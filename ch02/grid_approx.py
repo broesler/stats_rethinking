@@ -17,12 +17,12 @@ from matplotlib.gridspec import GridSpec
 from scipy.stats import binom
 
 # Possible prior distributions
-PRIOR_D = dict({'uniform': dict({'prior': lambda p: np.ones(p.shape),
-                                 'title': f'$U(0, 1)$'}),
-                'step': dict({'prior': lambda p: np.where(p < 0.5, 0, 1),
-                              'title': '0 where $p < 0.5$, 1 otherwise'}),
-                'exp': dict({'prior': lambda p: np.exp(-5 * np.abs(p - 0.5)),
-                             'title': '$-5e^{{|p - 0.5|}}$'})
+PRIOR_D = dict({'uniform': {'prior': lambda p: np.ones(p.shape),
+                            'title': '$U(0, 1)$'},
+                'step': {'prior': lambda p: np.where(p < 0.5, 0, 1),
+                         'title': '0 where $p < 0.5$, 1 otherwise'},
+                'exp': {'prior': lambda p: np.exp(-5 * np.abs(p - 0.5)),
+                        'title': '$-5e^{{|p - 0.5|}}$'}
                 })
 
 
