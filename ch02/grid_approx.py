@@ -26,8 +26,8 @@ PRIOR_D = dict({'uniform': dict({'prior': lambda p: np.ones(p.shape),
                 })
 
 
-def get_binom_posterior(Np, k, n, prior_str='uniform'):
-    """Posterior probability given a binomial distribution likelihood and
+def get_binom_posterior(Np, k, n, prior_key='uniform'):
+    """Posterior probability assuming a binomial distribution likelihood and
     arbitrary prior.
 
     Parameters
@@ -38,26 +38,33 @@ def get_binom_posterior(Np, k, n, prior_str='uniform'):
         Number of event occurrences observed.
     n : int
         Number of trials performed.
+    prior_key : str in {'uniform', 'step', 'exp'}, optional, default 'uniform'
+        String describing the desired prior distribution.
 
     Returns
     -------
     p_grid : (Np, 1) ndarray
-        Vector of probability values
+        Vector of parameter values.
     posterior : (Np, 1) ndarray
         Vector of posterior probability values.
     """
     p_grid = np.linspace(0, 1, Np)  # vector of possible parameter values
-    prior = PRIOR_D[prior_str]['prior'](p_grid)
-    likelihood = binom.pmf(k, n, p_grid)
+    prior = PRIOR_D[prior_key]['prior'](p_grid)
+    likelihood = binom.pmf(k, n, p_grid)  # binomial distribution
     posterior_u = likelihood * prior
-    posterior = posterior_u / np.sum(posterior_u)  # standardize to 1
+    posterior = posterior_u / np.sum(posterior_u)  # normalize to 1
     return p_grid, posterior
 
 
-prior_str = 'uniform'  # 'uniform', 'step', 'exp'
+#------------------------------------------------------------------------------ 
+#        Define Parameters
+#------------------------------------------------------------------------------
+# Data
 k = 6  # number of event occurrences, i.e. "heads"
 n = 9  # number of trials, i.e. "tosses"
 
+# Grid-search parameters
+prior_key = 'uniform'  # 'uniform', 'step', 'exp'
 Nps = [5, 20]  # range of grid sizes to try
 NN = len(Nps)
 
@@ -72,7 +79,7 @@ gs = GridSpec(nrows=1, ncols=NN)
 for i in range(NN):
     Np = Nps[i]
 
-    p_grid, posterior = get_binom_posterior(Np, k, n, prior_str=prior_str)
+    p_grid, posterior = get_binom_posterior(Np, k, n, prior_key=prior_key)
     p_max = p_grid[np.where(posterior == np.max(posterior))]
     p_max = p_max.mean() if p_max.size > 1 else p_max.item()
 
@@ -88,8 +95,9 @@ for i in range(NN):
     ax.set_ylabel('posterior probability')
     ax.grid()
 
-base_title = '$X \sim $ {} |  events: {}, trials: {}'
-fig.suptitle(base_title.format(PRIOR_D[prior_str]['title'], k, n))
+title = '$X \sim $ {}  |  events: {}, trials: {}'\
+          .format(PRIOR_D[prior_key]['title'], k, n)
+fig.suptitle(title)
 fig.subplots_adjust(top=0.2)
 gs.tight_layout(fig)
 plt.show()
