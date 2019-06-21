@@ -58,7 +58,8 @@ def get_binom_posterior(Np, k, n, prior_key='uniform'):
 
 
 def summarize(model, prob=0.89, verbose=False):
-    """Get the MAP estimate of the parameter mean and other summary statistics.
+    """Get the MAP estimate of the parameter mean and other summary statistics,
+    assuming the posterior is a normal distribution.
 
     Parameters
     ----------
@@ -81,10 +82,11 @@ def summarize(model, prob=0.89, verbose=False):
         parameter estimate.
     """
     with model:
-        mean_p = pm.find_MAP()  # use MAP estimation for mean
+        # mean_p = pm.find_MAP()  # use MAP estimation for mean
+        # NOTE the Hessian of a Gaussian == "precision" == 1 / sigma**2
         std_p = ((1 / pm.find_hessian(mean_p, vars=[p]))**0.5)[0,0]
 
-        # Calculate 89% percentile interval
+        # Calculate percentile interval, assuming normal distribution
         norm = stats.norm(mean_p, std_p)
         z = stats.norm.ppf([(1 - prob)/2, (1 + prob)/2])
         ci = mean_p['p'] + std_p * z
@@ -119,6 +121,7 @@ assert k == data.sum()
 with pm.Model() as normal_approx:
     p = pm.Uniform('p', 0, 1)  # prior distribution of p
     w = pm.Binomial('w', n=n, p=p, observed=k)  # likelihood
+    mean_p = pm.find_MAP()  # use MAP estimation for mean
 
 mean_p, std_p, ci = summarize(normal_approx, verbose=True)
 norm_a = stats.norm(mean_p, std_p)
@@ -129,7 +132,7 @@ beta = stats.beta(k+1, n-k+1)
 #------------------------------------------------------------------------------ 
 #        Plot Results
 #------------------------------------------------------------------------------
-fig = plt.figure(1, clear=True)
+fig = plt.figure(1, figsize=(8, 6), clear=True)
 ax = fig.add_subplot(111)
 
 for i in reversed(range(NN)):
@@ -141,7 +144,7 @@ for i in reversed(range(NN)):
     p_max = p_max.mean() if p_max.size > 1 else p_max.item()
 
     # Plot the result
-    ax.axvline(p_max, ls='--', lw=1, c=f'C{NN-1-i}')
+    ax.axvline(p_max, c=f'C{NN-1-i}', ls='--', lw=1)
     ax.plot(p_grid, posterior / posterior.max(), 
             marker='o', markerfacecolor='none', 
             label=f'Np = {Np}, $p_{{max}}$ = {p_max:.2f}')
@@ -155,15 +158,20 @@ p_fine = np.linspace(0, 1, num=100)
 ax.plot(p_fine, prior(p_fine), '-', c=0.4*np.array([1, 1, 1]), label='prior')
 
 # Plot the normal approximation
-ax.plot(p_fine, norm_a.pdf(p_fine) / norm_a.pdf(p_fine).max(),
+norm_ap = norm_a.pdf(p_fine) 
+ax.plot(p_fine, norm_ap / norm_ap.max(),
         'C3', label=f'Quad Approx: $\mu = {mean_p:.2f}, \sigma = {std_p:.2f}$')
-ax.plot(p_fine, beta.pdf(p_fine) / beta.pdf(p_fine).max(),
+ax.axvline(p_fine[norm_ap.argmax()], c='C3', ls='--', lw=1)
+
+beta_p = beta.pdf(p_fine)
+ax.plot(p_fine, beta_p / beta_p.max(),
         'k-', label=f'True Posterior: $\\beta({k+1}, {n-k+1})$')
+ax.axvline(p_fine[beta_p.argmax()], c='k', ls='--', lw=1)
 
 title = '$P \sim $ {}  |  trials: {}, events: {}'\
           .format(PRIOR_D[prior_key]['title'], k, n)
 ax.set_title(title)
-ax.legend()
+ax.legend(loc=2)
 plt.tight_layout()
 plt.show()
 
