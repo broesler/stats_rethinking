@@ -14,7 +14,7 @@ import numpy as np
 import pymc3 as pm
 
 from matplotlib.gridspec import GridSpec
-from scipy.stats import binom
+from scipy import stats
 
 # Possible prior distributions
 PRIOR_D = dict({'uniform': {'prior': lambda p: np.ones(p.shape),
@@ -50,11 +50,51 @@ def get_binom_posterior(Np, k, n, prior_key='uniform'):
     """
     p_grid = np.linspace(0, 1, Np)  # vector of possible parameter values
     prior = PRIOR_D[prior_key]['prior'](p_grid)
-    likelihood = binom.pmf(k, n, p_grid)  # binomial distribution
+    likelihood = stats.binom.pmf(k, n, p_grid)  # binomial distribution
     posterior = likelihood * prior
     # posterior = posterior_u / np.sum(posterior_u)  # normalize to sum to 1
     return p_grid, posterior
 
+
+def summarize(model, prob=0.89, verbose=False):
+    """Get the MAP estimate of the parameter mean and other summary statistics.
+
+    Parameters
+    ----------
+    model : pymc3 model
+        Pymc3 model as defined by `with pm.Model() as model:`.
+    prob : float \in [0, 1], default=0.89
+        Probability interval value.
+    verbose : bool, default=False
+        If True, print out summary statistics for model parameter.
+
+    Returns
+    -------
+    mean_p : dict
+        Result of `pm.find_MAP()`. Dictionary of values.
+    std_p : float
+        Standard deviation of model parameter MAP value, assuming the parameter
+        is normally distributed.
+    ci : (2,) ndarray
+        Lower and upper bounds of `prob` percent confidence interval on
+        parameter estimate.
+    """
+    with model:
+        mean_p = pm.find_MAP()  # use MAP estimation for mean
+        std_p = np.asscalar((1 / pm.find_hessian(mean_p))**0.5)
+
+        # Calculate 89% percentile interval
+        norm = stats.norm(mean_p, std_p)
+        z = stats.norm.ppf([(1 - prob)/2, (1 + prob)/2])
+        ci = mean_p['p'] + std_p * z
+
+    if verbose:
+        print('MAP Estimate')
+        print('------------')
+        print('  mean   std  5.5%  94.5%')
+        print(f"p {mean_p['p']:4.2f}  {std_p:4.2f}  {ci[0]:4.2f}   {ci[1]:4.2f}")
+
+    return mean_p, std_p, ci
 
 #------------------------------------------------------------------------------ 
 #        Define Parameters
@@ -71,15 +111,16 @@ NN = len(Nps)
 # Compute quadratic approximation
 data = np.repeat((0, 1), (n-k, k))  # actual toss results
 np.random.shuffle(data)
+assert n == len(data)
+assert k == data.sum()
 
+# Define the model
 with pm.Model() as normal_approx:
-    p = pm.Uniform('p', 0, 1)  # prior
-    w = pm.Binomial('w', n=len(data), p=p, observed=data.sum())  # likelihood
+    p = pm.Uniform('p', 0, 1)  # prior distribution of p
+    w = pm.Binomial('w', n=n, p=p, observed=k)  # likelihood
 
-map_est = pm.find_MAP(model=normal_approx)
-# std_p = ((1 / pm.find_hessian(mean_p, vars=[p]))**0.5)[0]
-
-# print(f"mu_p = {mean_p['p']:.2f}\nstd_p = {std_p[0]:.2f}")
+# Get summary statistics
+mean_p, std_p, ci = summarize(normal_approx, verbose=True)
 
 #------------------------------------------------------------------------------ 
 #        Plot Results
@@ -90,6 +131,7 @@ ax = fig.add_subplot(111)
 for i in reversed(range(NN)):
     Np = Nps[i]
 
+    # Generate the posterior samples on a grid of parameter values
     p_grid, posterior = get_binom_posterior(Np, k, n, prior_key=prior_key)
     p_max = p_grid[np.where(posterior == np.max(posterior))]
     p_max = p_max.mean() if p_max.size > 1 else p_max.item()
