@@ -49,11 +49,12 @@ def get_binom_posterior(Np, k, n, prior_key='uniform'):
         Vector of posterior probability values.
     """
     p_grid = np.linspace(0, 1, Np)  # vector of possible parameter values
-    prior = PRIOR_D[prior_key]['prior'](p_grid)
+    prior_func = PRIOR_D[prior_key]['prior']
+    prior = prior_func(p_grid)
     likelihood = stats.binom.pmf(k, n, p_grid)  # binomial distribution
     posterior = likelihood * prior
     # posterior = posterior_u / np.sum(posterior_u)  # normalize to sum to 1
-    return p_grid, posterior
+    return p_grid, posterior, prior_func
 
 
 def summarize(model, prob=0.89, verbose=False):
@@ -119,8 +120,11 @@ with pm.Model() as normal_approx:
     p = pm.Uniform('p', 0, 1)  # prior distribution of p
     w = pm.Binomial('w', n=n, p=p, observed=k)  # likelihood
 
-# Get summary statistics
 mean_p, std_p, ci = summarize(normal_approx, verbose=True)
+norm_a = stats.norm(mean_p, std_p)
+
+## Analytical Posterior
+beta = stats.beta(k+1, n-k+1)
 
 #------------------------------------------------------------------------------ 
 #        Plot Results
@@ -132,7 +136,7 @@ for i in reversed(range(NN)):
     Np = Nps[i]
 
     # Generate the posterior samples on a grid of parameter values
-    p_grid, posterior = get_binom_posterior(Np, k, n, prior_key=prior_key)
+    p_grid, posterior, prior = get_binom_posterior(Np, k, n, prior_key=prior_key)
     p_max = p_grid[np.where(posterior == np.max(posterior))]
     p_max = p_max.mean() if p_max.size > 1 else p_max.item()
 
@@ -141,16 +145,20 @@ for i in reversed(range(NN)):
     ax.plot(p_grid, posterior / posterior.max(), 
             marker='o', markerfacecolor='none', 
             label=f'Np = {Np}, $p_{{max}}$ = {p_max:.2f}')
-    # ax.plot(p_grid, prior, 'k-', label='prior')
 
     ax.set_xlabel('probability of water, $p$')
     ax.set_ylabel('non-normalized posterior probability of $p$')
     ax.grid(True)
 
+# Plot the prior
 p_fine = np.linspace(0, 1, num=100)
-norm_a = stats.norm(mean_p, std_p)
+ax.plot(p_fine, prior(p_fine), '-', c=0.4*np.array([1, 1, 1]), label='prior')
+
+# Plot the normal approximation
 ax.plot(p_fine, norm_a.pdf(p_fine) / norm_a.pdf(p_fine).max(),
         'C3', label=f'Quad Approx: $\mu = {mean_p:.2f}, \sigma = {std_p:.2f}$')
+ax.plot(p_fine, beta.pdf(p_fine) / beta.pdf(p_fine).max(),
+        'k-', label=f'True Posterior: $\\beta({k+1}, {n-k+1})$')
 
 title = '$P \sim $ {}  |  trials: {}, events: {}'\
           .format(PRIOR_D[prior_key]['title'], k, n)
