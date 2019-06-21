@@ -81,7 +81,7 @@ def summarize(model, prob=0.89, verbose=False):
     """
     with model:
         mean_p = pm.find_MAP()  # use MAP estimation for mean
-        std_p = np.asscalar((1 / pm.find_hessian(mean_p))**0.5)
+        std_p = ((1 / pm.find_hessian(mean_p, vars=[p]))**0.5)[0,0]
 
         # Calculate 89% percentile interval
         norm = stats.norm(mean_p, std_p)
@@ -94,7 +94,7 @@ def summarize(model, prob=0.89, verbose=False):
         print('  mean   std  5.5%  94.5%')
         print(f"p {mean_p['p']:4.2f}  {std_p:4.2f}  {ci[0]:4.2f}   {ci[1]:4.2f}")
 
-    return mean_p, std_p, ci
+    return mean_p['p'], std_p, ci
 
 #------------------------------------------------------------------------------ 
 #        Define Parameters
@@ -103,12 +103,12 @@ def summarize(model, prob=0.89, verbose=False):
 k = 6  # number of event occurrences, i.e. "heads"
 n = 9  # number of trials, i.e. "tosses"
 
-# Grid-search parameters
+## Grid-search parameters
 prior_key = 'uniform'  # 'uniform', 'step', 'exp'
 Nps = [5, 20, 100]  # range of grid sizes to try
 NN = len(Nps)
 
-# Compute quadratic approximation
+## Compute quadratic approximation
 data = np.repeat((0, 1), (n-k, k))  # actual toss results
 np.random.shuffle(data)
 assert n == len(data)
@@ -138,19 +138,24 @@ for i in reversed(range(NN)):
 
     # Plot the result
     ax.axvline(p_max, ls='--', lw=1, c=f'C{NN-1-i}')
-    ax.plot(p_grid, posterior, 
+    ax.plot(p_grid, posterior / posterior.max(), 
             marker='o', markerfacecolor='none', 
             label=f'Np = {Np}, $p_{{max}}$ = {p_max:.2f}')
     # ax.plot(p_grid, prior, 'k-', label='prior')
 
     ax.set_xlabel('probability of water, $p$')
     ax.set_ylabel('non-normalized posterior probability of $p$')
-    ax.legend()
     ax.grid(True)
 
-title = '$X \sim $ {}  |  events: {}, trials: {}'\
+p_fine = np.linspace(0, 1, num=100)
+norm_a = stats.norm(mean_p, std_p)
+ax.plot(p_fine, norm_a.pdf(p_fine) / norm_a.pdf(p_fine).max(),
+        'C3', label=f'Quad Approx: $\mu = {mean_p:.2f}, \sigma = {std_p:.2f}$')
+
+title = '$P \sim $ {}  |  trials: {}, events: {}'\
           .format(PRIOR_D[prior_key]['title'], k, n)
-plt.title(title)
+ax.set_title(title)
+ax.legend()
 plt.tight_layout()
 plt.show()
 
