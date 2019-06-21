@@ -26,7 +26,6 @@ PRIOR_D = dict({'uniform': {'prior': lambda p: np.ones(p.shape),
                 })
 
 
-<<<<<<< HEAD
 def get_binom_posterior(Np, k, n, prior_key='uniform'):
     """Posterior probability assuming a binomial distribution likelihood and
     arbitrary prior.
@@ -64,16 +63,18 @@ def get_binom_posterior(Np, k, n, prior_key='uniform'):
 k = 6  # number of event occurrences, i.e. "heads"
 n = 9  # number of trials, i.e. "tosses"
 
-data = np.repeat((0, 1), (n-k, k))  # actual toss results
-np.random.shuffle(data)
-
+# Grid-search parameters
+prior_key = 'uniform'  # 'uniform', 'step', 'exp'
 Nps = [5, 20, 100]  # range of grid sizes to try
 NN = len(Nps)
 
 # Compute quadratic approximation
+data = np.repeat((0, 1), (n-k, k))  # actual toss results
+np.random.shuffle(data)
+
 with pm.Model() as normal_approx:
     p = pm.Uniform('p', 0, 1)  # prior
-    W = pm.Binomial('w', n=len(data), p=p, observed=data.sum())  # likelihood
+    w = pm.Binomial('w', n=len(data), p=p, observed=data.sum())  # likelihood
     pm.sample()  # initialize sampler
     mean_q = pm.find_MAP()
     std_q = ((1 / pm.find_hessian(mean_q, vars=[p]))**0.5)[0]
