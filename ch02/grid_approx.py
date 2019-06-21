@@ -26,6 +26,7 @@ PRIOR_D = dict({'uniform': {'prior': lambda p: np.ones(p.shape),
                 })
 
 
+<<<<<<< HEAD
 def get_binom_posterior(Np, k, n, prior_key='uniform'):
     """Posterior probability assuming a binomial distribution likelihood and
     arbitrary prior.
@@ -52,7 +53,7 @@ def get_binom_posterior(Np, k, n, prior_key='uniform'):
     prior = PRIOR_D[prior_key]['prior'](p_grid)
     likelihood = binom.pmf(k, n, p_grid)  # binomial distribution
     posterior_u = likelihood * prior
-    posterior = posterior_u / np.sum(posterior_u)  # normalize to 1
+    posterior = posterior_u / np.sum(posterior_u)  # normalize to sum to 1
     return p_grid, posterior
 
 
@@ -63,17 +64,26 @@ def get_binom_posterior(Np, k, n, prior_key='uniform'):
 k = 6  # number of event occurrences, i.e. "heads"
 n = 9  # number of trials, i.e. "tosses"
 
-# Grid-search parameters
-prior_key = 'uniform'  # 'uniform', 'step', 'exp'
-Nps = [5, 20]  # range of grid sizes to try
+data = np.repeat((0, 1), (n-k, k))  # actual toss results
+np.random.shuffle(data)
+
+Nps = [5, 20, 100]  # range of grid sizes to try
 NN = len(Nps)
 
 # Compute quadratic approximation
+with pm.Model() as normal_approx:
+    p = pm.Uniform('p', 0, 1)  # prior
+    W = pm.Binomial('w', n=len(data), p=p, observed=data.sum())  # likelihood
+    pm.sample()  # initialize sampler
+    mean_q = pm.find_MAP()
+    std_q = ((1 / pm.find_hessian(mean_q, vars=[p]))**0.5)[0]
+
+print(f"mu_p = {mean_q['p']:.2f}\nstd_p = {std_q[0]:.2f}")
 
 #------------------------------------------------------------------------------ 
 #        Plot Results
 #------------------------------------------------------------------------------
-fig = plt.figure(1, clear=True)
+fig = plt.figure(1, figsize=(12, 5), clear=True)
 gs = GridSpec(nrows=1, ncols=NN)
 
 for i in range(NN):
@@ -93,7 +103,7 @@ for i in range(NN):
     ax.set_title(f'$N_p$ = {Np}, $p_{{max}}$ = {p_max:0.2f}')
     ax.set_xlabel('probability of water')
     ax.set_ylabel('posterior probability')
-    ax.grid()
+    ax.grid(True)
 
 title = '$X \sim $ {}  |  events: {}, trials: {}'\
           .format(PRIOR_D[prior_key]['title'], k, n)
