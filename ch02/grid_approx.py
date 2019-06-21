@@ -51,8 +51,8 @@ def get_binom_posterior(Np, k, n, prior_key='uniform'):
     p_grid = np.linspace(0, 1, Np)  # vector of possible parameter values
     prior = PRIOR_D[prior_key]['prior'](p_grid)
     likelihood = binom.pmf(k, n, p_grid)  # binomial distribution
-    posterior_u = likelihood * prior
-    posterior = posterior_u / np.sum(posterior_u)  # normalize to sum to 1
+    posterior = likelihood * prior
+    # posterior = posterior_u / np.sum(posterior_u)  # normalize to sum to 1
     return p_grid, posterior
 
 
@@ -75,19 +75,19 @@ np.random.shuffle(data)
 with pm.Model() as normal_approx:
     p = pm.Uniform('p', 0, 1)  # prior
     w = pm.Binomial('w', n=len(data), p=p, observed=data.sum())  # likelihood
-    pm.sample()  # initialize sampler
-    mean_q = pm.find_MAP()
-    std_q = ((1 / pm.find_hessian(mean_q, vars=[p]))**0.5)[0]
 
-print(f"mu_p = {mean_q['p']:.2f}\nstd_p = {std_q[0]:.2f}")
+map_est = pm.find_MAP(model=normal_approx)
+# std_p = ((1 / pm.find_hessian(mean_p, vars=[p]))**0.5)[0]
+
+# print(f"mu_p = {mean_p['p']:.2f}\nstd_p = {std_p[0]:.2f}")
 
 #------------------------------------------------------------------------------ 
 #        Plot Results
 #------------------------------------------------------------------------------
-fig = plt.figure(1, figsize=(12, 5), clear=True)
-gs = GridSpec(nrows=1, ncols=NN)
+fig = plt.figure(1, clear=True)
+ax = fig.add_subplot(111)
 
-for i in range(NN):
+for i in reversed(range(NN)):
     Np = Nps[i]
 
     p_grid, posterior = get_binom_posterior(Np, k, n, prior_key=prior_key)
@@ -95,22 +95,21 @@ for i in range(NN):
     p_max = p_max.mean() if p_max.size > 1 else p_max.item()
 
     # Plot the result
-    ax = fig.add_subplot(gs[i])  # left side plot
-    ax.axvline(p_max, ls='--', c='k', lw=1)
+    ax.axvline(p_max, ls='--', lw=1, c=f'C{NN-1-i}')
     ax.plot(p_grid, posterior, 
-            marker='o', markerfacecolor='none', label='Posterior')
+            marker='o', markerfacecolor='none', 
+            label=f'Np = {Np}, $p_{{max}}$ = {p_max:.2f}')
     # ax.plot(p_grid, prior, 'k-', label='prior')
 
-    ax.set_title(f'$N_p$ = {Np}, $p_{{max}}$ = {p_max:0.2f}')
-    ax.set_xlabel('probability of water')
-    ax.set_ylabel('posterior probability')
+    ax.set_xlabel('probability of water, $p$')
+    ax.set_ylabel('non-normalized posterior probability of $p$')
+    ax.legend()
     ax.grid(True)
 
 title = '$X \sim $ {}  |  events: {}, trials: {}'\
           .format(PRIOR_D[prior_key]['title'], k, n)
-fig.suptitle(title)
-fig.subplots_adjust(top=0.2)
-gs.tight_layout(fig)
+plt.title(title)
+plt.tight_layout()
 plt.show()
 
 #==============================================================================
