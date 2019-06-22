@@ -16,6 +16,9 @@ import pymc3 as pm
 from matplotlib.gridspec import GridSpec
 from scipy import stats
 
+plt.style.use('seaborn-darkgrid')
+np.random.seed(123)  # initialize random number generator
+
 # Possible prior distributions
 PRIOR_D = dict({'uniform': {'prior': lambda p: np.ones(p.shape),
                             'title': '$U(0, 1)$'},
@@ -57,48 +60,6 @@ def get_binom_posterior(Np, k, n, prior_key='uniform'):
     return p_grid, posterior, prior_func
 
 
-def summarize(model, prob=0.89, verbose=False):
-    """Get the MAP estimate of the parameter mean and other summary statistics,
-    assuming the posterior is a normal distribution.
-
-    Parameters
-    ----------
-    model : pymc3 model
-        Pymc3 model as defined by `with pm.Model() as model:`.
-    prob : float \in [0, 1], default=0.89
-        Probability interval value.
-    verbose : bool, default=False
-        If True, print out summary statistics for model parameter.
-
-    Returns
-    -------
-    mean_p : dict
-        Result of `pm.find_MAP()`. Dictionary of values.
-    std_p : float
-        Standard deviation of model parameter MAP value, assuming the parameter
-        is normally distributed.
-    ci : (2,) ndarray
-        Lower and upper bounds of `prob` percent confidence interval on
-        parameter estimate.
-    """
-    with model:
-        # mean_p = pm.find_MAP()  # use MAP estimation for mean
-        # NOTE the Hessian of a Gaussian == "precision" == 1 / sigma**2
-        std_p = ((1 / pm.find_hessian(mean_p, vars=[p]))**0.5)[0,0]
-
-        # Calculate percentile interval, assuming normal distribution
-        norm = stats.norm(mean_p, std_p)
-        z = stats.norm.ppf([(1 - prob)/2, (1 + prob)/2])
-        ci = mean_p['p'] + std_p * z
-
-    if verbose:
-        print('MAP Estimate')
-        print('------------')
-        print('  mean   std  5.5%  94.5%')
-        print(f"p {mean_p['p']:4.2f}  {std_p:4.2f}  {ci[0]:4.2f}   {ci[1]:4.2f}")
-
-    return mean_p['p'], std_p, ci
-
 #------------------------------------------------------------------------------ 
 #        Define Parameters
 #------------------------------------------------------------------------------
@@ -112,18 +73,28 @@ Nps = [5, 20, 100]  # range of grid sizes to try
 NN = len(Nps)
 
 ## Compute quadratic approximation
-data = np.repeat((0, 1), (n-k, k))  # actual toss results
-np.random.shuffle(data)
-assert n == len(data)
-assert k == data.sum()
 
 # Define the model
 with pm.Model() as normal_approx:
     p = pm.Uniform('p', 0, 1)  # prior distribution of p
     w = pm.Binomial('w', n=n, p=p, observed=k)  # likelihood
-    mean_p = pm.find_MAP()  # use MAP estimation for mean
+    map_est = pm.find_MAP()  # use MAP estimation for mean
+    mean_p = map_est['p']  # extract desired value
 
-mean_p, std_p, ci = summarize(normal_approx, verbose=True)
+    # The Hessian of a Gaussian == "precision" == 1 / sigma**2
+    std_p = ((1 / pm.find_hessian(map_est, vars=[p]))**0.5)[0,0]
+
+    # Calculate percentile interval, assuming normal distribution
+    prob = 0.89
+    norm = stats.norm(mean_p, std_p)
+    z = stats.norm.ppf([(1 - prob)/2, (1 + prob)/2])
+    ci = mean_p + std_p * z
+
+    print('MAP Estimate')
+    print('------------')
+    print('  mean   std  5.5%  94.5%')
+    print(f"p {mean_p:4.2f}  {std_p:4.2f}  {ci[0]:4.2f}   {ci[1]:4.2f}")
+
 norm_a = stats.norm(mean_p, std_p)
 
 ## Analytical Posterior
@@ -149,29 +120,31 @@ for i in reversed(range(NN)):
             marker='o', markerfacecolor='none', 
             label=f'Np = {Np}, $p_{{max}}$ = {p_max:.2f}')
 
-    ax.set_xlabel('probability of water, $p$')
-    ax.set_ylabel('non-normalized posterior probability of $p$')
-    ax.grid(True)
-
-# Plot the prior
 p_fine = np.linspace(0, 1, num=100)
-ax.plot(p_fine, prior(p_fine), '-', c=0.4*np.array([1, 1, 1]), label='prior')
 
 # Plot the normal approximation
 norm_ap = norm_a.pdf(p_fine) 
 ax.plot(p_fine, norm_ap / norm_ap.max(),
-        'C3', label=f'Quad Approx: $\mu = {mean_p:.2f}, \sigma = {std_p:.2f}$')
+        'C3', label=f'Quad Approx: $\mathcal{{N}}({mean_p:.2f}, {std_p:.2f})$')
 ax.axvline(p_fine[norm_ap.argmax()], c='C3', ls='--', lw=1)
 
+# Plot the analytical posterior
 beta_p = beta.pdf(p_fine)
 ax.plot(p_fine, beta_p / beta_p.max(),
         'k-', label=f'True Posterior: $\\beta({k+1}, {n-k+1})$')
 ax.axvline(p_fine[beta_p.argmax()], c='k', ls='--', lw=1)
 
+# Plot the prior
+ax.plot(p_fine, prior(p_fine), '-', c=0.4*np.array([1, 1, 1]), label='prior')
+
+# Plot formatting
 title = '$P \sim $ {}  |  trials: {}, events: {}'\
           .format(PRIOR_D[prior_key]['title'], k, n)
 ax.set_title(title)
-ax.legend(loc=2)
+ax.set_xlabel('probability of water, $p$')
+ax.set_ylabel('non-normalized posterior probability of $p$')
+ax.grid(True)
+ax.legend()
 plt.tight_layout()
 plt.show()
 
