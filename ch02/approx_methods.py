@@ -12,6 +12,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pymc3 as pm
+import seaborn as sns
 
 from matplotlib.gridspec import GridSpec
 from scipy import stats
@@ -41,7 +42,7 @@ def get_binom_posterior(Np, k, n, prior_key='uniform'):
         Number of event occurrences observed.
     n : int
         Number of trials performed.
-    prior_key : str in {'uniform', 'step', 'exp'}, optional, default 'uniform'
+    prior_key : {'uniform' | 'step' | 'exp'}, optional, default 'uniform'
         String describing the desired prior distribution.
 
     Returns
@@ -73,8 +74,7 @@ Nps = [5, 20, 100]  # range of grid sizes to try
 NN = len(Nps)
 
 ## Compute quadratic approximation
-
-# Define the model
+# MAP estimation of the parameter mean
 with pm.Model() as normal_approx:
     p = pm.Uniform('p', 0, 1)  # prior distribution of p
     w = pm.Binomial('w', n=n, p=p, observed=k)  # likelihood
@@ -95,7 +95,23 @@ with pm.Model() as normal_approx:
     print('  mean   std  5.5%  94.5%')
     print(f"p {mean_p:4.2f}  {std_p:4.2f}  {ci[0]:4.2f}   {ci[1]:4.2f}")
 
+# Normal approximation to the posterior
 norm_a = stats.norm(mean_p, std_p)
+
+## MCMC estimation of parameter mean
+Ns = 1000  # number of samples
+p_trace = np.empty(Ns)  # initialize array of samples
+p_trace[0] = 0.5
+for i in range(1, Ns):
+    p_new = stats.norm.rvs(loc=p_trace[i-1], scale=0.1)
+    if p_new < 0:
+        p_new = np.abs(p_new)
+    if p_new > 1:
+        p_new = 2 - p_new
+    q0 = stats.binom.pmf(k, n, p_trace[i-1])
+    q1 = stats.binom.pmf(k, n, p_new)
+    t = stats.uniform.rvs()
+    p_trace[i] = p_new if t < q1/q0 else p_trace[i-1]
 
 ## Analytical Posterior
 beta = stats.beta(k+1, n-k+1)
@@ -106,9 +122,8 @@ beta = stats.beta(k+1, n-k+1)
 fig = plt.figure(1, figsize=(8, 6), clear=True)
 ax = fig.add_subplot(111)
 
-for i in reversed(range(NN)):
-    Np = Nps[i]
-
+# Plot grid approximation posteriors
+for i, Np in enumerate(reversed(Nps)):
     # Generate the posterior samples on a grid of parameter values
     p_grid, posterior, prior = get_binom_posterior(Np, k, n, prior_key=prior_key)
     p_max = p_grid[np.where(posterior == np.max(posterior))]
@@ -134,8 +149,16 @@ ax.plot(p_fine, beta_p / beta_p.max(),
         'k-', label=f'True Posterior: $\\beta({k+1}, {n-k+1})$')
 ax.axvline(p_fine[beta_p.argmax()], c='k', ls='--', lw=1)
 
+# Plot the MCMC approximation
+kde = stats.gaussian_kde(p_trace, bw_method=0.75)
+kde_p = kde(p_fine)
+ax.plot(p_fine, kde_p / kde_p.max(),
+        c='C4', label = 'MCMC Posterior')
+ax.axvline(p_fine[kde_p.argmax()], c='C4', ls='--', lw=1)
+# sns.kdeplot(p_trace, ax=ax, c='C4', label='MCMC Posterior')
+
 # Plot the prior
-ax.plot(p_fine, prior(p_fine), '-', c=0.4*np.array([1, 1, 1]), label='prior')
+# ax.plot(p_fine, prior(p_fine), '-', c=0.4*np.array([1, 1, 1]), label='prior')
 
 # Plot formatting
 title = '$P \sim $ {}  |  trials: {}, events: {}'\

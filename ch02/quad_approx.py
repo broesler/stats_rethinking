@@ -30,6 +30,7 @@ Nd = len(ks)  # number of times to double data
 fig = plt.figure(1, figsize=(12, 5), clear=True)
 gs = GridSpec(nrows=1, ncols=Nd)
 
+# Error plots
 fig2 = plt.figure(2, figsize=(12, 5), clear=True)
 gs2 = GridSpec(nrows=1, ncols=2)
 ax21 = fig2.add_subplot(gs2[0])
@@ -71,13 +72,14 @@ for i, data in enumerate(zip(ks, ns)):
            xlabel='probability of water, $p$',
            ylabel='non-normalized posterior probability of $p$')
 
-    # Plot the error
+    # Plot the error vs p
     ax21.plot(p_fine, np.abs(norm_ap - beta_p), label=f'N = {n}')
     ax21.set_yscale('log')
     ax21.set(title='Error vs. $p$', 
             xlabel='$p$', 
             ylabel='$\mid \mathcal{N} - \\beta \mid$')
 
+    # point estimate of error for given n
     err[i] = np.linalg.norm(norm_ap - beta_p)
 
 # Error plot of norms
