@@ -114,7 +114,7 @@ for i in range(1, Ns):
     p_trace[i] = p_new if t < q1/q0 else p_trace[i-1]
 
 ## Analytical Posterior
-beta = stats.beta(k+1, n-k+1)
+Beta = stats.beta(k+1, n-k+1)  # Beta(\alpha = 1, \beta = 1) == U(0, 1)
 
 #------------------------------------------------------------------------------ 
 #        Plot Results
@@ -140,14 +140,15 @@ p_fine = np.linspace(0, 1, num=100)
 # Plot the normal approximation
 norm_ap = norm_a.pdf(p_fine) 
 ax.plot(p_fine, norm_ap / norm_ap.max(),
-        'C3', label=f'Quad Approx: $\mathcal{{N}}({mean_p:.2f}, {std_p:.2f})$')
+        c='C3', 
+        label=f'Quad Approx: $\mathcal{{N}}({mean_p:.2f}, {std_p:.2f})$')
 ax.axvline(p_fine[norm_ap.argmax()], c='C3', ls='--', lw=1)
 
 # Plot the analytical posterior
-beta_p = beta.pdf(p_fine)
-ax.plot(p_fine, beta_p / beta_p.max(),
-        'k-', label=f'True Posterior: $\\beta({k+1}, {n-k+1})$')
-ax.axvline(p_fine[beta_p.argmax()], c='k', ls='--', lw=1)
+Beta_p = Beta.pdf(p_fine)
+ax.plot(p_fine, Beta_p / Beta_p.max(),
+        'k-', label=f'True Posterior: $B({k+1}, {n-k+1})$')
+ax.axvline(p_fine[Beta_p.argmax()], c='k', ls='--', lw=1)
 
 # Plot the MCMC approximation
 kde = stats.gaussian_kde(p_trace, bw_method=0.75)
