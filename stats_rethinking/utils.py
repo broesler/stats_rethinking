@@ -12,6 +12,13 @@
 import numpy as np
 from scipy import stats
 
+def annotate(text, ax):
+    """Add annotation `text` to top-left of `ax` frame."""
+    ax.text(x=0.05, y=0.9, s=text,
+            ha='left',
+            va='center', 
+            transform=ax.transAxes)
+
 def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
     """Posterior probability assuming a binomial distribution likelihood and
     arbitrary prior.
