@@ -17,23 +17,40 @@ import seaborn as sns
 from matplotlib.gridspec import GridSpec
 from scipy import stats
 
+from stats_rethinking import utils
+
 plt.style.use('seaborn-darkgrid')
 np.random.seed(56)  # initialize random number generator
 
-k = 6
-n = 9
-Np = 1000
+k = 6       # successes
+n = 9       # trials
+Np = 1000   # size of parameter grid
 
-p_grid = np.linspace(0, 1, Np)                 # array of parameter values
-prob_p = np.ones(Np)                           # P(p) ~ U(0, 1)
-prob_data = stats.binom.pmf(k, n, p=p_grid)    # P(data | p) ~ B(n, k)
-posterior_u = prob_data * prob_p               # P(p | data)
-posterior = posterior_u / np.sum(posterior_u)
+prior_func = lambda p: np.ones(p.shape)  # P(p) ~ U(0, 1)
+p_grid, posterior, prior = utils.grid_binom_posterior(Np, k, n,
+                                                      prior_func=prior_func)
 
 # Sample the posterior distribution
 Ns = 100_000
 samples = np.random.choice(p_grid, p=posterior, size=Ns, replace=True)
 
+## Intervals of defined boundaries
+# Sum the grid search posterior
+print(f'P(p < 0.5) = {np.sum(posterior[p_grid < 0.5]):.8f}')
+# Sum the posterior samples
+print(f'P(p < 0.5) = {np.sum(samples < 0.5) / Ns:.8f}')
+
+## Intervals of defined probability mass
+print(f'{80:9d}%')
+print(f'{np.quantile(samples, 0.8):10.8f}')
+p1, p2 = 0.1, 0.9
+print(f'{100*p1:10.0f}% {100*p2:9.0f}%')
+with np.printoptions(formatter={'float': '{:10.8f}'.format}):
+    print(np.quantile(samples, (0.1, 0.9)))
+
+#------------------------------------------------------------------------------ 
+#        Plot the posterior samples
+#------------------------------------------------------------------------------
 fig = plt.figure(1, clear=True)
 gs = GridSpec(nrows=1, ncols=2)
 ax1 = fig.add_subplot(gs[1])
