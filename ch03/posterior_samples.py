@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import pymc3 as pm
 
 from matplotlib.gridspec import GridSpec
 from scipy import stats
@@ -51,10 +52,11 @@ value = np.sum((samples > 0.5) & (samples < 0.75)) / Ns
 print(f'P(0.5 < p < 0.75) = {value:{width}.{precision}f}')
 
 ## Intervals of defined probability mass
-fstr = f'{{:{width}.{precision}}}f'  # empty value for printoptions
+fstr = f'{{:{width}.{precision}f}}'  # empty value for printoptions
 with np.printoptions(formatter={'float': fstr.format}):
-    print(f'{80:{width}d}%')
-    print(np.quantile(samples, (0.8,)))  # return array for formatting
+    p1 = 0.8
+    print(f'{100*p1:{width}.0f}%')
+    print(np.quantile(samples, (p1,)))  # return array for formatting
     p1, p2 = 0.1, 0.9
     print(f'{100*p1:{width}.0f}% {100*p2:{width-1}.0f}%')
     print(np.quantile(samples, (p1, p2)))
@@ -85,12 +87,14 @@ fig = plt.figure(2, clear=True)
 gs = GridSpec(nrows=2, ncols=2)
 axes = np.empty(shape=gs.get_geometry(), dtype=object)
 
-indices = np.array([[p_grid < 0.5, ((p_grid > 0.5) & (p_grid < 0.75))],
-                    [p_grid < Beta.ppf(0.80), ((p_grid > Beta.ppf(0.10))
-                                             & (p_grid < Beta.ppf(0.90)))]])
+# 1st row: defined boundaries
+# 2nd row: defined probability masses
+indices = np.array([[p_grid < 0.5,  ((p_grid > 0.5) & (p_grid < 0.75))],
+                    [p_grid < Beta.ppf(0.80),   ((p_grid > Beta.ppf(0.10))
+                                               & (p_grid < Beta.ppf(0.90)))]])
 
 titles = np.array([['$p < 0.50$', '$0.50 < p < 0.75$'],
-                   ['lower 80%', 'middle 80%']], dtype=object)
+                   ['lower 80%', 'middle 80%']])
 
 for i in range(2):
     for j in range(2):
@@ -113,14 +117,16 @@ for i in range(2):
 gs.tight_layout(fig)
 
 # Plot a highly skewed distribution
-# k = 3
-# n = 3
-# p_grid, posterior, prior = utils.grid_binom_posterior(Np, k, n, prior_func=lambda p: np.ones(p.shape))
+_, skewed_posterior, _ = utils.grid_binom_posterior(Np, k=3, n=3)
+skewed_samples = np.random.choice(p_grid, p=skewed_posterior, size=Ns, replace=True)
 
-
-
-
-
+with np.printoptions(formatter={'float': fstr.format}):
+    percentile = 0.50  # [percentile] confidence interval
+    a = (1 - percentile) / 2
+    p1, p2 = a, 1-a
+    print(f'{100*p1:{width}.0f}% {100*p2:{width-1}.0f}%')
+    print(np.quantile(skewed_samples, (p1, p2)))
+    print(pm.stats.hpd(skewed_samples, a))
 
 plt.show()
 #==============================================================================
