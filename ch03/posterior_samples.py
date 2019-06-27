@@ -47,6 +47,9 @@ print(f'P(p < 0.5) = {value:{width}.{precision}f}')
 value = np.sum(samples < 0.5) / Ns
 print(f'P(p < 0.5) = {value:{width}.{precision}f}')
 
+value = np.sum((samples > 0.5) & (samples < 0.75)) / Ns
+print(f'P(0.5 < p < 0.75) = {value:{width}.{precision}f}')
+
 ## Intervals of defined probability mass
 fstr = f'{{:{width}.{precision}}}f'  # empty value for printoptions
 with np.printoptions(formatter={'float': fstr.format}):
@@ -81,36 +84,38 @@ gs.tight_layout(fig)
 fig = plt.figure(2, clear=True)
 gs = GridSpec(nrows=2, ncols=2)
 axes = np.empty(shape=gs.get_geometry(), dtype=object)
-# Plot the exact analytical distribution in each subplot
+
+indices = np.array([[p_grid < 0.5, ((p_grid > 0.5) & (p_grid < 0.75))],
+                    [p_grid < Beta.ppf(0.80), ((p_grid > Beta.ppf(0.10))
+                                             & (p_grid < Beta.ppf(0.90)))]])
+
+titles = np.array([['$p < 0.50$', '$0.50 < p < 0.75$'],
+                   ['lower 80%', 'middle 80%']], dtype=object)
+
 for i in range(2):
     for j in range(2):
-        axes[i,j] = fig.add_subplot(gs[i,j])  # left side plot
+        axes[i,j] = fig.add_subplot(gs[i,j])
+
+        # Plot the exact analytical distribution
         axes[i,j].plot(p_grid, Beta.pdf(p_grid),
                         c='k', lw=1, label='Beta$(k+1, n-k+1)$')
         axes[i,j].set(xlabel='$p$',
                        ylabel='Density')
 
-# Defined boundaries
-idx = p_grid < 0.5
-axes[0,0].fill_between(p_grid[idx], Beta.pdf(p_grid[idx]), alpha=0.5)
-utils.annotate('$p < 0.50$', axes[0,0])
+        # Fill in the percentiles
+        idx = indices[i,j]
+        axes[i,j].fill_between(p_grid[idx], Beta.pdf(p_grid[idx]), alpha=0.5)
+        utils.annotate(titles[i,j], axes[i,j])
 
-idx = np.logical_and(p_grid > 0.5, p_grid < 0.75)
-axes[0,1].fill_between(p_grid[idx], Beta.pdf(p_grid[idx]), alpha=0.5)
-utils.annotate('$0.50 < p < 0.75$', axes[0,1])
-
-# Defined probability masses
-idx = p_grid < Beta.ppf(0.8)
-axes[1,0].fill_between(p_grid[idx], Beta.pdf(p_grid[idx]), alpha=0.5)
-utils.annotate('lower 80%', axes[1,0])
-
-idx = np.logical_and(p_grid > Beta.ppf(0.10), p_grid < Beta.ppf(0.9))
-axes[1,1].fill_between(p_grid[idx], Beta.pdf(p_grid[idx]), alpha=0.5)
-utils.annotate('middle 80%', axes[1,1])
+        axes[i,j].set(xticks=[0, 0.25, 0.5, 0.75, 1.0],
+                      xticklabels=(str(x) for x in [0, 0.25, 0.5, 0.75, 1.0]))
 
 gs.tight_layout(fig)
 
 # Plot a highly skewed distribution
+# k = 3
+# n = 3
+# p_grid, posterior, prior = utils.grid_binom_posterior(Np, k, n, prior_func=lambda p: np.ones(p.shape))
 
 
 
