@@ -89,9 +89,11 @@ axes = np.empty(shape=gs.get_geometry(), dtype=object)
 
 # 1st row: defined boundaries
 # 2nd row: defined probability masses
-indices = np.array([[p_grid < 0.5,  ((p_grid > 0.5) & (p_grid < 0.75))],
-                    [p_grid < Beta.ppf(0.80),   ((p_grid > Beta.ppf(0.10))
-                                               & (p_grid < Beta.ppf(0.90)))]])
+indices = np.array([[p_grid < 0.5,
+                     ((p_grid > 0.5) & (p_grid < 0.75))],
+                    [p_grid < Beta.ppf(0.80),
+                      ((p_grid > Beta.ppf(0.10)) & (p_grid < Beta.ppf(0.90)))]
+                   ])
 
 titles = np.array([['$p < 0.50$', '$0.50 < p < 0.75$'],
                    ['lower 80%', 'middle 80%']])
@@ -125,6 +127,7 @@ with np.printoptions(formatter={'float': fstr.format}):
     a = (1 - percentile) / 2
     p1, p2 = a, 1-a
     print(f'{100*p1:{width}.0f}% {100*p2:{width-1}.0f}%')
+    # FIXME values don't match book precisely...
     print(np.quantile(skewed_samples, (p1, p2)))
     print(pm.stats.hpd(skewed_samples, a))
 
