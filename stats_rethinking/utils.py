@@ -12,12 +12,82 @@
 import numpy as np
 from scipy import stats
 
+
 def annotate(text, ax):
     """Add annotation `text` to top-left of `ax` frame."""
     ax.text(x=0.05, y=0.9, s=text,
             ha='left',
             va='center', 
             transform=ax.transAxes)
+
+
+def get_quantile(data, q=0.89, width=10, precision=8, 
+                 q_func=np.quantile, verbose=True, **kwargs):
+    """Pretty-print the desired quantile values from the data.
+
+    Parameters
+    ----------
+    data : (M, N) array_like
+        Matrix of M vectors in N dimensions.
+    q : array_like of float
+        Quantile or sequence of quantiles to compute, which must be between
+        0 and 1 inclusive.
+    width : int, optional, default=10
+        Width of printing field.
+    precision : int, optional, default=8
+        Number of decimal places to print.
+    q_func : callable, optional, default=numpy.quantile
+        Function to compute the quantile outputs from the data.
+    verbose : bool, optional, default=True
+        Print the output quantile percentages names and values.
+    **kwargs
+        Additional arguments to `q_func`.
+
+    Returns
+    -------
+    quantile : scalary or ndarray
+        The requested quantiles. See documentation for `numpy.quantile`.
+
+    See Also
+    --------
+    `numpy.quantile`
+    """
+    q = np.atleast_1d(q)
+    quantiles = q_func(data, q, **kwargs)
+    if verbose:
+        fstr = f"{width}.{precision}f"
+        name_str = ' '.join([f"{100*p:{width-1}g}%" for p in q])
+        value_str = ' '.join([f"{q:{fstr}}" for q in quantiles])
+        print(f"{name_str}\n{value_str}")
+    return quantiles
+
+
+def get_percentiles(data, q=0.5, **kwargs):
+    """Pretty-print the desired percentile values from the data.
+
+    ..note:: A wrapper around `get_quantile`, where the arguments are forced
+        to take the form:
+    ..math:: a = \frac{1 - q}{2}
+        and called with :math:\mathtt{get_quantile(data, (a, 1-a))}
+
+    Parameters
+    ----------
+    data : (M, N) array_like
+        Matrix of M vectors in N dimensions.
+    q : array_like of float
+        Quantile or sequence of quantiles to compute, which must be between
+        0 and 1 inclusive.
+    **kwargs
+        See `get_quantile` for additional options.
+
+    See Also
+    --------
+    `get_quantile`
+    """
+    a = (1 - q) / 2
+    quantiles = get_quantile(data, (a, 1-a), **kwargs)
+    return quantiles
+
 
 def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
     """Posterior probability assuming a binomial distribution likelihood and
@@ -54,6 +124,7 @@ def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
     if norm_post:
         posterior = posterior / np.sum(posterior)
     return p_grid, posterior, prior_func
+
 
 #==============================================================================
 #==============================================================================
