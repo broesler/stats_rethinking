@@ -17,7 +17,7 @@ import seaborn as sns
 from matplotlib.gridspec import GridSpec
 from scipy import stats
 
-from stats_rethinking import utils
+import stats_rethinking as sts
 
 plt.style.use('seaborn-darkgrid')
 np.random.seed(123)  # initialize random number generator
@@ -96,8 +96,7 @@ ax = fig.add_subplot(111)
 # Plot grid approximation posteriors
 for i, Np in enumerate(reversed(Nps)):
     # Generate the posterior samples on a grid of parameter values
-    prior_func = PRIOR_D[prior_key]['prior']
-    p_grid, posterior, prior = utils.grid_binom_posterior(Np, k, n,
+    p_grid, posterior, prior = sts.grid_binom_posterior(Np, k, n,
                                                           prior_func=prior_func,
                                                           norm_post=False)
     p_max = p_grid[np.where(posterior == np.max(posterior))]

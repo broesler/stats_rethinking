@@ -18,7 +18,7 @@ import pymc3 as pm
 from matplotlib.gridspec import GridSpec
 from scipy import stats
 
-from stats_rethinking import utils
+import stats_rethinking as sts
 
 plt.style.use('seaborn-darkgrid')
 np.random.seed(56)  # initialize random number generator
@@ -28,7 +28,7 @@ n = 9       # trials
 Np = 1000   # size of parameter grid
 
 # prior: P(p) ~ U(0, 1)
-p_grid, posterior, prior = utils.grid_binom_posterior(Np, k, n, prior_func=lambda p: np.ones(p.shape))
+p_grid, posterior, prior = sts.grid_binom_posterior(Np, k, n, prior_func=lambda p: np.ones(p.shape))
 
 # Sample the posterior distribution
 Ns = 100_000
@@ -56,8 +56,8 @@ value = np.sum((samples > 0.5) & (samples < 0.75)) / Ns
 print(f"P(0.5 < p < 0.75) = {value:{fstr}}")
 
 ## Intervals of defined probability mass
-utils.get_quantile(samples, 0.8)
-utils.get_quantile(samples, (0.1, 0.9))
+sts.get_quantile(samples, 0.8)
+sts.get_quantile(samples, (0.1, 0.9))
 
 #------------------------------------------------------------------------------ 
 #        Plot the posterior samples
@@ -109,7 +109,7 @@ for i in range(2):
         # Fill in the percentiles
         idx = indices[i,j]
         axes[i,j].fill_between(p_grid[idx], Beta.pdf(p_grid[idx]), alpha=0.5)
-        utils.annotate(titles[i,j], axes[i,j])
+        sts.annotate(titles[i,j], ax)
 
         axes[i,j].set(xticks=[0, 0.25, 0.5, 0.75, 1.0],
                       xticklabels=(str(x) for x in [0, 0.25, 0.5, 0.75, 1.0]))
@@ -119,13 +119,15 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------ 
 #        Plot a highly skewed distribution
 #------------------------------------------------------------------------------
-_, skewed_posterior, _ = utils.grid_binom_posterior(Np, k=3, n=3)
+_, skewed_posterior, _ = sts.grid_binom_posterior(Np, k=3, n=3)
 skewed_samples = np.random.choice(p_grid, p=skewed_posterior, size=Ns, replace=True)
 
 print('----------Beta(3, 3) sample----------')
 percentile = 0.50  # [percentile] confidence interval
-utils.get_percentiles(skewed_samples, q=percentile)
-utils.get_quantile(skewed_samples, q=percentile, q_func=pm.stats.hpd)
+print('Middle 50% PI:')
+sts.get_percentiles(skewed_samples, q=percentile)
+print('HDPI 50%:')
+sts.get_quantile(skewed_samples, q=percentile, q_func=pm.stats.hpd)
 
 # plt.show()
 #==============================================================================
