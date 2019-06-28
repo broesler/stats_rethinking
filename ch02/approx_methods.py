@@ -124,8 +124,16 @@ ax.plot(p_fine, Beta_p / Beta_p.max(),
 ax.axvline(p_fine[Beta_p.argmax()], c='k', ls='--', lw=1)
 
 # Plot the MCMC approximation
-kde = stats.gaussian_kde(p_trace, bw_method=0.75)
-kde_p = kde(p_fine)
+# NOTE The stats_rethinking "dens" (R code 2.9) function calls the following
+#   R function:
+#   thed <- density(p_trace, adjust=0.5)
+#   The default bandwidth in `density` (R docs) is: `bw="nrd0"`, which
+#   corresponds to 'silverman' in python. `adjust` sets `bandwith *= adjust`.
+#   
+adjust = 0.5
+kde = stats.gaussian_kde(p_trace)
+kde.set_bandwidth(adjust * kde.silverman_factor())
+kde_p = kde.pdf(p_fine)
 ax.plot(p_fine, kde_p / kde_p.max(),
         c='C4', label = 'MCMC Posterior')
 ax.axvline(p_fine[kde_p.argmax()], c='C4', ls='--', lw=1)
