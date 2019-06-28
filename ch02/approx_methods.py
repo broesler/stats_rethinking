@@ -12,9 +12,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pymc3 as pm
-import seaborn as sns
+# import seaborn as sns
 
-from matplotlib.gridspec import GridSpec
+# from matplotlib.gridspec import GridSpec
 from scipy import stats
 
 import stats_rethinking as sts
@@ -49,6 +49,7 @@ NN = len(Nps)
 with pm.Model() as normal_approx:
     p = pm.Uniform('p', 0, 1)  # prior distribution of p
     w = pm.Binomial('w', n=n, p=p, observed=k)  # likelihood
+    pm.sample()  # initialize NUTS
     map_est = pm.find_MAP()  # use MAP estimation for mean
     mean_p = map_est['p']  # extract desired value
 
@@ -69,7 +70,7 @@ with pm.Model() as normal_approx:
 # Normal approximation to the posterior
 norm_a = stats.norm(mean_p, std_p)
 
-## MCMC estimation of parameter mean
+## MCMC estimation of parameter mean (Stats Rethinking R code 2.8)
 Ns = 1000  # number of samples
 p_trace = np.empty(Ns)  # initialize array of samples
 p_trace[0] = 0.5
@@ -84,6 +85,9 @@ for i in range(1, Ns):
     t = stats.uniform.rvs()
     p_trace[i] = p_new if t < q1/q0 else p_trace[i-1]
 
+# with normal_approx:
+#     p_trace = pm.sample(Ns)
+
 ## Analytical Posterior
 Beta = stats.beta(k+1, n-k+1)  # Beta(\alpha = 1, \beta = 1) == U(0, 1)
 
@@ -93,12 +97,16 @@ Beta = stats.beta(k+1, n-k+1)  # Beta(\alpha = 1, \beta = 1) == U(0, 1)
 fig = plt.figure(1, figsize=(8, 6), clear=True)
 ax = fig.add_subplot(111)
 
+prior_func = PRIOR_D[prior_key]['prior']
+
+# TODO remake figures 2.x in the book
+
 # Plot grid approximation posteriors
 for i, Np in enumerate(reversed(Nps)):
     # Generate the posterior samples on a grid of parameter values
     p_grid, posterior, prior = sts.grid_binom_posterior(Np, k, n,
-                                                          prior_func=prior_func,
-                                                          norm_post=False)
+                                                        prior_func=prior_func,
+                                                        norm_post=False)
     p_max = p_grid[np.where(posterior == np.max(posterior))]
     p_max = p_max.mean() if p_max.size > 1 else p_max.item()
 
@@ -126,7 +134,7 @@ ax.axvline(p_fine[Beta_p.argmax()], c='k', ls='--', lw=1)
 # Plot the MCMC approximation
 # NOTE The stats_rethinking "dens" (R code 2.9) function calls the following
 #   R function:
-#   thed <- density(p_trace, adjust=0.5)
+#       thed <- density(p_trace, adjust=0.5)
 #   The default bandwidth in `density` (R docs) is: `bw="nrd0"`, which
 #   corresponds to 'silverman' in python. `adjust` sets `bandwith *= adjust`.
 #   
@@ -135,7 +143,7 @@ kde = stats.gaussian_kde(p_trace)
 kde.set_bandwidth(adjust * kde.silverman_factor())
 kde_p = kde.pdf(p_fine)
 ax.plot(p_fine, kde_p / kde_p.max(),
-        c='C4', label = 'MCMC Posterior')
+        c='C4', label='MCMC Posterior')
 ax.axvline(p_fine[kde_p.argmax()], c='C4', ls='--', lw=1)
 # sns.kdeplot(p_trace, ax=ax, c='C4', label='MCMC Posterior')
 
@@ -144,7 +152,7 @@ ax.axvline(p_fine[kde_p.argmax()], c='C4', ls='--', lw=1)
 
 # Plot formatting
 title = '$P \sim $ {}  |  trials: {}, events: {}'\
-          .format(PRIOR_D[prior_key]['title'], k, n)
+          .format(PRIOR_D[prior_key]['title'], n, k)
 ax.set_title(title)
 ax.set_xlabel('probability of water, $p$')
 ax.set_ylabel('non-normalized posterior probability of $p$')

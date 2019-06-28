@@ -43,15 +43,12 @@ width = precision + 2  # only need room for "0.", values \in [0, 1]
 fstr = f"{width}.{precision}f"
 
 print(f"----------Beta({k}, {n}) sample----------")
-# Sum the grid search posterior
 value = np.sum(posterior[p_grid < 0.5])
-print(f"P(p < 0.5) = {value:{fstr}}")
+print(f"P(p < 0.5) = {value:{fstr}}  # Sum the grid search posterior")
 
-# Sum the posterior samples
 value = np.sum(samples < 0.5) / Ns
-print(f"P(p < 0.5) = {value:{fstr}}")
+print(f"P(p < 0.5) = {value:{fstr}}  # Sum the posterior samples")
 
-# Middle percentiles
 value = np.sum((samples > 0.5) & (samples < 0.75)) / Ns
 print(f"P(0.5 < p < 0.75) = {value:{fstr}}")
 
@@ -76,43 +73,43 @@ ax1.set(xlabel='Sample number',
 ax2 = fig.add_subplot(gs[1])
 sns.distplot(samples, ax=ax2)
 ax2.set(xlabel='$p$',
-        ylabel='$P(p | \\mathrm{data})$')
+        ylabel=f"$P(p | k={k}, n={n})$")
 
 gs.tight_layout(fig)
 
 # Figure 3.2
 fig = plt.figure(2, clear=True)
 gs = GridSpec(nrows=2, ncols=2)
-axes = np.empty(shape=gs.get_geometry(), dtype=object)
 
 # 1st row: defined boundaries
 # 2nd row: defined probability masses
 indices = np.array([[p_grid < 0.5,
-                     ((p_grid > 0.5) & (p_grid < 0.75))],
+                      ((p_grid > 0.5) & (p_grid < 0.75))],
                     [p_grid < Beta.ppf(0.80),
                       ((p_grid > Beta.ppf(0.10)) & (p_grid < Beta.ppf(0.90)))]
                    ])
 
 titles = np.array([['$p < 0.50$', '$0.50 < p < 0.75$'],
-                   ['lower 80%', 'middle 80%']])
+                   ['lower 80%',  'middle 80%']])
+
+xticks = [0, 0.25, 0.5, 0.75, 1.0]  # custom axis labels
 
 for i in range(2):
     for j in range(2):
-        axes[i,j] = fig.add_subplot(gs[i,j])
+        ax = fig.add_subplot(gs[i,j])
 
         # Plot the exact analytical distribution
-        axes[i,j].plot(p_grid, Beta.pdf(p_grid),
+        ax.plot(p_grid, Beta.pdf(p_grid),
                         c='k', lw=1, label='Beta$(k+1, n-k+1)$')
-        axes[i,j].set(xlabel='$p$',
+        ax.set(xlabel='$p$',
                        ylabel='Density')
 
         # Fill in the percentiles
         idx = indices[i,j]
-        axes[i,j].fill_between(p_grid[idx], Beta.pdf(p_grid[idx]), alpha=0.5)
+        ax.fill_between(p_grid[idx], Beta.pdf(p_grid[idx]), alpha=0.5)
         sts.annotate(titles[i,j], ax)
 
-        axes[i,j].set(xticks=[0, 0.25, 0.5, 0.75, 1.0],
-                      xticklabels=(str(x) for x in [0, 0.25, 0.5, 0.75, 1.0]))
+        ax.set(xticks=xticks, xticklabels=(str(x) for x in xticks))
 
 gs.tight_layout(fig)
 
