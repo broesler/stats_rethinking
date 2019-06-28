@@ -40,26 +40,64 @@ Beta = stats.beta(k+1, n-k+1)  # Beta(\alpha = 1, \beta = 1) == U(0, 1)
 ## Intervals of defined boundaries
 precision = 4
 width = precision + 2  # only need room for "0.", values \in [0, 1]
+fstr = f"{width}.{precision}f"
 
+print(f"----------Beta({k}, {n}) sample----------")
 # Sum the grid search posterior
 value = np.sum(posterior[p_grid < 0.5])
-print(f'P(p < 0.5) = {value:{width}.{precision}f}')
+print(f"P(p < 0.5) = {value:{fstr}}")
+
 # Sum the posterior samples
 value = np.sum(samples < 0.5) / Ns
-print(f'P(p < 0.5) = {value:{width}.{precision}f}')
+print(f"P(p < 0.5) = {value:{fstr}}")
 
+# Middle percentiles
 value = np.sum((samples > 0.5) & (samples < 0.75)) / Ns
-print(f'P(0.5 < p < 0.75) = {value:{width}.{precision}f}')
+print(f"P(0.5 < p < 0.75) = {value:{fstr}}")
+
+def get_quantile(data, q=0.89, width=10, precision=8, 
+                 q_func=np.quantile, verbose=True, **kwargs):
+    """Pretty-print the desired quantile values from the data.
+
+    Parameters
+    ----------
+    data : (M, N) array_like
+        Matrix of M vectors in N dimensions.
+    q : array_like of float
+        Quantile or sequence of quantiles to compute, which must be between
+        0 and 1 inclusive.
+    width : int, optional, default=10
+        Width of printing field.
+    precision : int, optional, default=8
+        Number of decimal places to print.
+    q_func : callable, optional, default=numpy.quantile
+        Function to compute the quantile outputs from the data.
+    verbose : bool, optional, default=True
+        Print the output quantile percentages names and values.
+    **kwargs
+        Additional arguments to `q_func`.
+
+    Returns
+    -------
+    quantile : scalary or ndarray
+        The requested quantiles. See documentation for `numpy.quantile`.
+
+    See Also
+    --------
+    `numpy.quantile`
+    """
+    q = np.atleast_1d(q)
+    quantiles = q_func(data, q, **kwargs)
+    if verbose:
+        fstr = f"{width}.{precision}f"
+        name_str = ' '.join([f"{100*p:{width-1}g}%" for p in q])
+        value_str = ' '.join([f"{q:{fstr}}" for q in quantiles])
+        print(f"{name_str}\n{value_str}")
+    return quantiles
 
 ## Intervals of defined probability mass
-fstr = f'{{:{width}.{precision}f}}'  # empty value for printoptions
-with np.printoptions(formatter={'float': fstr.format}):
-    p1 = 0.8
-    print(f'{100*p1:{width}.0f}%')
-    print(np.quantile(samples, (p1,)))  # return array for formatting
-    p1, p2 = 0.1, 0.9
-    print(f'{100*p1:{width}.0f}% {100*p2:{width-1}.0f}%')
-    print(np.quantile(samples, (p1, p2)))
+get_quantile(samples, 0.8)
+get_quantile(samples, (0.1, 0.9))
 
 #------------------------------------------------------------------------------ 
 #        Plot the posterior samples
@@ -122,15 +160,38 @@ gs.tight_layout(fig)
 _, skewed_posterior, _ = utils.grid_binom_posterior(Np, k=3, n=3)
 skewed_samples = np.random.choice(p_grid, p=skewed_posterior, size=Ns, replace=True)
 
-with np.printoptions(formatter={'float': fstr.format}):
-    percentile = 0.50  # [percentile] confidence interval
-    a = (1 - percentile) / 2
-    p1, p2 = a, 1-a
-    print(f'{100*p1:{width}.0f}% {100*p2:{width-1}.0f}%')
-    # FIXME values don't match book precisely...
-    print(np.quantile(skewed_samples, (p1, p2)))
-    print(pm.stats.hpd(skewed_samples, a))
+print('----------Beta(3, 3) sample----------')
+percentile = 0.50  # [percentile] confidence interval
 
-plt.show()
+def get_percentiles(data, q=0.5, **kwargs):
+    """Pretty-print the desired percentile values from the data.
+
+    ..note:: A wrapper around `get_quantile`, where the arguments are forced
+        to take the form:
+    ..math:: a = \frac{1 - q}{2}
+        and called with :math:\mathtt{get_quantile(data, (a, 1-a))}
+
+    Parameters
+    ----------
+    data : (M, N) array_like
+        Matrix of M vectors in N dimensions.
+    q : array_like of float
+        Quantile or sequence of quantiles to compute, which must be between
+        0 and 1 inclusive.
+    **kwargs
+        See `get_quantile` for additional options.
+
+    See Also
+    --------
+    `get_quantile`
+    """
+    a = (1 - q) / 2
+    quantiles = get_quantile(skewed_samples, (a, 1-a), **kwargs)
+    return quantiles
+
+get_percentiles(skewed_samples, q=percentile)
+get_quantile(skewed_samples, q=percentile, q_func=pm.stats.hpd)
+
+# plt.show()
 #==============================================================================
 #==============================================================================
