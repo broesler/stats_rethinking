@@ -41,7 +41,7 @@ n = 9  # number of trials, i.e. "tosses"
 
 ## Grid-search parameters
 prior_key = 'uniform'  # 'uniform', 'step', 'exp'
-Nps = [5, 20, 100]  # range of grid sizes to try
+Nps = [5, 20]  # range of grid sizes to try
 NN = len(Nps)
 
 ## Compute quadratic approximation
@@ -72,21 +72,22 @@ norm_a = stats.norm(mean_p, std_p)
 
 ## MCMC estimation of parameter mean (Stats Rethinking R code 2.8)
 Ns = 1000  # number of samples
-p_trace = np.empty(Ns)  # initialize array of samples
-p_trace[0] = 0.5
-for i in range(1, Ns):
-    p_new = stats.norm.rvs(loc=p_trace[i-1], scale=0.1)
-    if p_new < 0:
-        p_new = np.abs(p_new)
-    if p_new > 1:
-        p_new = 2 - p_new
-    q0 = stats.binom.pmf(k, n, p_trace[i-1])
-    q1 = stats.binom.pmf(k, n, p_new)
-    t = stats.uniform.rvs()
-    p_trace[i] = p_new if t < q1/q0 else p_trace[i-1]
+# p_trace = np.empty(Ns)  # initialize array of samples
+# p_trace[0] = 0.5
+# for i in range(1, Ns):
+#     p_new = stats.norm.rvs(loc=p_trace[i-1], scale=0.1)
+#     if p_new < 0:
+#         p_new = np.abs(p_new)
+#     if p_new > 1:
+#         p_new = 2 - p_new
+#     q0 = stats.binom.pmf(k, n, p_trace[i-1])
+#     q1 = stats.binom.pmf(k, n, p_new)
+#     t = stats.uniform.rvs()
+#     p_trace[i] = p_new if t < q1/q0 else p_trace[i-1]
 
-# with normal_approx:
-#     p_trace = pm.sample(Ns)
+with normal_approx:
+    p_trace = pm.sample(Ns)
+    p_trace = p_trace['p']  # extract relevant values
 
 ## Analytical Posterior
 Beta = stats.beta(k+1, n-k+1)  # Beta(\alpha = 1, \beta = 1) == U(0, 1)
@@ -94,6 +95,7 @@ Beta = stats.beta(k+1, n-k+1)  # Beta(\alpha = 1, \beta = 1) == U(0, 1)
 #------------------------------------------------------------------------------ 
 #        Plot Results
 #------------------------------------------------------------------------------
+# Figure 2.7
 fig = plt.figure(1, figsize=(8, 6), clear=True)
 ax = fig.add_subplot(111)
 
@@ -111,7 +113,7 @@ for i, Np in enumerate(reversed(Nps)):
     p_max = p_max.mean() if p_max.size > 1 else p_max.item()
 
     # Plot the result
-    ax.axvline(p_max, c=f'C{NN-1-i}', ls='--', lw=1)
+    ax.axvline(p_max, c=f'C{i}', ls='--', lw=1)
     ax.plot(p_grid, posterior / posterior.max(), 
             marker='o', markerfacecolor='none', 
             label=f'Np = {Np}, $p_{{max}}$ = {p_max:.2f}')
@@ -120,16 +122,19 @@ p_fine = np.linspace(0, 1, num=100)
 
 # Plot the normal approximation
 norm_ap = norm_a.pdf(p_fine) 
+p_max = p_fine[norm_ap.argmax()]
 ax.plot(p_fine, norm_ap / norm_ap.max(),
         c='C3', 
-        label=f'Quad Approx: $\mathcal{{N}}({mean_p:.2f}, {std_p:.2f})$')
+        label=f"Quad Approx: $\mathcal{{N}}({mean_p:.2f}, {std_p:.2f})$"\
+                + f", $p_{{max}}$ = {p_max:.2f}")
 ax.axvline(p_fine[norm_ap.argmax()], c='C3', ls='--', lw=1)
 
 # Plot the analytical posterior
 Beta_p = Beta.pdf(p_fine)
+p_max = p_fine[Beta_p.argmax()]
 ax.plot(p_fine, Beta_p / Beta_p.max(),
-        'k-', label=f'True Posterior: $B({k+1}, {n-k+1})$')
-ax.axvline(p_fine[Beta_p.argmax()], c='k', ls='--', lw=1)
+        'k-', label=f"True Posterior: $B({k+1}, {n-k+1})$, $p_{{max}}$ = {p_max:.2f}")
+ax.axvline(p_max, c='k', ls='--', lw=1)
 
 # Plot the MCMC approximation
 # NOTE The stats_rethinking "dens" (R code 2.9) function calls the following
@@ -142,10 +147,10 @@ adjust = 0.5
 kde = stats.gaussian_kde(p_trace)
 kde.set_bandwidth(adjust * kde.silverman_factor())
 kde_p = kde.pdf(p_fine)
+p_max = p_fine[kde_p.argmax()]
 ax.plot(p_fine, kde_p / kde_p.max(),
-        c='C4', label='MCMC Posterior')
-ax.axvline(p_fine[kde_p.argmax()], c='C4', ls='--', lw=1)
-# sns.kdeplot(p_trace, ax=ax, c='C4', label='MCMC Posterior')
+        c='C4', label=f"MCMC Posterior, $p_{{max}}$ = {p_max:.2f}")
+ax.axvline(p_max, c='C4', ls='--', lw=1)
 
 # Plot the prior
 # ax.plot(p_fine, prior(p_fine), '-', c=0.4*np.array([1, 1, 1]), label='prior')
