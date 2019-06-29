@@ -11,17 +11,18 @@
 
 import numpy as np
 from scipy import stats
+import pymc3 as pm
 
 
 def annotate(text, ax):
     """Add annotation `text` to top-left of `ax` frame."""
     ax.text(x=0.05, y=0.9, s=text,
             ha='left',
-            va='center', 
+            va='center',
             transform=ax.transAxes)
 
 
-def get_quantile(data, q=0.89, width=10, precision=8, 
+def get_quantile(data, q=0.89, width=10, precision=8,
                  q_func=np.quantile, verbose=True, **kwargs):
     """Pretty-print the desired quantile values from the data.
 
@@ -89,6 +90,11 @@ def get_percentiles(data, q=0.5, **kwargs):
     return quantiles
 
 
+def get_hpdi(data, q=0.5, **kwargs):
+    """Call `sts.get_quantile` with `pymc3.stats.hpd` function."""
+    return get_quantile(data, q, q_func=pm.stats.hpd, **kwargs)
+
+
 def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
     """Posterior probability assuming a binomial distribution likelihood and
     arbitrary prior.
@@ -125,6 +131,34 @@ def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
         posterior = posterior / np.sum(posterior)
     return p_grid, posterior, prior_func
 
+
+def density(data, adjust=1.0, **kwargs):
+    """Return the kernel density estimate of the data, consistent with
+    R function of the same name.
+
+    Parameters
+    ----------
+    data : (M, N) array_like
+        Matrix of M vectors in K dimensions.
+    adjust : float, optional, default=1.0
+        Multiplicative factor for the bandwidth.
+    **kwargs : optional
+        Additional arguments passed to `scipy.stats.gaussian_kde`
+
+    Returns
+    -------
+    kde : kernel density estimate object
+        Call kde.pdf(x) to get the actual samples
+
+    ..note:: The stats_rethinking "dens" (R code 2.9) function calls the
+      following R function:
+          thed <- density(data, adjust=0.5)
+      The default bandwidth in `density` (R docs) is: `bw="nrd0"`, which
+      corresponds to 'silverman' in python. `adjust` sets `bandwith *= adjust`.
+    """
+    kde = stats.gaussian_kde(data)
+    kde.set_bandwidth(adjust * kde.silverman_factor())
+    return kde
 
 #==============================================================================
 #==============================================================================
