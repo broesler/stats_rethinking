@@ -14,12 +14,19 @@ from scipy import stats
 import pymc3 as pm
 
 
-def annotate(text, ax):
-    """Add annotation `text` to top-left of `ax` frame."""
-    ax.text(x=0.05, y=0.9, s=text,
-            ha='left',
-            va='center',
-            transform=ax.transAxes)
+def annotate(text, ax, loc='upper left'):
+    """Add annotation `text` to upper left of `ax` frame."""
+    # TODO validate loc string first
+    # except KeyError:
+    #     raise KeyError(f'The location {loc} is not supported!')
+
+    yloc, xloc = loc.split()
+    XS = dict({ 'left': 0.05, 'center': 0.5, 'right': 0.95})
+    YS = dict({'lower': 0.05, 'center': 0.5, 'upper': 0.95})
+    YA = dict({'upper': 'top', 'center': 'center', 'lower': 'bottom'})
+    xc, yc = XS[xloc], YS[yloc]
+    va = YA[yloc]
+    ax.text(x=xc, y=yc, s=text, ha=xloc, va=va, transform=ax.transAxes)
 
 
 def get_quantile(data, q=0.89, width=10, precision=8,
