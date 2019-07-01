@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
+from itertools import groupby
 from matplotlib.gridspec import GridSpec
 from scipy import stats
 
@@ -25,6 +26,7 @@ np.random.seed(56)  # initialize random number generator
 k = 6       # successes
 n = 9       # trials
 Np = 1000   # size of parameter grid
+given_data = np.array([1, 0, 1, 1, 1, 0, 1, 0, 1])
 
 # prior: P(p) ~ U(0, 1)
 p_grid, posterior, prior = sts.grid_binom_posterior(Np, k, n)
@@ -159,6 +161,7 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------ 
 #        2.2 Point Estimates
 #------------------------------------------------------------------------------
+print('----------Point Estimates----------')
 p_map = p_grid[skewed_posterior.argmax()]
 print(f"MAP estimate of posterior: {p_map:{fstr}}")
 
@@ -205,15 +208,15 @@ ax0.legend(loc='upper left')
 # Plot expected loss
 ax1 = fig.add_subplot(gs[1])
 
-ax1.plot(p_grid, abs_loss, label='Absolute Loss')
+ax1.plot(p_grid, abs_loss, label='Absolute Function')
 ax1.scatter(p_grid[abs_loss.argmin()], abs_loss.min(),
             marker='o', s=50, edgecolors='k', facecolors='none')
 
-ax1.plot(p_grid, quad_loss, label='Quadratic Loss')
+ax1.plot(p_grid, quad_loss, label='Quadratic Function')
 ax1.scatter(p_grid[quad_loss.argmin()], quad_loss.min(),
             marker='o', s=50, edgecolors='k', facecolors='none')
 
-ax1.set(xlabel='decision',
+ax1.set(xlabel='decision, $p$',
         ylabel='expected proportional loss')
 ax1.set_ylim((0, ax1.get_ylim()[1]))
 ax1.legend()
@@ -223,47 +226,109 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------ 
 #       3.3 Sampling to simulate predictions
 #------------------------------------------------------------------------------
-binom2 = stats.binom(n=2, p=0.7)   # frozen distribution
+print('----------Sampling for Simulation----------')
+# R code 3.22 - 3.25
+n = 2
+p = 0.7
+binom2 = stats.binom(n=n, p=p)   # frozen distribution
 
-print('P(X = {0, 1, 2}), X ~ Bin(n=2, p=0.7):')
-print(binom2.pmf(range(3)))
+print(f"P(X = {0, 1, 2}), X ~ Bin(n={n}, p={p}):")
+print(binom2.pmf(range(n+1)))
 
-print('X ~ Bin(n=2, p=0.7):')
+print(f"X ~ Bin(n={n}, p={p}):")
 print(binom2.rvs(1))  # X ~ {0, 1, 2}
 
 N = 100_000
 dummy2 = pd.Series(binom2.rvs(N))
 print('Histogram:')
-print(dummy2.value_counts(normalize=True, ascending=True))
+print(dummy2.value_counts(ascending=True))
 
-# Use 9 samples
-dummy9 = pd.Series(stats.binom.rvs(size=N, n=9, p=0.7))
-counts = dummy9.value_counts()
-
-# Plot histogram
-fig = plt.figure(5, clear=True)
-ax = fig.add_subplot(111)
-ax.stem(counts.index, counts.values, basefmt='none', use_line_collection=True)
-xticks = range(10)
-ax.set(xticks=xticks, xticklabels=(str(x) for x in xticks))
-ax.set_xlabel('$X$')
-ax.set_ylabel('Frequencies')
-ax.set_title('X ~ Bin(n=9, p=0.7)')
+# Use 9 trials instead of 2
+n = 9
+p = 0.7
+dummy9 = stats.binom.rvs(size=N, n=n, p=p)
 
 # Generate posterior predictive distribution
-# N = 10_000
-# w = stats.binom.rvs(size=N, n=9, p=0.6)
-# counts = np.bincount(w)
+w = stats.binom.rvs(size=Ns, n=n, p=samples)  # [# successes] == k_s
 
-# Plot histogram
-# fig = plt.figure(6, clear=True)
-# ax = fig.add_subplot(111)
-# ax.stem(counts.index, counts.values, basefmt='none', use_line_collection=True)
-# xticks = range(10)
-# ax.set(xticks=xticks, xticklabels=(str(x) for x in xticks))
-# ax.set_xlabel('$X$')
-# ax.set_ylabel('Frequencies')
-# ax.set_title('X ~ Bin(n=9, p=0.7)')
+counts = [np.bincount(dummy9), np.bincount(w) / Ns]
+titles = [f"$X \sim \mathrm{{Bin}}(n={n}, p={p})$", 'Posterior Predictive']
+
+# Figure 3.5, 3.6: Posterior predictive probability
+fig = plt.figure(5, figsize=(8, 4), clear=True)
+gs = GridSpec(nrows=1, ncols=2)
+for i in range(2):
+    ax = fig.add_subplot(gs[i])
+    ax.stem(counts[i], basefmt='none', use_line_collection=True)
+
+    xticks = range(n + 1)
+    ax.set(xticks=xticks, xticklabels=(str(x) for x in xticks))
+    ax.set(xlabel='$X$', ylabel='Counts', title=titles[i])
+
+gs.tight_layout(fig)
+
+#------------------------------------------------------------------------------ 
+#        Figure 3.7: Runs and Switches
+#------------------------------------------------------------------------------
+# Need to simulate each series of n trials, and count:
+#   * longest streak of successes
+#   * number of switches from success to failure or vice versa
+
+def longest_streak(data, val=1):
+    """Return the longest number of consecutive `val` occurrences in `data`."""
+    longest, current = 0, 0
+    for x in data:
+        if x == val:
+            current += 1
+        else:
+            longest = max(longest, current)
+            current = 0
+    return max(longest, current)
+
+def count_switches(data):
+    """Count the number of times consecutive values differ."""
+    return np.count_nonzero(np.diff(data))  # same as sum(abs(diff(...)))
+
+streaks, switches = np.empty(Ns, dtype=np.int64), np.empty(Ns, dtype=np.int64)
+for i, k_s in enumerate(w):
+    # Create n-vector of [0, 1]
+    trials = np.concatenate([np.ones(k_s), np.zeros(n - k_s)])
+    np.random.shuffle(trials)  # randomize order (independent events)
+    streaks[i] = longest_streak(trials)
+    switches[i] = count_switches(trials)
+
+counts = [np.bincount(streaks) / Ns, np.bincount(switches) / Ns]
+xlabels = ['longest run length', 'switches']
+
+data_vals = [longest_streak(given_data), count_switches(given_data)]
+
+# Figure 3.7
+fig = plt.figure(6, figsize=(8, 4), clear=True)
+gs = GridSpec(nrows=1, ncols=2)
+for i in range(2):
+    ax = fig.add_subplot(gs[i])
+    # plot simulated counts
+    _, stemlines, _ = ax.stem(counts[i],\
+                              linefmt='k', 
+                              markerfmt='none', 
+                              basefmt='none', 
+                              use_line_collection=True)
+    plt.setp(stemlines, lw=1)
+
+    # highlight the actual data value
+    ax.stem([data_vals[i]], [counts[i][data_vals[i]]],
+            linefmt='C0', 
+            markerfmt='none',
+            basefmt='none',
+            use_line_collection=True)
+
+    xticks = range(n + 1)
+    ax.set(xticks=xticks, xticklabels=(str(x) for x in xticks))
+    ax.set(xlabel=xlabels[i], ylabel='Frequencies')
+
+gs.tight_layout(fig)
+
+
 
 plt.show()
 #==============================================================================
