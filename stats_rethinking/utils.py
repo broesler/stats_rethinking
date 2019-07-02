@@ -132,11 +132,11 @@ def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
         prior = np.ones(Np)  # default uniform prior
     else:
         prior = prior_func(p_grid)
-    likelihood = stats.binom.pmf(k, n, p_grid)  # binomial distribution
+    likelihood = stats.binom.pmf(k=k, n=n, p=p_grid)  # binomial distribution
     posterior = likelihood * prior
     if norm_post:
         posterior = posterior / np.sum(posterior)
-    return p_grid, posterior, prior_func
+    return p_grid, posterior, prior
 
 
 def density(data, adjust=1.0, **kwargs):
