@@ -109,7 +109,7 @@ for i, Np in enumerate(reversed(Nps)):
     p_grid, posterior, prior = sts.grid_binom_posterior(Np, k, n,
                                                         prior_func=prior_func,
                                                         norm_post=False)
-    p_max = p_grid[np.where(posterior == np.max(posterior))]
+    p_max = p_grid[np.argmax(posterior)]
     p_max = p_max.mean() if p_max.size > 1 else p_max.item()
 
     # Plot the result
