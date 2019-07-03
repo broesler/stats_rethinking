@@ -35,14 +35,14 @@ birth2 = np.array([0,1,0,1,0,1,1,1,0,0,1,1,1,1,1,0,0,1,1,1,0,0,1,1,1,0,
 1,1,1,0,1,1,0,1,1,0,1,1,1,0,0,0,0,0,0,1,0,0,0,1,1,0,0,1,0,0,1,1,
 0,0,0,1,1,1,0,0,0,0])
 
-df = pd.DataFrame(np.vstack([birth1, birth2]).T, columns=['birth1', 'birth2'])
+# df = pd.DataFrame(np.vstack([birth1, birth2]).T, columns=['birth1', 'birth2'])
 
 # Compute the posterior distribution for:
 #   P(boy | data) ∝ P(data | boy) * P(boy)  
 #
 Np = 1000                        # [-] size of parameter grid
-n = df.size                      # trials
-k = np.sum(df.values.flatten())  # total boys
+n = birth1.size + birth2.size    # trials
+k = birth1.sum() + birth2.sum()  # total boys
 
 # prior: P(p) ~ U(0, 1); P(data | p) = B(n, p)
 p_grid, posterior, prior = sts.grid_binom_posterior(Np, k, n)
@@ -65,22 +65,36 @@ def model_compare(n=0, k=0, p=0.5, ax=None):
     mode = stats.mode(binom).mode[0]
 
     # Plot the distribution vs the value from the data
-    ax = sns.distplot(binom, label=f"$B({n}, {p:.2f})$")
-    ax.axvline(mode, c='C0', ls='--', label=f"Theory: $k = {mode}$")
-    ax.axvline(k, c='k', ls='--', label=f"Data: $k = {k}$")
+    # sns.distplot(binom, label=f"$B({n}, {p:.2f})$", ax=ax)
+    counts = np.bincount(binom)
+    ax.stem(counts, label=f"$B({n}, {p:.2f})$ | Theory: $k = {mode}$",
+            basefmt='none', use_line_collection=True)
+    # ax.axvline(mode, c='k', ls='--', label=f"Theory: $k = {mode}$")
+    ax.axvline(k, c='C1', ls='--', label=f"Data: $k = {k}$")
     ax.set(xlabel='Number of Boys', ylabel='Frequency')
     ax.legend()
 
 # Simulate 10,000 replicas of 200 births
 p = 0.5  # assume boys are equally likely as girls
 fig, ax = plt.subplots(num=1, clear=True)
+ax.set_title('All 200 births')
 model_compare(n=n, k=k, p=p, ax=ax)
 
 # 3H4: simulate 10,000 replicas of 100 births (birth1)
 fig, ax = plt.subplots(num=2, clear=True)
+ax.set_title('First birth only')
 model_compare(n=birth1.size, k=np.sum(birth1), p=p, ax=ax)
 
 # 3H5: Check assumption that birth1 and birth2 are independent
+girl_first = birth2[birth1 == 0]
+ng = girl_first.size
+kg = girl_first.sum()
+
+fig, ax = plt.subplots(num=3, clear=True)
+ax.set_title('Second Births after Girls')
+model_compare(n=ng, k=kg, p=p, ax=ax)
+
+# Model far underpredicts boys following girls!
 
 plt.show()
 #==============================================================================
