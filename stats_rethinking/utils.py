@@ -30,7 +30,7 @@ def annotate(text, ax, loc='upper left'):
 
 
 def quantile(data, q=0.89, width=10, precision=8,
-                 q_func=np.quantile, verbose=True, **kwargs):
+                 q_func=np.quantile, verbose=False, **kwargs):
     """Pretty-print the desired quantile values from the data.
 
     Parameters
@@ -99,7 +99,11 @@ def percentiles(data, q=0.5, **kwargs):
 
 def hpdi(data, q=0.5, **kwargs):
     """Call `sts.quantile` with `pymc3.stats.hpd` function."""
-    return quantile(data, q, q_func=pm.stats.hpd, **kwargs)
+    q_arr = np.atleast_1d(q)
+    out = np.empty((q_arr.shape[0], 2))
+    for i, v in enumerate(q_arr):
+        out[i,:] = quantile(data, v, q_func=pm.stats.hpd, **kwargs)
+    return out.squeeze()  # return a tuple for a float input
 
 
 def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
