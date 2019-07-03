@@ -53,8 +53,8 @@ value = np.sum((samples > 0.5) & (samples < 0.75)) / Ns
 print(f"P(0.5 < p < 0.75) = {value:{fstr}}")
 
 ## Intervals of defined probability mass
-sts.get_quantile(samples, 0.8)
-sts.get_quantile(samples, (0.1, 0.9))
+sts.quantile(samples, 0.8)
+sts.quantile(samples, (0.1, 0.9))
 
 #------------------------------------------------------------------------------ 
 #        Plot the posterior samples
@@ -126,10 +126,10 @@ Beta_skewed = stats.beta(k+1, n-k+1)  # n = k = 3
 print('----------Beta(3, 3) sample----------')
 percentile = 0.50  # [percentile] confidence interval
 print('Middle 50% PI:')
-perc_50 = sts.get_percentiles(skewed_samples, q=percentile)
-print('HDPI 50%:')
-# hpdi_50 = sts.get_quantile(skewed_samples, q=percentile, q_func=pm.stats.hpd)
-hpdi_50 = sts.get_hpdi(skewed_samples, q=percentile)
+perc_50 = sts.percentiles(skewed_samples, q=percentile)
+print('HPDI 50%:')
+# hpdi_50 = sts.quantile(skewed_samples, q=percentile, q_func=pm.stats.hpd)
+hpdi_50 = sts.hpdi(skewed_samples, q=percentile)
 
 # Figure 3.3
 fig = plt.figure(3, figsize=(8,4), clear=True)

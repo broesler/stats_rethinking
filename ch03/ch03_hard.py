@@ -42,8 +42,21 @@ Np = 1000                        # [-] size of parameter grid
 n = df.size                      # trials
 k = np.sum(df.values.flatten())  # boys
 
-# prior: P(p) ~ U(0, 1)
+# prior: P(p) ~ U(0, 1); P(data | p) = Bin(n, k, p)
 p_grid, posterior, prior = sts.grid_binom_posterior(Np, k, n)
+
+# 3H1: MAP estimation
+p_max = p_grid[np.argmax(posterior)]
+print(f"P(boy | data) = {p_max:10.8f}")
+
+# 3H2: sample from the posterior
+Ns = 10_000
+samples = np.random.choice(p_grid, p=posterior, size=Ns, replace=True)
+
+hpdi_qs = [0.50, 0.89, 0.97]
+hpdi = list()
+for q in hpdi_qs:
+    hpdi.append(sts.hpdi(samples, q, width=6, precision=4))
 
 #==============================================================================
 #==============================================================================

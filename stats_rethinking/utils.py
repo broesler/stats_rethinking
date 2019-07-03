@@ -29,7 +29,7 @@ def annotate(text, ax, loc='upper left'):
     ax.text(x=xc, y=yc, s=text, ha=xloc, va=va, transform=ax.transAxes)
 
 
-def get_quantile(data, q=0.89, width=10, precision=8,
+def quantile(data, q=0.89, width=10, precision=8,
                  q_func=np.quantile, verbose=True, **kwargs):
     """Pretty-print the desired quantile values from the data.
 
@@ -70,13 +70,13 @@ def get_quantile(data, q=0.89, width=10, precision=8,
     return quantiles
 
 
-def get_percentiles(data, q=0.5, **kwargs):
+def percentiles(data, q=0.5, **kwargs):
     """Pretty-print the desired percentile values from the data.
 
-    ..note:: A wrapper around `get_quantile`, where the arguments are forced
+    ..note:: A wrapper around `quantile`, where the arguments are forced
         to take the form:
     ..math:: a = \frac{1 - q}{2}
-        and called with :math:\mathtt{get_quantile(data, (a, 1-a))}
+        and called with :math:\mathtt{quantile(data, (a, 1-a))}
 
     Parameters
     ----------
@@ -86,20 +86,20 @@ def get_percentiles(data, q=0.5, **kwargs):
         Quantile or sequence of quantiles to compute, which must be between
         0 and 1 inclusive.
     **kwargs
-        See `get_quantile` for additional options.
+        See `quantile` for additional options.
 
     See Also
     --------
-    `get_quantile`
+    `quantile`
     """
     a = (1 - q) / 2
-    quantiles = get_quantile(data, (a, 1-a), **kwargs)
+    quantiles = quantile(data, (a, 1-a), **kwargs)
     return quantiles
 
 
-def get_hpdi(data, q=0.5, **kwargs):
-    """Call `sts.get_quantile` with `pymc3.stats.hpd` function."""
-    return get_quantile(data, q, q_func=pm.stats.hpd, **kwargs)
+def hpdi(data, q=0.5, **kwargs):
+    """Call `sts.quantile` with `pymc3.stats.hpd` function."""
+    return quantile(data, q, q_func=pm.stats.hpd, **kwargs)
 
 
 def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
