@@ -154,22 +154,25 @@ def density(data, adjust=1.0, **kwargs):
     adjust : float, optional, default=1.0
         Multiplicative factor for the bandwidth.
     **kwargs : optional
-        Additional arguments passed to `scipy.stats.gaussian_kde`
+        Additional arguments passed to `scipy.stats.gaussian_kde`. 
+
+    ..note:: This function overrides the `bw_method` argument. The
+      stats_rethinking "dens" (R code 2.9) function calls the following
+      R function:
+          thed <- density(data, adjust=0.5)
+      The default bandwidth in `density` (R docs) is: `bw="nrd0"`, which
+      corresponds to 'silverman' in python. `adjust` sets `bandwith *= adjust`.
 
     Returns
     -------
     kde : kernel density estimate object
         Call kde.pdf(x) to get the actual samples
 
-    ..note:: The stats_rethinking "dens" (R code 2.9) function calls the
-      following R function:
-          thed <- density(data, adjust=0.5)
-      The default bandwidth in `density` (R docs) is: `bw="nrd0"`, which
-      corresponds to 'silverman' in python. `adjust` sets `bandwith *= adjust`.
     """
-    kde = stats.gaussian_kde(data)
+    kde = stats.gaussian_kde(data, **kwargs)
     kde.set_bandwidth(adjust * kde.silverman_factor())
     return kde
+
 
 #==============================================================================
 #==============================================================================
