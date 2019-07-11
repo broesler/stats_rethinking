@@ -76,13 +76,32 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------ 
 #        Gaussian from product of RVs (R code 4.2-4.4)
 #------------------------------------------------------------------------------
-N = 10000
-Np = 12
-unif = stats.uniform(loc=0, scale=0.1)
-growth = np.prod(1 + unif.rvs(size=(N, Np)), axis=1)
+N, Np = 10000, 12
 
-plt.figure(2, clear=True)
-sns.distplot(growth, fit=stats.norm, ax=ax)
+# Product of Np samples, repeated N times
+def prod_dist(p):
+    unif = stats.uniform(0, p)
+    return np.prod(1 + unif.rvs(size=(N, Np)), axis=1)
+
+fig = plt.figure(2, figsize=(8,3), clear=True)
+gs = GridSpec(nrows=1, ncols=3)
+
+for i, p in enumerate([0.01, 0.1, 0.5]):
+    ax = fig.add_subplot(gs[i])
+    sns.distplot(prod_dist(p), fit=stats.norm)  # dens() from R code 4.3
+    ax.set(title=f"$p = {p}$",
+           xlabel='value',
+           ylabel='density')
+
+gs.tight_layout(fig)
+
+# log of large deviate
+p = 0.5
+plt.figure(3, clear=True)
+ax = sns.distplot(np.log(prod_dist(p)), fit=stats.norm)
+ax.set(title=f"$p = {p}$",
+       xlabel='value',
+       ylabel='log(density)')
 
 plt.show()
 #==============================================================================
