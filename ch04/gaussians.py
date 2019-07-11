@@ -22,7 +22,7 @@ import stats_rethinking as sts
 plt.style.use('seaborn-darkgrid')
 np.random.seed(56)  # initialize random number generator
 
-# Demonstrate central limit theorem
+# Demonstrate central limit theorem (R code 4.1)
 N = 1000  # number of players
 Ns = 16   # number of coin flips (steps to take)
 
@@ -63,27 +63,27 @@ for i, n in enumerate([4, 8, 16]):
         ax.get_shared_x_axes().join(ax, axes[i-1])
     axes.append(ax)
 
-    data = players[:, n]  # the relevant column
-
-    # Generate the kernel density estimate
-    max_val = np.ceil(np.max(np.abs(data)))
-    x = np.linspace(-max_val, max_val, 1000)
-
-    # sns.distplot(data, ax=ax)
-    kde = sts.density(data, adjust=0.5).pdf(x)
-    ax.plot(x, kde, 'C0')
-
-    # Plot a Gaussian for comparison
-    norm = stats.norm(loc=data.mean(), scale=data.std())
-    ax.plot(x, norm.pdf(x), 'k-', alpha=0.5)
+    # Generate the kernel density estimate, and normal fit
+    data = players[:, n]  # select the relevant column
+    sns.distplot(data, fit=stats.norm, ax=ax)
 
     ax.set_title(f"{n} steps", fontsize=12)
     ax.set(xlabel='position',
            ylabel='Density')
 
-ax.set_xlim((max_val-1)*np.array([-1, 1]))
-
 gs.tight_layout(fig)
+
+#------------------------------------------------------------------------------ 
+#        Gaussian from product of RVs (R code 4.2-4.4)
+#------------------------------------------------------------------------------
+N = 10000
+Np = 12
+unif = stats.uniform(loc=0, scale=0.1)
+growth = np.prod(1 + unif.rvs(size=(N, Np)), axis=1)
+
+plt.figure(2, clear=True)
+sns.distplot(growth, fit=stats.norm, ax=ax)
+
 plt.show()
 #==============================================================================
 #==============================================================================
