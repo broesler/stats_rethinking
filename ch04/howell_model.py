@@ -74,11 +74,12 @@ gs.tight_layout(fig)
 N = 10_000
 sample_mu = mu.rvs(N)
 sample_sigma = sigma.rvs(N)
-prior_h = stats.norm(sample_mu, sample_sigma).rvs(N)
+prior_h = stats.norm(sample_mu, sample_sigma)
+sample_h = prior_h.rvs(N)
 
 plt.figure(3, clear=True)
-ax = sns.distplot(prior_h, fit=stats.norm)
-ax.axvline(prior_h.mean(), c='k', ls='--', lw=1)
+ax = sns.distplot(sample_h, fit=stats.norm)
+ax.axvline(sample_h.mean(), c='k', ls='--', lw=1)
 ax.set(title='$h \sim \mathcal{N}(\mu, \sigma)$',
        xlabel=col, 
        ylabel='density')
