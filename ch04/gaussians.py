@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-  Description: Chapter 4 Code
+  Description: Chapter 4 Code Sections 4.1 - 4.2
 """
 #==============================================================================
 
