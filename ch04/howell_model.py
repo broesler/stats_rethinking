@@ -23,7 +23,12 @@ plt.ion()
 plt.style.use('seaborn-darkgrid')
 np.random.seed(56)  # initialize random number generator
 
+#------------------------------------------------------------------------------ 
+#        Load Dataset
+#------------------------------------------------------------------------------
 data_path = '../data/'
+
+# df: height [cm], weight [kg], age [int], male [0,1]
 df = pd.read_csv(data_path + 'Howell1.csv')
 
 # Filter adults only
@@ -37,31 +42,46 @@ ax = sns.distplot(adults[col], fit=stats.norm)
 ax.set(xlabel=col, 
        ylabel='density')
 
-# Build a model
+#------------------------------------------------------------------------------ 
+#        Build a model
+#------------------------------------------------------------------------------
 # Assume: h_i ~ N(mu, sigma)
 # Specify the priors for each parameter:
 mu = stats.norm(178, 20)  # mu = 178 cm, sigma = 20 cm
 sigma = stats.uniform(0, 50)
 
-# Plot the priors
-x1 = np.linspace(mu.ppf(0.01), mu.ppf(0.99))
-x2 = np.linspace(sigma.ppf(0.01), sigma.ppf(0.99))
+# Combine data for plotting convenience
+priors = dict({'mu':    {'dist': mu,    'lims': (100, 250)},
+               'sigma': {'dist': sigma, 'lims': (-10, 60)}})
 
+# Plot the priors
 fig = plt.figure(2, clear=True)
 gs = GridSpec(nrows=1, ncols=2)
 
-ax1 = fig.add_subplot(gs[0])
-ax1.plot(x1, mu.pdf(x1))
-ax1.set(xlabel='$\mu$',
-        ylabel='density')
-ax1.ticklabel_format(axis='y', style='sci', scilimits=(-1, 1))
+for i, (name, d) in enumerate(priors.items()):
+    x = np.linspace(d['lims'][0], d['lims'][1], 100)
 
-ax2 = fig.add_subplot(gs[1])
-ax2.plot(x2, sigma.pdf(x2))
-ax2.set(xlabel='$\sigma$')
-ax2.ticklabel_format(axis='y', style='sci', scilimits=(-1, 1))
+    ax = fig.add_subplot(gs[i])
+    ax.plot(x, d['dist'].pdf(x))
+    ax.set(title='prior distribution',
+           xlabel=f"$\{name}$",
+           ylabel='density')
+    ax.ticklabel_format(axis='y', style='sci', scilimits=(-1, 1))
 
 gs.tight_layout(fig)
+
+# Sample from the joint prior distribution
+N = 10_000
+sample_mu = mu.rvs(N)
+sample_sigma = sigma.rvs(N)
+prior_h = stats.norm(sample_mu, sample_sigma).rvs(N)
+
+plt.figure(3, clear=True)
+ax = sns.distplot(prior_h, fit=stats.norm)
+ax.axvline(prior_h.mean(), c='k', ls='--', lw=1)
+ax.set(title='$h \sim \mathcal{N}(\mu, \sigma)$',
+       xlabel=col, 
+       ylabel='density')
 
 #==============================================================================
 #==============================================================================
