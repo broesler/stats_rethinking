@@ -20,7 +20,7 @@ from matplotlib.gridspec import GridSpec
 
 import stats_rethinking as sts
 
-plt.ion()
+# plt.ion()
 plt.style.use('seaborn-darkgrid')
 np.random.seed(56)  # initialize random number generator
 
@@ -33,14 +33,15 @@ data_path = '../data/'
 df = pd.read_csv(data_path + 'Howell1.csv')
 
 # Filter adults only
-adults = df[df['age'] >= 18]
+adults = df.loc[df['age'] >= 18]
 
 # Inspect the data
-col = 'height'
+data_col = 'height'
 
 plt.figure(1, clear=True)
-ax = sns.distplot(adults[col], fit=stats.norm)
-ax.set(xlabel=col, 
+ax = sns.distplot(adults[data_col], fit=stats.norm)
+ax.set(title='Raw data',
+       xlabel=data_col, 
        ylabel='density')
 
 #------------------------------------------------------------------------------ 
@@ -86,18 +87,16 @@ plt.figure(3, clear=True)
 ax = sns.distplot(sample_h, fit=stats.norm)
 ax.axvline(sample_h.mean(), c='k', ls='--', lw=1)
 ax.set(title='Joint Prior: $h \sim \mathcal{N}(\mu, \sigma)$',
-       xlabel=col, 
+       xlabel=data_col, 
        ylabel='density')
 
-# ----------------------------------------------------------------------------- 
+#------------------------------------------------------------------------------ 
 #         Grid approximation of the posterior distribution
-# -----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 Np = 200  # number of parameters values to test
 # return a DataFrame of the input data
-# post = sts.expand_grid(mu=np.linspace(140, 160, Np),
-#                        sigma=np.linspace(4, 9, Np))
-post = sts.expand_grid(mu=np.linspace(120, 180, Np),
-                       sigma=np.linspace(0, 50, Np))
+post = sts.expand_grid(mu=np.linspace(140, 160, Np),
+                       sigma=np.linspace(4, 9, Np))
 
 # Compute the joint (log) probability of the data given each set of parameters:
 #     f(x) = P(data | x),
@@ -105,9 +104,11 @@ post = sts.expand_grid(mu=np.linspace(120, 180, Np),
 def log_likelihood(data):
     return lambda x: stats.norm(x['mu'], x['sigma']).logpdf(data).sum()
 
-post['log_likelihood'] = post.apply(log_likelihood(df[col]), axis=1)
+post['log_likelihood'] = post.apply(log_likelihood(adults[data_col]), axis=1)
 
-# Bayes' rule: P(p | data) = P(data | p)*P(p) -- log(a) + log(b) = log(a*b)
+# Bayes' rule numerator:
+#   P(p | data) ∝ P(data | p)*P(p),
+# taking advantage of the fact that log(a*b) == log(a) + log(b)
 post['prod'] = (post['log_likelihood']
                 + mu.logpdf(post['mu'])
                 + sigma.logpdf(post['sigma']))
@@ -127,5 +128,32 @@ ax.set_title('Contours of Posterior')
 ax.set_xlabel('$\mu$')
 ax.set_ylabel('$\sigma$')
 
+#------------------------------------------------------------------------------ 
+#         Sample from the posterior
+#------------------------------------------------------------------------------
+Ns = 10_000
+samples = post.sample(n=Ns, replace=True, weights='posterior') 
+
+# Plot the samples
+fig = plt.figure(5, clear=True)
+ax = fig.add_subplot(111)
+ax.scatter(samples['mu'], samples['sigma'], alpha=0.05)
+ax.axis('equal')
+ax.set(title='Posterior Samples',
+       xlabel='$\mu$',
+       ylabel='$\sigma$')
+
+# Plot the marginal posterior densities of mu and sigma
+fig = plt.figure(6, clear=True)
+gs = GridSpec(nrows=1, ncols=2)
+for i, col in enumerate(['mu', 'sigma']):
+    ax = fig.add_subplot(gs[i])
+    sns.distplot(samples[col])
+    ax.set(xlabel=f"$\\{col}$",
+           ylabel='density')
+plt.title('Marginal Posterior Density')
+gs.tight_layout(fig)
+
+plt.show()
 #==============================================================================
 #==============================================================================

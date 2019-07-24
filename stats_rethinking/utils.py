@@ -28,8 +28,7 @@ def annotate(text, ax, loc='upper left'):
     XS = dict({ 'left': 0.05, 'center': 0.5, 'right': 0.95})
     YS = dict({'lower': 0.05, 'center': 0.5, 'upper': 0.95})
     YA = dict({'upper': 'top', 'center': 'center', 'lower': 'bottom'})
-    xc, yc = XS[xloc], YS[yloc]
-    va = YA[yloc]
+    xc, yc, va = XS[xloc], YS[yloc], YA[yloc]
     ax.text(x=xc, y=yc, s=text, ha=xloc, va=va, transform=ax.transAxes)
 
 
@@ -102,7 +101,11 @@ def percentiles(data, q=0.5, **kwargs):
 
 
 def hpdi(data, q=0.5, **kwargs):
-    """Call `sts.quantile` with `pymc3.stats.hpd` function."""
+    """Compute highest probability density interval.
+
+    ..note::
+        This function calls `sts.quantile` with `pymc3.stats.hpd` function.
+    """
     q_arr = np.atleast_1d(q)
     out = np.empty((q_arr.shape[0], 2))
     for i, v in enumerate(q_arr):
