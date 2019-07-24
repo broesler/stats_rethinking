@@ -107,7 +107,7 @@ def log_likelihood(data):
 
 post['log_likelihood'] = post.apply(log_likelihood(df[col]), axis=1)
 
-# Bayes' rule (log(a) + log(b) = log(a*b))
+# Bayes' rule: P(p | data) = P(data | p)*P(p) -- log(a) + log(b) = log(a*b)
 post['prod'] = (post['log_likelihood']
                 + mu.logpdf(post['mu'])
                 + sigma.logpdf(post['sigma']))
