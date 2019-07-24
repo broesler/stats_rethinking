@@ -15,6 +15,7 @@ import pandas as pd
 import seaborn as sns
 
 from scipy import stats
+from scipy.interpolate import griddata
 from matplotlib.gridspec import GridSpec
 
 import stats_rethinking as sts
@@ -47,8 +48,11 @@ ax.set(xlabel=col,
 #------------------------------------------------------------------------------
 # Assume: h_i ~ N(mu, sigma)
 # Specify the priors for each parameter:
-mu = stats.norm(178, 20)  # mu = 178 cm, sigma = 20 cm
-sigma = stats.uniform(0, 50)
+mu_c = 178  # [cm] chosen mean for the height-mean prior
+mus_c = 20  # [cm] chosen std  for the height-mean prior
+sig_c = 50  # [cm] chosen maximum value for height-stdev prior
+mu = stats.norm(mu_c, mus_c)
+sigma = stats.uniform(0, sig_c)
 
 # Combine data for plotting convenience
 priors = dict({'mu':    {'dist': mu,    'lims': (100, 250)},
@@ -56,7 +60,7 @@ priors = dict({'mu':    {'dist': mu,    'lims': (100, 250)},
 
 # Plot the priors
 fig = plt.figure(2, clear=True)
-gs = GridSpec(nrows=1, ncols=2)
+gs = GridSpec(nrows=1, ncols=len(priors))
 
 for i, (name, d) in enumerate(priors.items()):
     x = np.linspace(d['lims'][0], d['lims'][1], 100)
@@ -77,12 +81,51 @@ sample_sigma = sigma.rvs(N)
 prior_h = stats.norm(sample_mu, sample_sigma)
 sample_h = prior_h.rvs(N)
 
+# Plot the sampled joint prior
 plt.figure(3, clear=True)
 ax = sns.distplot(sample_h, fit=stats.norm)
 ax.axvline(sample_h.mean(), c='k', ls='--', lw=1)
-ax.set(title='$h \sim \mathcal{N}(\mu, \sigma)$',
+ax.set(title='Joint Prior: $h \sim \mathcal{N}(\mu, \sigma)$',
        xlabel=col, 
        ylabel='density')
+
+# ----------------------------------------------------------------------------- 
+#         Grid approximation of the posterior distribution
+# -----------------------------------------------------------------------------
+Np = 200  # number of parameters values to test
+# return a DataFrame of the input data
+# post = sts.expand_grid(mu=np.linspace(140, 160, Np),
+#                        sigma=np.linspace(4, 9, Np))
+post = sts.expand_grid(mu=np.linspace(120, 180, Np),
+                       sigma=np.linspace(0, 50, Np))
+
+# Compute the joint (log) probability of the data given each set of parameters:
+#     f(x) = P(data | x),
+# where x = (mu, sigma), for example.
+def log_likelihood(data):
+    return lambda x: stats.norm(x['mu'], x['sigma']).logpdf(data).sum()
+
+post['log_likelihood'] = post.apply(log_likelihood(df[col]), axis=1)
+
+# Bayes' rule (log(a) + log(b) = log(a*b))
+post['prod'] = (post['log_likelihood']
+                + mu.logpdf(post['mu'])
+                + sigma.logpdf(post['sigma']))
+
+# Un-logify to get the actual posterior probability values
+post['posterior'] = np.exp(post['prod'] - post['prod'].max())
+
+# Contour plot of the results
+xx, yy, zz = (np.reshape(np.asarray(m), (Np, Np))
+                for m in [post['mu'], post['sigma'], post['posterior']])
+
+fig = plt.figure(4, clear=True)
+ax = fig.add_subplot(111)
+cs = plt.contour(xx, yy, zz)
+ax.clabel(cs, inline=1, fontsize=10)
+ax.set_title('Contours of Posterior')
+ax.set_xlabel('$\mu$')
+ax.set_ylabel('$\sigma$')
 
 #==============================================================================
 #==============================================================================

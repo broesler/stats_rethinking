@@ -9,9 +9,13 @@
 """
 #==============================================================================
 
+import matplotlib.pyplot as plt
 import numpy as np
-from scipy import stats
+import pandas as pd
 import pymc3 as pm
+
+from scipy import stats
+from sklearn.utils.extmath import cartesian
 
 
 def annotate(text, ax, loc='upper left'):
@@ -172,6 +176,12 @@ def density(data, adjust=1.0, **kwargs):
     kde = stats.gaussian_kde(data, **kwargs)
     kde.set_bandwidth(adjust * kde.silverman_factor())
     return kde
+
+
+# TODO expand documentation with examples
+def expand_grid(**kwargs):
+    """Return a DataFrame of points, where the columns are kwargs."""
+    return pd.DataFrame(cartesian(kwargs.values()), columns=kwargs.keys())
 
 
 #==============================================================================
