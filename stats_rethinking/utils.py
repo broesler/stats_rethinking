@@ -187,5 +187,22 @@ def expand_grid(**kwargs):
     return pd.DataFrame(cartesian(kwargs.values()), columns=kwargs.keys())
 
 
+def precis(quap, p=0.89):
+    """Return a `DataFrame` of the mean, standard deviation, and percentile
+    interval of the given `rv_frozen` distributions.
+    """
+    a = (1-p)/2
+    pp = 100*np.array([a, 1-a])
+
+    vals = np.empty((len(quap), 4))
+    for i, v in enumerate(quap.values()):
+        vals[i,:] = [v.mean(), v.std(), v.ppf(a), v.ppf(1-a)]
+
+    # Organize in a DataFrame 
+    df = pd.DataFrame(vals,
+                      columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"],
+                      index=quap.keys())
+    return df
+
 #==============================================================================
 #==============================================================================
