@@ -19,6 +19,9 @@ from matplotlib.gridspec import GridSpec
 
 import stats_rethinking as sts
 
+# Set to True for "Overthinking" R code 4.24
+sample_size_flag = True  # if True, take only 20 data points
+
 plt.ion()
 plt.style.use('seaborn-darkgrid')
 np.random.seed(56)  # initialize random number generator
@@ -31,16 +34,19 @@ data_path = '../data/'
 # df: height [cm], weight [kg], age [int], male [0,1]
 df = pd.read_csv(data_path + 'Howell1.csv')
 
+if sample_size_flag:
+    df = df.sample(n=20)  # small sample size
+
 # Filter adults only
 adults = df.loc[df['age'] >= 18]
 
 # Inspect the data
-data_col = 'height'
+col = 'height'
 
 plt.figure(1, clear=True)
-ax = sns.distplot(adults[data_col], fit=stats.norm)
+ax = sns.distplot(adults[col], fit=stats.norm)
 ax.set(title='Raw data',
-       xlabel=data_col, 
+       xlabel=col, 
        ylabel='density')
 
 #------------------------------------------------------------------------------ 
@@ -48,11 +54,11 @@ ax.set(title='Raw data',
 #------------------------------------------------------------------------------
 # Assume: h_i ~ N(mu, sigma)
 # Specify the priors for each parameter:
-mu_c = 178  # [cm] chosen mean for the height-mean prior
-mus_c = 20  # [cm] chosen std  for the height-mean prior
-sig_c = 50  # [cm] chosen maximum value for height-stdev prior
+mu_c = 178  # [cm] mean for the height-mean prior
+mus_c = 20  # [cm] std  for the height-mean prior
+sig_c = 50  # [cm] maximum value for height-stdev prior
 mu = stats.norm(mu_c, mus_c)
-sigma = stats.uniform(0, sig_c)
+sigma = stats.uniform(0, sig_c)  # sigma must be positive!
 
 # Combine data for plotting convenience
 priors = dict({'mu':    {'dist': mu,    'lims': (100, 250)},
@@ -136,8 +142,13 @@ print_percentiles(wadlow_height)
 #------------------------------------------------------------------------------
 Np = 200  # number of parameters values to test
 # return a DataFrame of the input data
-post = sts.expand_grid(mu=np.linspace(140, 160, Np),
-                       sigma=np.linspace(4, 9, Np))
+if sample_size_flag:
+    mu_stop, sigma_stop = 170, 20
+else:
+    mu_stop, sigma_stop = 140, 9
+
+post = sts.expand_grid(mu=np.linspace(140, mu_stop, Np),
+                       sigma=np.linspace(4, sigma_stop, Np))
 
 # Compute the joint (log) probability of the data given each set of parameters:
 #     f(x) = P(data | x),
@@ -145,7 +156,9 @@ post = sts.expand_grid(mu=np.linspace(140, 160, Np),
 def log_likelihood(data):
     return lambda x: stats.norm(x['mu'], x['sigma']).logpdf(data).sum()
 
-post['log_likelihood'] = post.apply(log_likelihood(adults[data_col]), axis=1)
+# post['log_likelihood'] = post.apply(log_likelihood(adults[col]), axis=1)
+post['log_likelihood'] = post.apply(lambda x: stats.norm.logpdf(adults[col], loc=x['mu'], scale=x['sigma']).sum(),
+                                    axis=1)
 
 # Bayes' rule numerator:
 #   P(p | data) ∝ P(data | p)*P(p),
@@ -163,7 +176,7 @@ xx, yy, zz = (np.reshape(np.asarray(m), (Np, Np))
 
 fig = plt.figure(4, clear=True)
 ax = fig.add_subplot(111)
-cs = plt.contour(xx, yy, zz)
+cs = plt.contour(xx, yy, zz, cmap='viridis')
 ax.clabel(cs, inline=1, fontsize=10)
 ax.set_title('Contours of Posterior')
 ax.set_xlabel('$\mu$')
@@ -179,7 +192,6 @@ samples = post.sample(n=Ns, replace=True, weights='posterior')
 fig = plt.figure(5, clear=True)
 ax = fig.add_subplot(111)
 ax.scatter(samples['mu'], samples['sigma'], alpha=0.05)
-ax.axis('equal')
 ax.set(title='Posterior Samples',
        xlabel='$\mu$',
        ylabel='$\sigma$')
@@ -187,14 +199,13 @@ ax.set(title='Posterior Samples',
 # Plot the marginal posterior densities of mu and sigma
 fig = plt.figure(6, clear=True)
 gs = GridSpec(nrows=1, ncols=2)
-for i, col in enumerate(['mu', 'sigma']):
+for i, c in enumerate(['mu', 'sigma']):
     ax = fig.add_subplot(gs[i])
-    sns.distplot(samples[col])
-    ax.set(xlabel=f"$\\{col}$",
+    sns.distplot(samples[c], fit=stats.norm)
+    ax.set(title='Marginal Posterior Density',
+           xlabel=f"$\\{c}$",
            ylabel='density')
-plt.title('Marginal Posterior Density')
 gs.tight_layout(fig)
 
-plt.show()
 #==============================================================================
 #==============================================================================
