@@ -32,14 +32,15 @@ data_path = '../data/'
 df = pd.read_csv(data_path + 'Howell1.csv')
 
 # Filter adults only
-adults = df[df['age'] >= 18]
+adults = df.loc[df['age'] >= 18]
 
 # Inspect the data
-col = 'height'
+data_col = 'height'
 
 plt.figure(1, clear=True)
-ax = sns.distplot(adults[col], fit=stats.norm)
-ax.set(xlabel=col, 
+ax = sns.distplot(adults[data_col], fit=stats.norm)
+ax.set(title='Raw data',
+       xlabel=data_col, 
        ylabel='density')
 
 #------------------------------------------------------------------------------ 
@@ -47,8 +48,11 @@ ax.set(xlabel=col,
 #------------------------------------------------------------------------------
 # Assume: h_i ~ N(mu, sigma)
 # Specify the priors for each parameter:
-mu = stats.norm(178, 20)  # mu = 178 cm, sigma = 20 cm
-sigma = stats.uniform(0, 50)
+mu_c = 178  # [cm] chosen mean for the height-mean prior
+mus_c = 20  # [cm] chosen std  for the height-mean prior
+sig_c = 50  # [cm] chosen maximum value for height-stdev prior
+mu = stats.norm(mu_c, mus_c)
+sigma = stats.uniform(0, sig_c)
 
 # Combine data for plotting convenience
 priors = dict({'mu':    {'dist': mu,    'lims': (100, 250)},
@@ -56,7 +60,7 @@ priors = dict({'mu':    {'dist': mu,    'lims': (100, 250)},
 
 # Plot the priors
 fig = plt.figure(2, clear=True)
-gs = GridSpec(nrows=1, ncols=2)
+gs = GridSpec(nrows=1, ncols=len(priors))
 
 for i, (name, d) in enumerate(priors.items()):
     x = np.linspace(d['lims'][0], d['lims'][1], 100)
@@ -127,5 +131,70 @@ print_percentiles(wadlow_height)
 #------------------------------------------------------------------------------
 # P(h | data) ∝ P(data | h) * P(h) = P(data | h) * N(N(m, s), U(0, v))
 
+#------------------------------------------------------------------------------ 
+#         Grid approximation of the posterior distribution
+#------------------------------------------------------------------------------
+Np = 200  # number of parameters values to test
+# return a DataFrame of the input data
+post = sts.expand_grid(mu=np.linspace(140, 160, Np),
+                       sigma=np.linspace(4, 9, Np))
+
+# Compute the joint (log) probability of the data given each set of parameters:
+#     f(x) = P(data | x),
+# where x = (mu, sigma), for example.
+def log_likelihood(data):
+    return lambda x: stats.norm(x['mu'], x['sigma']).logpdf(data).sum()
+
+post['log_likelihood'] = post.apply(log_likelihood(adults[data_col]), axis=1)
+
+# Bayes' rule numerator:
+#   P(p | data) ∝ P(data | p)*P(p),
+# taking advantage of the fact that log(a*b) == log(a) + log(b)
+post['prod'] = (post['log_likelihood']
+                + mu.logpdf(post['mu'])
+                + sigma.logpdf(post['sigma']))
+
+# Un-logify to get the actual posterior probability values
+post['posterior'] = np.exp(post['prod'] - post['prod'].max())
+
+# Contour plot of the results
+xx, yy, zz = (np.reshape(np.asarray(m), (Np, Np))
+                for m in [post['mu'], post['sigma'], post['posterior']])
+
+fig = plt.figure(4, clear=True)
+ax = fig.add_subplot(111)
+cs = plt.contour(xx, yy, zz)
+ax.clabel(cs, inline=1, fontsize=10)
+ax.set_title('Contours of Posterior')
+ax.set_xlabel('$\mu$')
+ax.set_ylabel('$\sigma$')
+
+#------------------------------------------------------------------------------ 
+#         Sample from the posterior
+#------------------------------------------------------------------------------
+Ns = 10_000
+samples = post.sample(n=Ns, replace=True, weights='posterior') 
+
+# Plot the samples
+fig = plt.figure(5, clear=True)
+ax = fig.add_subplot(111)
+ax.scatter(samples['mu'], samples['sigma'], alpha=0.05)
+ax.axis('equal')
+ax.set(title='Posterior Samples',
+       xlabel='$\mu$',
+       ylabel='$\sigma$')
+
+# Plot the marginal posterior densities of mu and sigma
+fig = plt.figure(6, clear=True)
+gs = GridSpec(nrows=1, ncols=2)
+for i, col in enumerate(['mu', 'sigma']):
+    ax = fig.add_subplot(gs[i])
+    sns.distplot(samples[col])
+    ax.set(xlabel=f"$\\{col}$",
+           ylabel='density')
+plt.title('Marginal Posterior Density')
+gs.tight_layout(fig)
+
+plt.show()
 #==============================================================================
 #==============================================================================
