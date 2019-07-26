@@ -20,7 +20,7 @@ from matplotlib.gridspec import GridSpec
 import stats_rethinking as sts
 
 # Set to True for "Overthinking" R code 4.24
-sample_size_flag = True  # if True, take only 20 data points
+sample_size_flag = False  # if True, take only 20 data points
 
 plt.ion()
 plt.style.use('seaborn-darkgrid')
@@ -61,8 +61,8 @@ mu = stats.norm(mu_c, mus_c)
 sigma = stats.uniform(0, sig_c)  # sigma must be positive!
 
 # Combine data for plotting convenience
-priors = dict({'mu':    {'dist': mu,    'lims': (100, 250)},
-               'sigma': {'dist': sigma, 'lims': (-10, 60)}})
+priors = dict(mu=dict(dist=mu, lims=(100, 250)),
+              sigma=dict(dist=sigma, lims=(-10, 60)))
 
 # Plot the priors
 fig = plt.figure(2, clear=True)
@@ -93,10 +93,13 @@ sample_h_wide = stats.norm(sample_mu_wide, sample_sigma).rvs(N)
 
 wadlow_height = 272  # tallest man ever
 
+#------------------------------------------------------------------------------ 
+#        Prior-Predictive Simulation
+#------------------------------------------------------------------------------
 fig = plt.figure(3, figsize=(10,6), clear=True)
 gs = GridSpec(nrows=1, ncols=2)
 
-# Plot the desired joint prior
+# Plot with the desired joint prior
 ax = fig.add_subplot(gs[0])
 sns.distplot(sample_h, fit=stats.norm, ax=ax)
 ax.axvline(sample_h.mean(), c='k', ls='--', lw=1)
@@ -106,7 +109,7 @@ ax.set(xlim=(0, 350),
        ylabel='density')
 ax.ticklabel_format(axis='y', style='sci', scilimits=(-1, 1))
 
-# Plot a poor joint prior
+# Plot with a poor joint prior
 ax = fig.add_subplot(gs[1])
 sns.distplot(sample_h_wide, fit=stats.norm, ax=ax)
 ax.axvline(sample_h_wide.mean(), c='k', ls='--', lw=1)
@@ -145,7 +148,7 @@ Np = 200  # number of parameters values to test
 if sample_size_flag:
     mu_stop, sigma_stop = 170, 20
 else:
-    mu_stop, sigma_stop = 140, 9
+    mu_stop, sigma_stop = 160, 9
 
 post = sts.expand_grid(mu=np.linspace(140, mu_stop, Np),
                        sigma=np.linspace(4, sigma_stop, Np))

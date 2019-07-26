@@ -58,8 +58,8 @@ with pm.Model() as normal_approx:
     height = pm.Normal('h', mu=mu, sd=sigma, observed=adults[col])
 
     # Sample the posterior to find argmax P(mu, sigma | data)
-    start = dict({'mu': adults[col].mean(),
-                  'sigma': adults[col].std()})
+    start = dict(mu=adults[col].mean(),
+                 sigma=adults[col].std())
     map_est = pm.find_MAP(start=start)  # use MAP estimation for mean
 
     # quadratic approximation
@@ -83,9 +83,9 @@ print(sts.precis(quap))
 
 # Sample from the multivariate posterior
 #   (other option: use pm.sample() -> trace_to_dataframe())
-df = sts.sample_quap(quap, Ns)
-print(df.cov())
-print(df.corr())
+samples = sts.sample_quap(quap, Ns)
+print(samples.cov())
+print(samples.corr())
 
 #==============================================================================
 #==============================================================================
