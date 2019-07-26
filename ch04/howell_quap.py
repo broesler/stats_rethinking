@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-  Description: Quadratic approximation to the data
+  Description: Quadratic approximation to the data (R code 4.26 -- 4.30)
 """
 #==============================================================================
 
@@ -43,7 +43,10 @@ col = 'height'
 # Specify the priors for each parameter:
 mu_c = 178  # [cm] chosen mean for the height-mean prior
 mus_c = 20  # [cm] chosen std  for the height-mean prior
+# mus_c = 0.1 # [cm] R code 4.31 test with narrow prior for the mean
 sig_c = 50  # [cm] chosen maximum value for height-stdev prior
+
+Ns = 10_000  # number of samples
 
 # Compute quadratic approximation
 with pm.Model() as normal_approx:
@@ -54,23 +57,35 @@ with pm.Model() as normal_approx:
     # Define the model likelihood, including the data: P(data | mu, sigma)
     height = pm.Normal('h', mu=mu, sd=sigma, observed=adults[col])
 
-    start = dict({'mu': adults[col]
+    # Sample the posterior to find argmax P(mu, sigma | data)
+    start = dict({'mu': adults[col].mean(),
+                  'sigma': adults[col].std()})
+    map_est = pm.find_MAP(start=start)  # use MAP estimation for mean
 
-    # Sample the posterior to find P(mu, sigma | data)
-    pm.sample()
-    map_est = pm.find_MAP()  # use MAP estimation for mean
-
-    # Extract desired values
-    mean_mu = map_est['mu']
-    std_mu = ((1 / pm.find_hessian(map_est, vars=[mu]))**0.5)[0,0]
-    mean_sigma = map_est['sigma']
-    std_sigma = ((1 / pm.find_hessian(map_est, vars=[sigma]))**0.5)[0,0]
-
-# quadratic approximation
-quap = dict({'mu': stats.norm(mean_mu, std_mu),
-             'sigma': stats.norm(mean_sigma, std_sigma)})
+    # quadratic approximation
+    quap = dict()
+    for k in ['mu', 'sigma']:
+        # NOTE eval(k) requires variable to be eponymous
+        mean = map_est[k]
+        std = ((1 / pm.find_hessian(map_est, vars=[eval(k)]))**0.5)[0,0]
+        quap[k] = stats.norm(mean, std)
 
 print(sts.precis(quap))
+## Output:
+# With mus_c = 20:
+#                mean       std        5.5%       94.5%
+#   mu     154.607024  0.411994  153.948578  155.265470
+#   sigma    7.731333  0.291386    7.265643    8.197024
+# With mus_c = 0.1:
+#                mean       std        5.5%       94.5%
+#   mu     177.863755  0.099708  177.704401  178.023108
+#   sigma   24.517564  0.924040   23.040769   25.994359
+
+# Sample from the multivariate posterior
+#   (other option: use pm.sample() -> trace_to_dataframe())
+df = sts.sample_quap(quap, Ns)
+print(df.cov())
+print(df.corr())
 
 #==============================================================================
 #==============================================================================

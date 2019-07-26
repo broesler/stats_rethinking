@@ -186,23 +186,34 @@ def expand_grid(**kwargs):
     """Return a DataFrame of points, where the columns are kwargs."""
     return pd.DataFrame(cartesian(kwargs.values()), columns=kwargs.keys())
 
-
+# TODO:
+#     * allow for numpy array of data (change ppf calls to quantile)
+#     * allow for DataFrame of samples (cols are variable names)
+#     * allow for non-dict (just data) input by excluding "index"
+#     parameter from DataFrame call.
 def precis(quap, p=0.89):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
     """
     a = (1-p)/2
-    pp = 100*np.array([a, 1-a])
+    pp = 100*np.array([a, 1-a])  # percentages for printing
 
+    index = quap.keys()
     vals = np.empty((len(quap), 4))
     for i, v in enumerate(quap.values()):
         vals[i,:] = [v.mean(), v.std(), v.ppf(a), v.ppf(1-a)]
 
     # Organize in a DataFrame 
     df = pd.DataFrame(vals,
-                      columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"],
-                      index=quap.keys())
+                      index=index,
+                      columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"])
     return df
+
+
+def sample_quap(quap, N=1000):
+    """Sample each distribution in the `quap` dictionary."""
+    return pd.DataFrame(np.array([v.rvs(N) for v in quap.values()]).T,
+                        columns=quap.keys())
 
 #==============================================================================
 #==============================================================================
