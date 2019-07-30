@@ -198,16 +198,54 @@ def precis(quap, p=0.89):
     a = (1-p)/2
     pp = 100*np.array([a, 1-a])  # percentages for printing
 
-    index = quap.keys()
-    vals = np.empty((len(quap), 4))
-    for i, v in enumerate(quap.values()):
-        vals[i,:] = [v.mean(), v.std(), v.ppf(a), v.ppf(1-a)]
+    # dictionary of `rv_frozen` distributions
+    if isinstance(quap, dict):
+        index = quap.keys()
+        vals = np.empty((len(quap), 4))
+        for i, v in enumerate(quap.values()):
+            vals[i,:] = [v.mean(), v.std(), v.ppf(a), v.ppf(1-a)]
+        df = pd.DataFrame(vals, index=index,
+                          columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"])
+        return df
 
-    # Organize in a DataFrame 
-    df = pd.DataFrame(vals,
-                      index=index,
-                      columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"])
-    return df
+    # DataFrame of data points
+    if isinstance(quap, pd.DataFrame):
+        index = quap.keys()
+        df = pd.DataFrame()
+        df['mean'] = quap.mean()
+        df['std'] = quap.std()
+        for i in range(2):
+            df[f"{pp[i]:g}%"] = quap.apply(lambda x: np.percentile(x, pp[i]))
+        return df
+
+    # Numpy array of data points
+    if isinstance(quap, np.ndarray):
+        # Columns are data, ignore index
+        vals = np.vstack([quap.mean(axis=0),
+                          quap.std(axis=0),
+                          np.percentile(quap, pp[0], axis=0),
+                          np.percentile(quap, pp[1], axis=0)]).T
+        df = pd.DataFrame(vals,
+                          columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"])
+        return df
+    else:
+        raise TypeError('quap of this type is unsupported!')
+
+
+# TODO expand documentation with examples
+def quap(varnames, start=None):
+    """Return quadratic approximation for the MAP estimate of each variable in
+    `varnames`. Must be called within a pymc3 context block.
+    """
+    pm.sample()  # initialize NUTS sampler
+    map_est = pm.find_MAP(start=start)  # use MAP estimation for mean
+
+    quap = dict()
+    for k, v in varnames.items():
+        mean = map_est[k]
+        std = ((1 / pm.find_hessian(map_est, vars=[v]))**0.5)[0,0]
+        quap[k] = stats.norm(mean, std)
+    return quap
 
 
 def sample_quap(quap, N=1000):

@@ -60,15 +60,9 @@ with pm.Model() as normal_approx:
     # Sample the posterior to find argmax P(mu, sigma | data)
     start = dict(mu=adults[col].mean(),
                  sigma=adults[col].std())
-    map_est = pm.find_MAP(start=start)  # use MAP estimation for mean
 
-    # quadratic approximation
-    quap = dict()
-    for k in ['mu', 'sigma']:
-        # NOTE eval(k) requires variable to be eponymous
-        mean = map_est[k]
-        std = ((1 / pm.find_hessian(map_est, vars=[eval(k)]))**0.5)[0,0]
-        quap[k] = stats.norm(mean, std)
+    # normal approximation to the posterior
+    quap = sts.quap(dict(mu=mu, sigma=sigma), start=start)
 
 print(sts.precis(quap))
 ## Output:
@@ -84,7 +78,9 @@ print(sts.precis(quap))
 # Sample from the multivariate posterior
 #   (other option: use pm.sample() -> trace_to_dataframe())
 samples = sts.sample_quap(quap, Ns)
+print('covariance:')
 print(samples.cov())
+print('correlation coeff:')
 print(samples.corr())
 
 #==============================================================================
