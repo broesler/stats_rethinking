@@ -73,7 +73,7 @@ def quantile(data, q=0.89, width=10, precision=8,
     return quantiles
 
 
-def percentiles(data, q=0.5, **kwargs):
+def percentiles(data, q=50, **kwargs):
     """Pretty-print the desired percentile values from the data.
 
     ..note:: A wrapper around `quantile`, where the arguments are forced
@@ -86,8 +86,8 @@ def percentiles(data, q=0.5, **kwargs):
     data : (M, N) array_like
         Matrix of M vectors in N dimensions.
     q : array_like of float
-        Quantile or sequence of quantiles to compute, which must be between
-        0 and 1 inclusive.
+        Percentile or sequence of percentiles to compute, which must be between
+        0 and 100, inclusive.
     **kwargs
         See `quantile` for additional options.
 
@@ -95,22 +95,30 @@ def percentiles(data, q=0.5, **kwargs):
     --------
     `quantile`
     """
-    a = (1 - q) / 2
+    a = (1 - (q/100)) / 2
     quantiles = quantile(data, (a, 1-a), **kwargs)
     return quantiles
 
 
-def hpdi(data, q=0.5, **kwargs):
+def hpdi(data, alpha=0.5, verbose=False, width=10, precision=8, **kwargs):
     """Compute highest probability density interval.
 
     ..note::
         This function calls `sts.quantile` with `pymc3.stats.hpd` function.
     """
-    q_arr = np.atleast_1d(q)
-    out = np.empty((q_arr.shape[0], 2))
-    for i, v in enumerate(q_arr):
-        out[i,:] = quantile(data, v, q_func=pm.stats.hpd, **kwargs)
-    return out.squeeze()  # return a tuple for a float input
+    # subtract from 1, so "alpha=0.89" gives 89% of probability
+    # q_arr = 1 - np.atleast_1d(alpha)
+    # out = np.empty((q_arr.shape[0], 2))
+    # for i, q in enumerate(q_arr):
+        # out[i,:] = quantile(data, v, q_func=pm.stats.hpd, **kwargs)
+    q = 1 - alpha
+    quantiles = pm.stats.hpd(data, q, **kwargs)
+    if verbose:
+        fstr = f"{width}.{precision}f"
+        name_str = ' '.join([f"{100*(1-p):{width-1}g}%" for p in np.hstack((q, q))])
+        value_str = ' '.join([f"{q:{fstr}}" for q in quantiles])
+        print(f"|{name_str}|\n{value_str}")
+    return quantiles
 
 
 def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
