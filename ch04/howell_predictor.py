@@ -36,6 +36,7 @@ df = pd.read_csv(data_path + 'Howell1.csv')
 adults = df[df['age'] >= 18]
 
 Ns = 10_000
+Nd = adults.shape[0]
 
 w = adults['weight']  # [kg] independent variable
 wbar = w.mean()
@@ -119,17 +120,14 @@ b_map = map_est['beta']
 h_pred = a_map + b_map * (w - wbar)
 
 # Figure 4.6
-ax_d.plot(w, h_pred, 'k', alpha=0.5, label='MAP Prediction')
+ax_d.plot(w, h_pred, 'k', label='MAP Prediction')
 ax_d.legend()
 
 # Plot the posterior prediction vs N data points
-N_test = [10, 50, 150, adults.shape[0]]
+N_test = [10, 50, 150, Nd]
 
 fig = plt.figure(3, clear=True)
 gs = GridSpec(nrows=2, ncols=2)
-
-# Compute all model output from evenly-spaced input
-x = np.linspace(adults['weight'].min(), adults['weight'].max(), 100)
 
 for i, N in enumerate(N_test):
     df_n = adults[:N]
@@ -138,11 +136,11 @@ for i, N in enumerate(N_test):
 
     with pm.Model() as linear_model:
         # Define the model
-        alpha = pm.Normal('alpha', mu=178, sd=20)       # parameter priors
+        alpha = pm.Normal('alpha', mu=178, sd=20)  # parameter priors
         beta = pm.Lognormal('beta', mu=0, sd=1)
-        sigma = pm.Uniform('sigma', 0, 50)              # std prior
-        linear_model = alpha + beta*(w - wbar)
-        h = pm.Normal('h', mu=linear_model, sd=sigma,   # likelihood
+        sigma = pm.Uniform('sigma', 0, 50)         # std prior
+        mu = alpha + beta*(w - wbar)
+        h = pm.Normal('h', mu=mu, sd=sigma,        # likelihood
                       observed=df_n['height'])
         # Sample the posterior distributions of parameters
         quap = sts.quap(dict(alpha=alpha, beta=beta, sigma=sigma))
@@ -158,14 +156,13 @@ for i, N in enumerate(N_test):
     ax.scatter(df_n['weight'], df_n['height'], alpha=0.5, label='Raw Data')
 
     # linear model (input pts) x (# curves)
-    model = post['alpha'].values + post['beta'].values * (x[:, None] - wbar)
+    mu = post['alpha'].values + post['beta'].values * (w[:, None] - wbar)
 
     for j in range(post.shape[0]):
-        ax.plot(x, model[:, j], 'k-', lw=1, alpha=0.3)
+        ax.plot(w, mu[:, j], 'k-', lw=1, alpha=0.3)
     ax.set(title=f"N = {N}",
            xlabel='weight [kg]',
-           ylabel='height [cm]',
-           xlim=(x.min(), x.max()))
+           ylabel='height [cm]')
 
 gs.tight_layout(fig)
 
@@ -174,12 +171,38 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------
 mu_at_50 = tr['alpha'] + tr['beta'] * (50 - wbar)
 
+# Figure 4.8 (R code 4.50 -- 4.51)
 fig = plt.figure(4, clear=True)
 ax = sns.distplot(mu_at_50)
 ax.set(xlabel='$\mu | w = 50$ [kg]',
        ylabel='density')
 
 sts.hpdi(mu_at_50, 0.89, verbose=True)
+
+# mu = sts.link()
+Ns = 1000
+tr = sts.sample_quap(quap, Ns)
+
+# Compute all model output from evenly-spaced input
+x = np.arange(25, 71)
+
+# each row corresponds to a data point
+mu = tr['alpha'].values + tr['beta'].values * (x[:, None] - wbar)
+
+mu_mean = mu.mean(axis=1)  # (Nd, 1) average mu values for each data point
+q = 0.89
+mu_hpdi = np.apply_along_axis(lambda row: sts.hpdi(row, q=q), axis=1, arr=mu)
+
+fig = plt.figure(5, clear=True)
+ax = fig.add_subplot()
+ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
+ax.plot(x, mu_mean, 'k', label='MAP Estimate')
+ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
+                facecolor='k', alpha=0.5, interpolate=True,
+                label=f"{100*q:g}% Credible Interval")
+ax.set(xlabel='weight [kg]',
+       ylabel='height [cm]')
+ax.legend()
 
 #==============================================================================
 #==============================================================================

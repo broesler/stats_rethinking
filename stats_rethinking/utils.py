@@ -100,25 +100,32 @@ def percentiles(data, q=50, **kwargs):
     return quantiles
 
 
-def hpdi(data, alpha=0.5, verbose=False, width=10, precision=8, **kwargs):
+def hpdi(data, alpha=None, q=None, 
+         verbose=False, width=10, precision=8, **kwargs):
     """Compute highest probability density interval.
 
     ..note::
         This function calls `sts.quantile` with `pymc3.stats.hpd` function.
+
+    Examples
+    --------
+    >>> arr = np.random.random((100, 1))
+    >>> (sts.hpdi(arr, q=0.89) ==  sts.hpdi(arr, alpha=1-0.89)).all()
+    True
     """
-    # subtract from 1, so "alpha=0.89" gives 89% of probability
-    # q_arr = 1 - np.atleast_1d(alpha)
-    # out = np.empty((q_arr.shape[0], 2))
-    # for i, q in enumerate(q_arr):
-        # out[i,:] = quantile(data, v, q_func=pm.stats.hpd, **kwargs)
-    q = 1 - alpha
-    quantiles = pm.stats.hpd(data, q, **kwargs)
+    if alpha is None:
+        if q is None:
+            alpha = 0.05
+        else:
+            alpha = 1 - q
+    q = 1 - alpha  # alpha takes precedence if both are given
+    quantiles = pm.stats.hpd(data, alpha, **kwargs)
     if verbose:
         fstr = f"{width}.{precision}f"
         name_str = ' '.join([f"{100*(1-p):{width-1}g}%" for p in np.hstack((q, q))])
         value_str = ' '.join([f"{q:{fstr}}" for q in quantiles])
         print(f"|{name_str}|\n{value_str}")
-    return quantiles
+    return quantiles.squeeze()
 
 
 def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
