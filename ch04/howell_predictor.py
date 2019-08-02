@@ -54,10 +54,11 @@ ax_d.set(xlabel='weight [kg]',
 # Build the model:
 #   w = actual weight data
 #   h ~ N(mu, sigma)
-#   mu = alpha + beta*(w - w_bar)
-#   alpha = N(178, 20)
-#   beta = N(0, 10)
-#   sigma = U(0, 50)
+#   where:
+#       mu = alpha + beta*(w - w_bar)
+#       alpha = N(178, 20)
+#       beta = N(0, 10)
+#       sigma = U(0, 50)
 
 #------------------------------------------------------------------------------ 
 #        Prior Predictive Simulation (Figure 4.5)
@@ -156,10 +157,10 @@ for i, N in enumerate(N_test):
     ax.scatter(df_n['weight'], df_n['height'], alpha=0.5, label='Raw Data')
 
     # linear model (input pts) x (# curves)
-    mu = post['alpha'].values + post['beta'].values * (w[:, None] - wbar)
+    model = post['alpha'].values + post['beta'].values * (w[:, None] - wbar)
 
     for j in range(post.shape[0]):
-        ax.plot(w, mu[:, j], 'k-', lw=1, alpha=0.3)
+        ax.plot(w, model[:, j], 'k-', lw=1, alpha=0.3)
     ax.set(title=f"N = {N}",
            xlabel='weight [kg]',
            ylabel='height [cm]')
@@ -179,30 +180,30 @@ ax.set(xlabel='$\mu | w = 50$ [kg]',
 
 sts.hpdi(mu_at_50, 0.89, verbose=True)
 
-# mu = sts.link()
-Ns = 1000
+# mu = sts.link(model, Ns)
+# Generate samples, compute model output for even-interval input
 tr = sts.sample_quap(quap, Ns)
-
-# Compute all model output from evenly-spaced input
 x = np.arange(25, 71)
+mu_samp = tr['alpha'].values + tr['beta'].values * (x[:, None] - wbar)
 
-# each row corresponds to a data point
-mu = tr['alpha'].values + tr['beta'].values * (x[:, None] - wbar)
-
-mu_mean = mu.mean(axis=1)  # (Nd, 1) average mu values for each data point
+# Plot the credible interval for the mean of the height (not including sigma)
 q = 0.89
-mu_hpdi = np.apply_along_axis(lambda row: sts.hpdi(row, q=q), axis=1, arr=mu)
+mu_mean = mu_samp.mean(axis=1)  # (Nd, 1) average mu values for each data point
+mu_hpdi = np.apply_along_axis(lambda row: sts.hpdi(row, q=q), axis=1, arr=mu_samp)
 
 fig = plt.figure(5, clear=True)
 ax = fig.add_subplot()
 ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
 ax.plot(x, mu_mean, 'k', label='MAP Estimate')
 ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
-                facecolor='k', alpha=0.5, interpolate=True,
+                facecolor='k', alpha=0.3, interpolate=True,
                 label=f"{100*q:g}% Credible Interval")
 ax.set(xlabel='weight [kg]',
        ylabel='height [cm]')
 ax.legend()
+
+# Calculate the prediction interval, including sigma
+
 
 #==============================================================================
 #==============================================================================
