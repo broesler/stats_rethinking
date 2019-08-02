@@ -35,11 +35,10 @@ df = pd.read_csv(data_path + 'Howell1.csv')
 # Filter adults only
 adults = df[df['age'] >= 18]
 
-Ns = 10_000
-Nd = adults.shape[0]
-
 w = adults['weight']  # [kg] independent variable
 wbar = w.mean()
+
+Ns = 10_000  # general number of samples to use
 
 # Plot the raw data
 fig = plt.figure(1, clear=True)
@@ -63,7 +62,7 @@ ax_d.set(xlabel='weight [kg]',
 #------------------------------------------------------------------------------ 
 #        Prior Predictive Simulation (Figure 4.5)
 #------------------------------------------------------------------------------
-# Plot the height as predicted by just the priors (without the data)
+# Plot the mean height vs weight as predicted by the priors (without the data)
 fig = plt.figure(2, clear=True)
 gs = GridSpec(nrows=1, ncols=2)
 ax0 = fig.add_subplot(gs[0])
@@ -80,16 +79,16 @@ for ax in [ax0, ax1]:
 N = 100
 a = stats.norm(178, 20).rvs(N)
 b = stats.norm(0, 10).rvs(N)
-h_prior = a + b*(w[:, None] - wbar)  # (Nw, N)
+mu_prior = a + b*(w[:, None] - wbar)  # (Nw, N)
 for i in range(N):
-    ax0.plot(w, h_prior[:, i], 'k', alpha=0.2)
+    ax0.plot(w, mu_prior[:, i], 'k', alpha=0.2)
 ax0.set_title('A poor prior')
 
 # Restrict beta to positive values
-b_pos = stats.lognorm(s=1, scale=1).rvs(N)
-h_prior_better = a + b_pos*(w[:, None] - wbar)  # (Nw, N)
+b_pos = stats.lognorm(s=1, scale=1).rvs(N)  # s = sigma, scale = exp(mu)
+mu_prior_better = a + b_pos*(w[:, None] - wbar)  # (Nw, N)
 for i in range(N):
-    ax1.plot(w, h_prior_better[:, i], 'k', alpha=0.2)
+    ax1.plot(w, mu_prior_better[:, i], 'k', alpha=0.2)
 ax1.set_title('A better prior')
 gs.tight_layout(fig)
 
@@ -125,7 +124,7 @@ ax_d.plot(w, h_pred, 'k', label='MAP Prediction')
 ax_d.legend()
 
 # Plot the posterior prediction vs N data points
-N_test = [10, 50, 150, Nd]
+N_test = [10, 50, 150, adults.shape[0]]
 
 fig = plt.figure(3, clear=True)
 gs = GridSpec(nrows=2, ncols=2)
@@ -157,6 +156,8 @@ for i, N in enumerate(N_test):
     ax.scatter(df_n['weight'], df_n['height'], alpha=0.5, label='Raw Data')
 
     # linear model (input pts) x (# curves)
+    # Pandas tries to impose an index on Series, which fails when we try to do
+    # broadcast operations with a numpy array, so need to get the values out
     model = post['alpha'].values + post['beta'].values * (w[:, None] - wbar)
 
     for j in range(post.shape[0]):
@@ -178,7 +179,7 @@ ax = sns.distplot(mu_at_50)
 ax.set(xlabel='$\mu | w = 50$ [kg]',
        ylabel='density')
 
-sts.hpdi(mu_at_50, 0.89, verbose=True)
+sts.hpdi(mu_at_50, q=0.89, verbose=True)
 
 # mu = sts.link(model, Ns)
 # Generate samples, compute model output for even-interval input
@@ -189,7 +190,7 @@ mu_samp = tr['alpha'].values + tr['beta'].values * (x[:, None] - wbar)
 # Plot the credible interval for the mean of the height (not including sigma)
 q = 0.89
 mu_mean = mu_samp.mean(axis=1)  # (Nd, 1) average mu values for each data point
-mu_hpdi = np.apply_along_axis(lambda row: sts.hpdi(row, q=q), axis=1, arr=mu_samp)
+mu_hpdi = sts.hpdi(mu_samp.T, q=q)
 
 fig = plt.figure(5, clear=True)
 ax = fig.add_subplot()
@@ -197,13 +198,19 @@ ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
 ax.plot(x, mu_mean, 'k', label='MAP Estimate')
 ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
                 facecolor='k', alpha=0.3, interpolate=True,
-                label=f"{100*q:g}% Credible Interval")
+                label=f"{100*q:g}% Credible Interval of $\mu$")
 ax.set(xlabel='weight [kg]',
        ylabel='height [cm]')
 ax.legend()
 
 # Calculate the prediction interval, including sigma
+h_samp = stats.norm(mu_samp, tr['sigma']).rvs()
+h_hpdi = sts.hpdi(h_samp.T, q=q)
 
+ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
+                facecolor='k', alpha=0.2, interpolate=True,
+                label=f"{100*q:g}% Credible Interval of Height")
+ax.legend()
 
 #==============================================================================
 #==============================================================================

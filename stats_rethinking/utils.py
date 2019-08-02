@@ -76,7 +76,7 @@ def quantile(data, q=0.89, width=10, precision=8,
 def percentiles(data, q=50, **kwargs):
     """Pretty-print the desired percentile values from the data.
 
-    ..note:: A wrapper around `quantile`, where the arguments are forced
+    .. note:: A wrapper around `quantile`, where the arguments are forced
         to take the form:
     ..math:: a = \frac{1 - q}{2}
         and called with :math:\mathtt{quantile(data, (a, 1-a))}
@@ -104,7 +104,7 @@ def hpdi(data, alpha=None, q=None,
          verbose=False, width=10, precision=8, **kwargs):
     """Compute highest probability density interval.
 
-    ..note::
+    .. note::
         This function calls `sts.quantile` with `pymc3.stats.hpd` function.
 
     Examples
@@ -178,7 +178,7 @@ def density(data, adjust=1.0, **kwargs):
     **kwargs : optional
         Additional arguments passed to `scipy.stats.gaussian_kde`. 
 
-    ..note:: This function overrides the `bw_method` argument. The
+    .. note:: This function overrides the `bw_method` argument. The
       stats_rethinking "dens" (R code 2.9) function calls the following
       R function:
           thed <- density(data, adjust=0.5)
