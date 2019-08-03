@@ -52,22 +52,73 @@ ax.legend()
 #        Build a Polynomial Model of Height
 #------------------------------------------------------------------------------
 # Standardize the input
-w = stats.zscore(df['weight'])  # [-] independent variable
+w_z = (df['weight'] - df['weight'].mean()) / df['weight'].std() 
+# w_z =                    (w - w.mean()) / w.std() == stats.zscore(w, ddof=1)
+# w_z = (N / (N-1))**0.5 * (w - w.mean()) / w.std() == stats.zscore(w, ddof=0)
+
+# Figure 4.11
+Np = 3  # max nummber of polynomial terms
+
+fig = plt.figure(2, clear=True)
+gs = GridSpec(nrows=1, ncols=Np)
+
+# for poly_order in range(Np):
+poly_order = 2
 
 with pm.Model() as poly_model:
+    sigma = pm.Uniform('sigma', 0, 50)
+
     alpha = pm.Normal('alpha', 178, 20)
     beta_0 = pm.Lognormal('beta_0', 0, 1)
-    beta_1 = pm.Normal('beta_1', 0, 1)
-    sigma = pm.Uniform('sigma', 0, 50)
-    mu = alpha + beta_0 * w + beta_1 * w**2
+    if poly_order == 1:
+        mu = alpha + beta_0 * z
+    elif poly_order == 2:
+        beta_1 = pm.Normal('beta_1', 0, 1)
+        mu = alpha + beta_0 * z + beta_1 * z**2
+    elif poly_order == 3:
+        beta_2 = pm.Normal('beta_2', 0, 1)
+        mu = alpha + beta_0 * z + beta_1 * z**2 + beta_2 * z**3
+
     h = pm.Normal('h', mu=mu, sd=sigma, observed=df['height'])
-    quap = sts.quap(dict(alpha=alpha,
-                         beta_0=beta_0, 
-                         beta_1=beta_1,
-                         sigma=sigma))
+
+    var = dict(sigma=sigma, alpha=alpha, beta_0=beta_0)
+    if poly_order > 1:
+        var['beta_1'] = beta_1
+    if poly_order > 2:
+        var['beta_2'] = beta_2
+
+    quap = sts.quap(var)
     tr = sts.sample_quap(quap, Ns)
 
-print(sts.precis(tr))
+# print(sts.precis(tr))
+
+# Sample from normalized inputs
+x = np.arange(0, 71)
+z = (x - df['weight'].mean()) / df['weight'].std()
+
+mu_samp = tr['alpha'].values \
+        + tr['beta_0'].values * z[:, None] \
+        + tr['beta_1'].values * z[:, None]**2
+
+# for i in range(poly_order):
+#   mu_samp += tr[f"beta_{i}"].values * x[:, None]**(i+1)
+
+q = 0.89
+h_samp = stats.norm(mu_samp, tr['sigma']).rvs()
+h_hpdi = sts.hpdi(h_samp.T, q=q)
+
+mu_mean = mu_samp.mean(axis=1)  # [cm] mean height estimate vs. weight
+
+ax = fig.add_subplot(gs[0])
+ax.scatter(df['weight'], df['height'], alpha=0.5, label='Data')
+ax.plot(x, mu_mean, 'k', label='Polynomial Model')
+ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
+                facecolor='k', alpha=0.2, interpolate=True,
+                label=f"{100*q:g}% Credible Interval of Height")
+ax.set(title=f"Polynomial Order {poly_order}",
+       xlabel='weight [kg]',
+       ylabel='height [cm]')
+ax.legend()
 
 #==============================================================================
 #==============================================================================
