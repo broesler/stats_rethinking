@@ -59,66 +59,67 @@ w_z = (df['weight'] - df['weight'].mean()) / df['weight'].std()
 # Figure 4.11
 Np = 3  # max nummber of polynomial terms
 
+titles = dict({1: 'Linear', 2: 'Quadratic', 3: 'Cubic'})
+
 fig = plt.figure(2, clear=True)
 gs = GridSpec(nrows=1, ncols=Np)
 
-# for poly_order in range(Np):
-poly_order = 2
+for poly_order in range(1, Np+1):
 
-with pm.Model() as poly_model:
-    sigma = pm.Uniform('sigma', 0, 50)
+    with pm.Model() as poly_model:
+        sigma = pm.Uniform('sigma', 0, 50)
 
-    alpha = pm.Normal('alpha', 178, 20)
-    beta_0 = pm.Lognormal('beta_0', 0, 1)
-    if poly_order == 1:
-        mu = alpha + beta_0 * z
-    elif poly_order == 2:
-        beta_1 = pm.Normal('beta_1', 0, 1)
-        mu = alpha + beta_0 * z + beta_1 * z**2
-    elif poly_order == 3:
-        beta_2 = pm.Normal('beta_2', 0, 1)
-        mu = alpha + beta_0 * z + beta_1 * z**2 + beta_2 * z**3
+        alpha = pm.Normal('alpha', 178, 20)
+        beta_0 = pm.Lognormal('beta_0', 0, 1)
+        if poly_order == 1:
+            mu = alpha + beta_0 * w_z
+        elif poly_order == 2:
+            beta_1 = pm.Normal('beta_1', 0, 1)
+            mu = alpha + beta_0 * w_z + beta_1 * w_z**2
+        elif poly_order == 3:
+            beta_1 = pm.Normal('beta_1', 0, 1)
+            beta_2 = pm.Normal('beta_2', 0, 1)
+            mu = alpha + beta_0 * w_z + beta_1 * w_z**2 + beta_2 * w_z**3
 
-    h = pm.Normal('h', mu=mu, sd=sigma, observed=df['height'])
+        h = pm.Normal('h', mu=mu, sd=sigma, observed=df['height'])
 
-    var = dict(sigma=sigma, alpha=alpha, beta_0=beta_0)
-    if poly_order > 1:
-        var['beta_1'] = beta_1
-    if poly_order > 2:
-        var['beta_2'] = beta_2
+        var = dict(sigma=sigma, alpha=alpha, beta_0=beta_0)
+        if poly_order > 1:
+            var['beta_1'] = beta_1
+        if poly_order > 2:
+            var['beta_2'] = beta_2
 
-    quap = sts.quap(var)
-    tr = sts.sample_quap(quap, Ns)
+        quap = sts.quap(var)
+        tr = sts.sample_quap(quap, Ns)
 
-# print(sts.precis(tr))
+    print(f"poly order: {poly_order}")
+    print(sts.precis(tr))
 
-# Sample from normalized inputs
-x = np.arange(0, 71)
-z = (x - df['weight'].mean()) / df['weight'].std()
+    # Sample from normalized inputs
+    x = np.arange(0, 71)
+    z = (x - df['weight'].mean()) / df['weight'].std()
 
-mu_samp = tr['alpha'].values \
-        + tr['beta_0'].values * z[:, None] \
-        + tr['beta_1'].values * z[:, None]**2
+    mu_samp = tr['alpha'].values  # (Ns,)
+    for i in range(poly_order):
+        # Weird "+=" issue here
+        mu_samp = mu_samp + tr[f"beta_{i}"].values * z[:, None]**(i+1)
+    mu_mean = mu_samp.mean(axis=1)  # [cm] mean height estimate vs. weight
 
-# for i in range(poly_order):
-#   mu_samp += tr[f"beta_{i}"].values * x[:, None]**(i+1)
+    q = 0.89
+    h_samp = stats.norm(mu_samp, tr['sigma']).rvs()
+    h_hpdi = sts.hpdi(h_samp.T, q=q)
 
-q = 0.89
-h_samp = stats.norm(mu_samp, tr['sigma']).rvs()
-h_hpdi = sts.hpdi(h_samp.T, q=q)
-
-mu_mean = mu_samp.mean(axis=1)  # [cm] mean height estimate vs. weight
-
-ax = fig.add_subplot(gs[0])
-ax.scatter(df['weight'], df['height'], alpha=0.5, label='Data')
-ax.plot(x, mu_mean, 'k', label='Polynomial Model')
-ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
-                facecolor='k', alpha=0.2, interpolate=True,
-                label=f"{100*q:g}% Credible Interval of Height")
-ax.set(title=f"Polynomial Order {poly_order}",
-       xlabel='weight [kg]',
-       ylabel='height [cm]')
-ax.legend()
+    # Plot vs the data (in non-normalized x-axis for readability)
+    ax = fig.add_subplot(gs[poly_order-1])
+    ax.scatter(df['weight'], df['height'], alpha=0.5, label='Data')
+    ax.plot(x, mu_mean, 'k', label='Model')
+    ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
+                    facecolor='k', alpha=0.2, interpolate=True,
+                    label=f"{100*q:g}% CI")
+    ax.set(title=titles[poly_order],
+        xlabel='weight [kg]',
+        ylabel='height [cm]')
+    ax.legend()
 
 #==============================================================================
 #==============================================================================
