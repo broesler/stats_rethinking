@@ -51,7 +51,7 @@ ax_d.set(xlabel='weight [kg]',
 #        Build a Model
 #------------------------------------------------------------------------------
 # Section 4.4.1 model description:
-with pm.Model() as linear_model:
+with pm.Model() as model:
     # Define the model
     alpha = pm.Normal('alpha', mu=178, sd=20)       # parameter priors
     beta = pm.Normal('beta', mu=0, sd=10)
@@ -77,21 +77,25 @@ for ax in [ax0, ax1]:
 
 # Plot the model of mean height vs. weight
 N = 100
-with linear_model:
+with model:
     prior_samp = pm.sample_prior_predictive(N)
 
 for i in range(N):
     ax0.plot(w, prior_samp['mu'][i], 'k', alpha=0.2)
 ax0.set_title('A poor prior')
 
-# Restrict beta to positive values
-with pm.Model() as linear_model:
-    # Define the model
-    alpha = pm.Normal('alpha', mu=178, sd=20)       # parameter priors
-    beta = pm.Lognormal('beta', mu=0, sd=1)
-    sigma = pm.Uniform('sigma', 0, 50)              # std prior
-    mu = pm.Deterministic('mu', alpha + beta*(w - wbar))
-    h = pm.Normal('h', mu=mu, sd=sigma, observed=adults['height'])
+# Restrict beta to positive values in the new model
+def linear_model(w, wbar):
+    with pm.Model() as model:
+        alpha = pm.Normal('alpha', mu=178, sd=20)             # parameter priors
+        beta = pm.Lognormal('beta', mu=0, sd=1)               # new prior!
+        sigma = pm.Uniform('sigma', 0, 50)                    # std prior
+        mu = pm.Deterministic('mu', alpha + beta*(w - wbar))
+        h = pm.Normal('h', mu=mu, sd=sigma, observed=adults['height'])
+    return model
+
+the_model = linear_model(w, wbar)
+with the_model:
     prior_samp = pm.sample_prior_predictive(N)
 
 for i in range(N):
@@ -102,11 +106,19 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------ 
 #        Compute the Posterior
 #------------------------------------------------------------------------------
-with linear_model:
+with the_model:
     # Sample the posterior distributions of parameters
+    trace = pm.sample(Ns)
+
+    # NOTE error at sts.quap line:
+    # /Users/bernardroesler/miniconda3/envs/dev/lib/python3.7/site-packages/theano/gradient.py:589:
+    # UserWarning: grad method was asked to compute the gradient with respect
+    # to a variable that is not part of the computational graph of the cost, or
+    # is used only by a non-differentiable operator: alpha
     quap = sts.quap(dict(alpha=alpha, beta=beta, sigma=sigma))
     tr = sts.sample_quap(quap, Ns)
 
+tr = pm.trace_to_dataframe(trace).filter(regex='^(?!mu)')
 print(sts.precis(tr))
 print('cov:')
 print(tr.cov())
@@ -115,7 +127,7 @@ print(tr.cov())
 #        Posterior Prediction
 #------------------------------------------------------------------------------
 # Figure 4.6
-map_est = pm.find_MAP(model=linear_model)
+map_est = pm.find_MAP(model=the_model)
 ax_d.plot(w, map_est['mu'], 'k', label='MAP Prediction')
 ax_d.legend()
 
@@ -130,19 +142,11 @@ for i, N in enumerate(N_test):
     w = df_n['weight']
     wbar = w.mean()
 
-    with pm.Model() as linear_model:
-        # Define the model
-        alpha = pm.Normal('alpha', mu=178, sd=20)  # parameter priors
-        beta = pm.Lognormal('beta', mu=0, sd=1)
-        sigma = pm.Uniform('sigma', 0, 50)         # std prior
-        mu = pm.Deterministic('mu', alpha + beta*(w - wbar))
-        h = pm.Normal('h', mu=mu, sd=sigma,        # likelihood
-                      observed=df_n['height'])
+    with linear_model(w, wbar):
         # Sample the posterior distributions of parameters
-        quap = sts.quap(dict(alpha=alpha, beta=beta, sigma=sigma))
-        tr = sts.sample_quap(quap, Ns)
-
-    post = tr.sample(20)  # plot 20 lines
+        # quap = sts.quap(dict(alpha=alpha, beta=beta, sigma=sigma))
+        # post = sts.sample_quap(quap, 20)  # only sample 20 lines
+        post_samp = pm.sample_posterior_predictive(trace, 20)
 
     # Plot the raw data
     ax = fig.add_subplot(gs[i])
@@ -153,12 +157,14 @@ for i, N in enumerate(N_test):
     ax.scatter(df_n['weight'], df_n['height'], alpha=0.5, label='Raw Data')
 
     # linear model (input pts) x (# curves)
+    # TODO rewrite quap/sample_quap to accomodate mu which is shape (Nd,)
     # Pandas tries to impose an index on Series, which fails when we try to do
     # broadcast operations with a numpy array, so need to get the values out
-    model = (post['alpha'].values + post['beta'].values * (w[:, None] - wbar)).T
+    # model = (post['alpha'].values + post['beta'].values * (w[:, None] - wbar)).T
 
     for j in range(post.shape[0]):
-        ax.plot(w, model[j, :], 'k-', lw=1, alpha=0.3)
+        # ax.plot(w, model[j, :], 'k-', lw=1, alpha=0.3)
+        ax.plot(w, post_samp['mu'][j], 'k-', lw=1, alpha=0.3)
     ax.set(title=f"N = {N}",
            xlabel='weight [kg]',
            ylabel='height [cm]')
@@ -168,6 +174,7 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------ 
 #        Plot regression intervals
 #------------------------------------------------------------------------------
+tr = sts.sample_quap(quap, Ns)
 mu_at_50 = tr['alpha'] + tr['beta'] * (50 - wbar)
 
 # Figure 4.8 (R code 4.50 -- 4.51)
@@ -181,9 +188,12 @@ sts.hpdi(mu_at_50, q=0.89, verbose=True)
 # Manually write code for: 
 #   mu = sts.link(linear_model, Ns)
 # Generate samples, compute model output for even-interval input
-tr = sts.sample_quap(quap, Ns)
+# tr = sts.sample_quap(quap, Ns)
 x = np.arange(25, 71)
-mu_samp = tr['alpha'].values + tr['beta'].values * (x[:, None] - wbar)
+with linear_model(x, wbar):
+    post_samp = pm.sample_posterior_predictive(Ns)
+    mu_samp = post_samp['mu']
+# mu_samp = tr['alpha'].values + tr['beta'].values * (x[:, None] - wbar)
 
 # Plot the credible interval for the mean of the height (not including sigma)
 q = 0.89
