@@ -85,14 +85,14 @@ for i in range(N):
 ax0.set_title('A poor prior')
 
 # Restrict beta to positive values in the new model
-def linear_model(w, observed):
-    wbar = w.mean()
+def linear_model(x, observed):
+    """Define a pymc3 model with the given data."""
     with pm.Model() as model:
         alpha = pm.Normal('alpha', mu=178, sd=20)             # parameter priors
         beta = pm.Lognormal('beta', mu=0, sd=1)               # new prior!
         sigma = pm.Uniform('sigma', 0, 50)                    # std prior
-        mu = pm.Deterministic('mu', alpha + beta*(w - wbar))
-        h = pm.Normal('h', mu=mu, sd=sigma, observed=observed)
+        mu = pm.Deterministic('mu', alpha + beta*(x - x.mean()))
+        h = pm.Normal('h', mu=mu, sd=sigma, observed=observed)  # likelihood
     return model
 
 the_model = linear_model(w, observed=adults['height'])
@@ -109,17 +109,16 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------
 with the_model:
     # Sample the posterior distributions of parameters
-    trace = pm.sample(Ns)
+    # TODO change API to simple line:
+    # quap = sts.quap(the_model)
+    # using default: the_model.unobserved_RVs, filter for ending '__'
+    # [x for x in the_model.unobserved_RVs if not x.name.endswith('__')]
+    # fun fact: the_model.mu.name = 'mu'
+    quap = sts.quap(dict(alpha=the_model.alpha,
+                         beta=the_model.beta,
+                         sigma=the_model.sigma))
 
-    # NOTE error at sts.quap line:
-    # /Users/bernardroesler/miniconda3/envs/dev/lib/python3.7/site-packages/theano/gradient.py:589:
-    # UserWarning: grad method was asked to compute the gradient with respect
-    # to a variable that is not part of the computational graph of the cost, or
-    # is used only by a non-differentiable operator: alpha
-    # quap = sts.quap(dict(alpha=alpha, beta=beta, sigma=sigma))
-    # tr = sts.sample_quap(quap, Ns)
-
-tr = pm.trace_to_dataframe(trace).filter(regex='^(?!mu)')  # ignore mu
+tr = sts.sample_quap(quap, Ns)
 print(sts.precis(tr))
 print('cov:')
 print(tr.cov())
@@ -147,11 +146,14 @@ for i, N in enumerate(N_test):
     the_model = linear_model(w, observed=df_n['height'])
     with the_model:
         # Sample the posterior distributions of parameters
-        # quap = sts.quap(dict(alpha=alpha, beta=beta, sigma=sigma))
-        # post = sts.sample_quap(quap, 20)  # only sample 20 lines
-        trace = pm.sample(Ns)
-        post_samp = pm.sample_posterior_predictive(trace, N_lines, 
-                                                   vars=[the_model.mu])
+        quap = sts.quap(dict(alpha=the_model.alpha,
+                             beta=the_model.beta,
+                             sigma=the_model.sigma))
+        # TODO rewrite this line using find_MAP() input
+        # post = pm.sample_posterior_predictive([map_est], N_lines, 
+        #                                       vars=[the_model.mu])
+
+    post = sts.sample_quap(quap, N_lines)  # only sample 20 lines
 
     # Plot the raw data
     ax = fig.add_subplot(gs[i])
@@ -165,11 +167,10 @@ for i, N in enumerate(N_test):
     # TODO rewrite quap/sample_quap to accomodate mu which is shape (Nd,)
     # Pandas tries to impose an index on Series, which fails when we try to do
     # broadcast operations with a numpy array, so need to get the values out
-    # model = (post['alpha'].values + post['beta'].values * (w[:, None] - wbar)).T
+    post_mu = (post['alpha'].values + post['beta'].values * (w[:, None] - wbar)).T
 
     for j in range(N_lines):
-        # ax.plot(w, model[j, :], 'k-', lw=1, alpha=0.3)
-        ax.plot(w, post_samp['mu'][j], 'k-', lw=1, alpha=0.3)
+        ax.plot(w, post_mu[j], 'k-', lw=1, alpha=0.3)
     ax.set(title=f"N = {N}",
            xlabel='weight [kg]',
            ylabel='height [cm]')
@@ -179,8 +180,7 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------ 
 #        Plot regression intervals
 #------------------------------------------------------------------------------
-# tr = sts.sample_quap(quap, Ns)
-tr = pm.trace_to_dataframe(trace).filter(regex='^(?!mu)')
+tr = sts.sample_quap(quap, Ns)
 mu_at_50 = tr['alpha'] + tr['beta'] * (50 - wbar)
 
 # Figure 4.8 (R code 4.50 -- 4.51)
