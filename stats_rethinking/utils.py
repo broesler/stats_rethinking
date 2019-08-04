@@ -252,7 +252,7 @@ def quap(varnames, start=None):
     """Return quadratic approximation for the MAP estimate of each variable in
     `varnames`. Must be called within a pymc3 context block.
     """
-    pm.sample()  # initialize NUTS sampler
+    pm.init_nuts()  # initialize NUTS sampler
     map_est = pm.find_MAP(start=start)  # use MAP estimation for mean
 
     quap = dict()
