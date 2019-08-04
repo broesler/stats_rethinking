@@ -61,36 +61,28 @@ Np = 3  # max nummber of polynomial terms
 
 titles = dict({1: 'Linear', 2: 'Quadratic', 3: 'Cubic'})
 
-fig = plt.figure(2, clear=True)
+fig = plt.figure(2, clear=True, figsize=(12, 6))
 gs = GridSpec(nrows=1, ncols=Np)
 
 for poly_order in range(1, Np+1):
+    # poly_order = 2
 
     with pm.Model() as poly_model:
         sigma = pm.Uniform('sigma', 0, 50)
 
         alpha = pm.Normal('alpha', 178, 20)
-        beta_0 = pm.Lognormal('beta_0', 0, 1)
-        if poly_order == 1:
-            mu = alpha + beta_0 * w_z
-        elif poly_order == 2:
-            beta_1 = pm.Normal('beta_1', 0, 1)
-            mu = alpha + beta_0 * w_z + beta_1 * w_z**2
-        elif poly_order == 3:
-            beta_1 = pm.Normal('beta_1', 0, 1)
-            beta_2 = pm.Normal('beta_2', 0, 1)
-            mu = alpha + beta_0 * w_z + beta_1 * w_z**2 + beta_2 * w_z**3
-
+        # TODO rewrite as a vector with lognorm for beta[0]
+        beta = pm.Normal('beta', 0, 10, shape=poly_order)
+        w_m = np.vstack([w_z**(i+1) for i in range(0, poly_order)])
+        mu = pm.Deterministic('mu', alpha + pm.math.dot(beta, w_m))
         h = pm.Normal('h', mu=mu, sd=sigma, observed=df['height'])
 
-        var = dict(sigma=sigma, alpha=alpha, beta_0=beta_0)
-        if poly_order > 1:
-            var['beta_1'] = beta_1
-        if poly_order > 2:
-            var['beta_2'] = beta_2
+        # quap = sts.quap(var)
+        # tr = sts.sample_quap(quap, Ns)
+        trace = pm.sample(Ns, tune=1000)
+        map_est = pm.find_MAP()
 
-        quap = sts.quap(var)
-        tr = sts.sample_quap(quap, Ns)
+    tr = pm.trace_to_dataframe(trace).filter(regex='^(?!mu)')
 
     print(f"poly order: {poly_order}")
     print(sts.precis(tr))
@@ -98,16 +90,14 @@ for poly_order in range(1, Np+1):
     # Sample from normalized inputs
     x = np.arange(0, 71)
     z = (x - df['weight'].mean()) / df['weight'].std()
+    z_m = np.vstack([z**(i+1) for i in range(0, poly_order)])
 
-    mu_samp = tr['alpha'].values  # (Ns,)
-    for i in range(poly_order):
-        # Weird "+=" issue here
-        mu_samp = mu_samp + tr[f"beta_{i}"].values * z[:, None]**(i+1)
-    mu_mean = mu_samp.mean(axis=1)  # [cm] mean height estimate vs. weight
+    mu_samp = trace['alpha'][:, np.newaxis] + np.dot(trace['beta'], z_m)
+    mu_mean = mu_samp.mean(axis=0)  # [cm] mean height estimate vs. weight
 
     q = 0.89
-    h_samp = stats.norm(mu_samp, tr['sigma']).rvs()
-    h_hpdi = sts.hpdi(h_samp.T, q=q)
+    h_samp = stats.norm(mu_samp.T, trace['sigma']).rvs().T
+    h_hpdi = sts.hpdi(h_samp, q=q)
 
     # Plot vs the data (in non-normalized x-axis for readability)
     ax = fig.add_subplot(gs[poly_order-1])
