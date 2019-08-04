@@ -122,8 +122,8 @@ def hpdi(data, alpha=None, q=None,
     quantiles = pm.stats.hpd(data, alpha, **kwargs)
     if verbose:
         fstr = f"{width}.{precision}f"
-        name_str = ' '.join([f"{100*(1-p):{width-1}g}%" for p in np.hstack((q, q))])
-        value_str = ' '.join([f"{q:{fstr}}" for q in quantiles])
+        name_str = ' '.join([f"{100*x:{width-1}g}%" for x in np.hstack((q, q))])
+        value_str = ' '.join([f"{x:{fstr}}" for x in quantiles])
         print(f"|{name_str}|\n{value_str}")
     return quantiles.squeeze()
 
@@ -201,11 +201,7 @@ def expand_grid(**kwargs):
     """Return a DataFrame of points, where the columns are kwargs."""
     return pd.DataFrame(cartesian(kwargs.values()), columns=kwargs.keys())
 
-# TODO:
-#     * allow for numpy array of data (change ppf calls to quantile)
-#     * allow for DataFrame of samples (cols are variable names)
-#     * allow for non-dict (just data) input by excluding "index"
-#     parameter from DataFrame call.
+# TODO expand documentation with examples
 def precis(quap, p=0.89):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
@@ -247,16 +243,19 @@ def precis(quap, p=0.89):
         raise TypeError('quap of this type is unsupported!')
 
 
-# TODO expand documentation with examples
-def quap(varnames, start=None):
+# TODO 
+#   * rewrite quap/sample_quap to accomodate mu which is shape (Nd,)
+#   * expand documentation with examples
+#   * accept "model" as a kwarg for use outside of context block
+def quap(mvars, start=None):
     """Return quadratic approximation for the MAP estimate of each variable in
-    `varnames`. Must be called within a pymc3 context block.
+    `mvars`. Must be called within a pymc3 context block.
     """
-    pm.sample()
+    pm.init_nuts()
     map_est = pm.find_MAP(start=start)  # use MAP estimation for mean
 
     quap = dict()
-    for k, v in varnames.items():
+    for k, v in mvars.items():
         mean = map_est[k]
         std = ((1 / pm.find_hessian(map_est, vars=[v]))**0.5)[0,0]
         quap[k] = stats.norm(mean, std)
