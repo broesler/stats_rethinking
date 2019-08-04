@@ -300,7 +300,6 @@ def sample_quap(quap, N=1000):
 
 def sample_to_dataframe(data):
     """Convert dict of samples to DataFrame."""
-    # if all([v.ndim == 1 for v in data.values()]):
     try:
         df = pd.DataFrame(data)
     except:
@@ -312,7 +311,7 @@ def sample_to_dataframe(data):
             if v.ndim == 1:
                 df_s.columns=[k]
             else:
-                df_s = df_s.add_prefix(k + '_')  # enumerate matrix variables
+                df_s = df_s.add_prefix(k + '__')  # enumerate matrix variables
 
             # concatenate into one DataFrame
             if df.empty:
