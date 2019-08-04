@@ -243,25 +243,50 @@ def precis(quap, p=0.89):
         raise TypeError('quap of this type is unsupported!')
 
 
-# TODO 
-#   * make NormApprox class that contains the dictionary + method to get sizes
-#   * expand documentation with examples
-#   * accept "model" as a kwarg for use outside of context block
-def quap(mvars, start=None):
-    """Return quadratic approximation for the MAP estimate of each variable in
-    `mvars`. Must be called within a pymc3 context block.
+def quap(vars=None, var_names=None, model=None, start=None):
+    """Return quadratic approximation for the MAP estimate.
+
+    Parameters
+    ----------
+    vars : list, optional, default=model.unobserved_RVs
+        List of variables to optimize and set to optimum
+    var_names : list, optional
+        List of `str` of variables names specified by `model`
+    model : pymc3.Model (optional if in `with` context)
+    start : `dict` of parameter values, optional, default=`model.test_point`
+
+    Returns
+    -------
+    result : dict
+        Dictionary of `scipy.stats.rv_frozen` distributions corresponding to
+        the MAP estimates of `vars`.
     """
-    pm.init_nuts()
-    map_est = pm.find_MAP(start=start)  # use MAP estimation for mean
+    model = pm.modelcontext(model)
+
+    pm.init_nuts(model=model)
+    map_est = pm.find_MAP(start=start, model=model)
+
+    if vars is None:
+        if var_names is None:
+            # filter out internally used variables
+            mvars = [x for x in model.unobserved_RVs if not x.name.endswith('__')]
+        else:
+            mvars = [model[x] for x in var_names]
+    else:
+        mvars = vars
 
     quap = dict()
-    for k, v in mvars.items():
+    for v in mvars:
+        k = v.name
         mean = map_est[k]
-        std = ((1 / pm.find_hessian(map_est, vars=[v]))**0.5)[0,0]
+        std = ((1 / pm.find_hessian(map_est, vars=[v], model=model))**0.5)[0,0]
         quap[k] = stats.norm(loc=mean, scale=std)
     return quap
 
 
+# TODO
+#   * make NormApprox class that contains the dictionary + method to get sizes
+#     so we don't have to use "v.rvs().shape"
 def sample_quap(quap, N=1000):
     """Sample each distribution in the `quap` dict.
     Return a dict like pm.sample_posterior_predictive."""
@@ -275,18 +300,21 @@ def sample_quap(quap, N=1000):
 
 def sample_to_dataframe(data):
     """Convert dict of samples to DataFrame."""
-    if all([v.ndim == 1 for v in data.values()]):
+    # if all([v.ndim == 1 for v in data.values()]):
+    try:
         df = pd.DataFrame(data)
-    else:
+    except:
         df = pd.DataFrame()
         for k, v in data.items():
             df_s = pd.DataFrame(v)
 
+            # name the columns
             if v.ndim == 1:
                 df_s.columns=[k]
             else:
-                df_s = df_s.add_prefix(k + '_')
+                df_s = df_s.add_prefix(k + '_')  # enumerate matrix variables
 
+            # concatenate into one DataFrame
             if df.empty:
                 df = df_s
             else:

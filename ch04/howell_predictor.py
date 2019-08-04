@@ -85,6 +85,7 @@ for i in range(N):
 ax0.set_title('A poor prior')
 
 # Restrict beta to positive values in the new model
+# TODO use pm.Data() for x and observed, then use pm.set_data() later.
 def linear_model(x, observed):
     """Define a pymc3 model with the given data."""
     with pm.Model() as model:
@@ -109,15 +110,7 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------
 with the_model:
     # Sample the posterior distributions of parameters
-    # TODO change API to simple line:
-    # quap = sts.quap(the_model)
-    # using default: the_model.unobserved_RVs, filter for ending '__'
-    # [x for x in the_model.unobserved_RVs if not x.name.endswith('__')]
-    # fun fact: the_model.mu.name = 'mu'
-    quap = sts.quap(dict(alpha=the_model.alpha,
-                         beta=the_model.beta,
-                         sigma=the_model.sigma,
-                         mu=the_model.mu))
+    quap = sts.quap()
 
 post = sts.sample_quap(quap, Ns)
 tr = sts.sample_to_dataframe(post).filter(regex='^(?!mu)')
@@ -147,9 +140,7 @@ for i, N in enumerate(N_test):
     the_model = linear_model(w, observed=df_n['height'])
     with the_model:
         # Compute the MAP estimate of the parameters
-        quap = sts.quap(dict(alpha=the_model.alpha,
-                             beta=the_model.beta,
-                             sigma=the_model.sigma))
+        quap = sts.quap(var_names=['alpha', 'beta', 'sigma'])
 
         # Using MCMC sampling: (much slower, but no need to rewrite model)
         # trace = pm.sample(Ns)
