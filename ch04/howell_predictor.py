@@ -50,14 +50,14 @@ ax_d.set(xlabel='weight [kg]',
 #------------------------------------------------------------------------------ 
 #        Build a Model
 #------------------------------------------------------------------------------
-# Build the model:
-#   w = actual weight data
-#   h ~ N(mu, sigma)
-#   where:
-#       mu = alpha + beta*(w - w_bar)
-#       alpha = N(178, 20)
-#       beta = N(0, 10)
-#       sigma = U(0, 50)
+# Section 4.4.1 model description:
+with pm.Model() as linear_model:
+    # Define the model
+    alpha = pm.Normal('alpha', mu=178, sd=20)       # parameter priors
+    beta = pm.Normal('beta', mu=0, sd=10)
+    sigma = pm.Uniform('sigma', 0, 50)              # std prior
+    mu = pm.Deterministic('mu', alpha + beta*(w - wbar))
+    h = pm.Normal('h', mu=mu, sd=sigma, observed=adults['height'])
 
 #------------------------------------------------------------------------------ 
 #        Prior Predictive Simulation (Figure 4.5)
@@ -66,7 +66,7 @@ ax_d.set(xlabel='weight [kg]',
 fig = plt.figure(2, clear=True)
 gs = GridSpec(nrows=1, ncols=2)
 ax0 = fig.add_subplot(gs[0])
-ax1 = fig.add_subplot(gs[1])
+ax1 = fig.add_subplot(gs[1], sharex=ax0, sharey=ax0)
 for ax in [ax0, ax1]:
     ax.axhline(0, c='k', ls='--', lw=1)   # x-axis
     ax.axhline(272, c='k', ls='-', lw=1)  # Wadlow line
@@ -75,34 +75,34 @@ for ax in [ax0, ax1]:
            xlabel='weight [kg]',
            ylabel='height [cm]')
 
-# Plot the model
+# Plot the model of mean height vs. weight
 N = 100
-a = stats.norm(178, 20).rvs(N)
-b = stats.norm(0, 10).rvs(N)
-mu_prior = a + b*(w[:, None] - wbar)  # (Nw, N)
+with linear_model:
+    prior_samp = pm.sample_prior_predictive(N)
+
 for i in range(N):
-    ax0.plot(w, mu_prior[:, i], 'k', alpha=0.2)
+    ax0.plot(w, prior_samp['mu'][i], 'k', alpha=0.2)
 ax0.set_title('A poor prior')
 
 # Restrict beta to positive values
-b_pos = stats.lognorm(s=1, scale=1).rvs(N)  # s = sigma, scale = exp(mu)
-mu_prior_better = a + b_pos*(w[:, None] - wbar)  # (Nw, N)
+with pm.Model() as linear_model:
+    # Define the model
+    alpha = pm.Normal('alpha', mu=178, sd=20)       # parameter priors
+    beta = pm.Lognormal('beta', mu=0, sd=1)
+    sigma = pm.Uniform('sigma', 0, 50)              # std prior
+    mu = pm.Deterministic('mu', alpha + beta*(w - wbar))
+    h = pm.Normal('h', mu=mu, sd=sigma, observed=adults['height'])
+    prior_samp = pm.sample_prior_predictive(N)
+
 for i in range(N):
-    ax1.plot(w, mu_prior_better[:, i], 'k', alpha=0.2)
+    ax1.plot(w, prior_samp['mu'][i], 'k', alpha=0.2)
 ax1.set_title('A better prior')
 gs.tight_layout(fig)
 
 #------------------------------------------------------------------------------ 
 #        Compute the Posterior
 #------------------------------------------------------------------------------
-with pm.Model() as linear_model:
-    # Define the model
-    alpha = pm.Normal('alpha', mu=178, sd=20)       # parameter priors
-    beta = pm.Lognormal('beta', mu=0, sd=1)
-    sigma = pm.Uniform('sigma', 0, 50)              # std prior
-    h = pm.Normal('h', mu=alpha + beta*(w - wbar),  # likelihood
-                  sd=sigma,
-                  observed=adults['height'])
+with linear_model:
     # Sample the posterior distributions of parameters
     quap = sts.quap(dict(alpha=alpha, beta=beta, sigma=sigma))
     tr = sts.sample_quap(quap, Ns)
@@ -114,13 +114,9 @@ print(tr.cov())
 #------------------------------------------------------------------------------ 
 #        Posterior Prediction
 #------------------------------------------------------------------------------
-map_est = tr.mean()
-a_map = map_est['alpha']
-b_map = map_est['beta']
-h_pred = a_map + b_map * (w - wbar)
-
 # Figure 4.6
-ax_d.plot(w, h_pred, 'k', label='MAP Prediction')
+map_est = pm.find_MAP(model=linear_model)
+ax_d.plot(w, map_est['mu'], 'k', label='MAP Prediction')
 ax_d.legend()
 
 # Plot the posterior prediction vs N data points
@@ -139,7 +135,7 @@ for i, N in enumerate(N_test):
         alpha = pm.Normal('alpha', mu=178, sd=20)  # parameter priors
         beta = pm.Lognormal('beta', mu=0, sd=1)
         sigma = pm.Uniform('sigma', 0, 50)         # std prior
-        mu = alpha + beta*(w - wbar)
+        mu = pm.Deterministic('mu', alpha + beta*(w - wbar))
         h = pm.Normal('h', mu=mu, sd=sigma,        # likelihood
                       observed=df_n['height'])
         # Sample the posterior distributions of parameters
@@ -153,15 +149,16 @@ for i, N in enumerate(N_test):
     ax.get_shared_x_axes().join(ax)
     ax.get_shared_y_axes().join(ax)
 
+    # Plot the raw data
     ax.scatter(df_n['weight'], df_n['height'], alpha=0.5, label='Raw Data')
 
     # linear model (input pts) x (# curves)
     # Pandas tries to impose an index on Series, which fails when we try to do
     # broadcast operations with a numpy array, so need to get the values out
-    model = post['alpha'].values + post['beta'].values * (w[:, None] - wbar)
+    model = (post['alpha'].values + post['beta'].values * (w[:, None] - wbar)).T
 
     for j in range(post.shape[0]):
-        ax.plot(w, model[:, j], 'k-', lw=1, alpha=0.3)
+        ax.plot(w, model[j, :], 'k-', lw=1, alpha=0.3)
     ax.set(title=f"N = {N}",
            xlabel='weight [kg]',
            ylabel='height [cm]')
@@ -181,7 +178,8 @@ ax.set(xlabel='$\mu | w = 50$ [kg]',
 
 sts.hpdi(mu_at_50, q=0.89, verbose=True)
 
-# mu = sts.link(model, Ns)
+# Manually write code for: 
+#   mu = sts.link(linear_model, Ns)
 # Generate samples, compute model output for even-interval input
 tr = sts.sample_quap(quap, Ns)
 x = np.arange(25, 71)
@@ -204,6 +202,8 @@ ax.set(xlabel='weight [kg]',
 ax.legend()
 
 # Calculate the prediction interval, including sigma
+# Manually write code for: 
+#   h_samp = sts.sim(linear_model, Ns)
 h_samp = stats.norm(mu_samp, tr['sigma']).rvs()
 h_hpdi = sts.hpdi(h_samp.T, q=q)
 
