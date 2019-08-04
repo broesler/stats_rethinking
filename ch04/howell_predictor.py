@@ -53,11 +53,11 @@ ax_d.set(xlabel='weight [kg]',
 # Section 4.4.1 model description:
 with pm.Model() as first_model:
     # Define the model
-    alpha = pm.Normal('alpha', mu=178, sd=20)       # parameter priors
-    beta = pm.Normal('beta', mu=0, sd=10)
+    alpha = pm.Normal('alpha', mu=178, sigma=20)       # parameter priors
+    beta = pm.Normal('beta', mu=0, sigma=10)
     sigma = pm.Uniform('sigma', 0, 50)              # std prior
     mu = pm.Deterministic('mu', alpha + beta*(w - wbar))
-    h = pm.Normal('h', mu=mu, sd=sigma, observed=adults['height'])
+    h = pm.Normal('h', mu=mu, sigma=sigma, observed=adults['height'])
 
 #------------------------------------------------------------------------------ 
 #        Prior Predictive Simulation (Figure 4.5)
@@ -88,11 +88,11 @@ ax0.set_title('A poor prior')
 def linear_model(x, observed):
     """Define a pymc3 model with the given data."""
     with pm.Model() as model:
-        alpha = pm.Normal('alpha', mu=178, sd=20)             # parameter priors
-        beta = pm.Lognormal('beta', mu=0, sd=1)               # new prior!
-        sigma = pm.Uniform('sigma', 0, 50)                    # std prior
+        alpha = pm.Normal('alpha', mu=178, sigma=20)  # parameter priors
+        beta = pm.Lognormal('beta', mu=0, sigma=1)    # new prior!
+        sigma = pm.Uniform('sigma', 0, 50)            # std prior
         mu = pm.Deterministic('mu', alpha + beta*(x - x.mean()))
-        h = pm.Normal('h', mu=mu, sd=sigma, observed=observed)  # likelihood
+        h = pm.Normal('h', mu=mu, sigma=sigma, observed=observed)  # likelihood
     return model
 
 the_model = linear_model(w, observed=adults['height'])
@@ -118,7 +118,15 @@ with the_model:
                          beta=the_model.beta,
                          sigma=the_model.sigma))
 
-tr = sts.sample_quap(quap, Ns)
+    # Fit a normal distribution using AVDI
+    # See: <https://docs.pymc.io/api/inference.html#pymc3.variational.inference.ADVI>
+    # approx = pm.fit()
+    # trace = approx.sample(Ns)
+
+post = sts.sample_quap(quap, Ns)
+tr = sts.sample_to_dataframe(post)
+# tr_a = pm.trace_to_dataframe(trace).filter(regex='^(?!mu)')
+# print(sts.precis(tr_a))
 print(sts.precis(tr))
 print('cov:')
 print(tr.cov())
@@ -145,14 +153,13 @@ for i, N in enumerate(N_test):
 
     the_model = linear_model(w, observed=df_n['height'])
     with the_model:
-        # Sample the posterior distributions of parameters
+        # Compute the MAP estimate of the mean
         quap = sts.quap(dict(alpha=the_model.alpha,
                              beta=the_model.beta,
-                             sigma=the_model.sigma))
-        # TODO rewrite this line using find_MAP() input
-        # post = pm.sample_posterior_predictive([map_est], N_lines, 
-        #                                       vars=[the_model.mu])
+                             sigma=the_model.sigma,
+                             mu=the_model.mu))
 
+    # Sample the posterior distributions of parameters
     post = sts.sample_quap(quap, N_lines)  # only sample 20 lines
 
     # Plot the raw data
@@ -163,14 +170,10 @@ for i, N in enumerate(N_test):
     # Plot the raw data
     ax.scatter(df_n['weight'], df_n['height'], alpha=0.5, label='Raw Data')
 
-    # linear model (input pts) x (# curves)
-    # TODO rewrite quap/sample_quap to accomodate mu which is shape (Nd,)
-    # Pandas tries to impose an index on Series, which fails when we try to do
-    # broadcast operations with a numpy array, so need to get the values out
-    post_mu = (post['alpha'].values + post['beta'].values * (w[:, None] - wbar)).T
-
+    # Plot N_lines approximations
     for j in range(N_lines):
-        ax.plot(w, post_mu[j], 'k-', lw=1, alpha=0.3)
+        ax.plot(w, sorted(post['mu'][j]), 'k-', lw=1, alpha=0.3)
+
     ax.set(title=f"N = {N}",
            xlabel='weight [kg]',
            ylabel='height [cm]')
@@ -195,9 +198,8 @@ sts.hpdi(mu_at_50, q=0.89, verbose=True)
 # Manually write code for: 
 #   mu = sts.link(linear_model, Ns)
 # Generate samples, compute model output for even-interval input
-# tr = sts.sample_quap(quap, Ns)
 x = np.arange(25, 71)
-mu_samp = (tr['alpha'].values + tr['beta'].values * (x[:, None] - wbar)).T
+mu_samp = (tr['alpha'] + tr['beta'] * (x[:, None] - wbar)).T
 
 # Plot the credible interval for the mean of the height (not including sigma)
 q = 0.89

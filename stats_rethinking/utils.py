@@ -244,7 +244,7 @@ def precis(quap, p=0.89):
 
 
 # TODO 
-#   * rewrite quap/sample_quap to accomodate mu which is shape (Nd,)
+#   * make NormApprox class that contains the dictionary + method to get sizes
 #   * expand documentation with examples
 #   * accept "model" as a kwarg for use outside of context block
 def quap(mvars, start=None):
@@ -258,14 +258,40 @@ def quap(mvars, start=None):
     for k, v in mvars.items():
         mean = map_est[k]
         std = ((1 / pm.find_hessian(map_est, vars=[v]))**0.5)[0,0]
-        quap[k] = stats.norm(mean, std)
+        quap[k] = stats.norm(loc=mean, scale=std)
     return quap
 
 
 def sample_quap(quap, N=1000):
-    """Sample each distribution in the `quap` dictionary."""
-    return pd.DataFrame(np.array([v.rvs(N) for v in quap.values()]).T,
-                        columns=quap.keys())
+    """Sample each distribution in the `quap` dict.
+    Return a dict like pm.sample_posterior_predictive."""
+    out = dict()
+    for k, v in quap.items():
+        # number of samples must be first dimension
+        size = [N] + list(v.rvs().shape)
+        out[k] = v.rvs(size=size)
+    return out
+
+
+def sample_to_dataframe(data):
+    """Convert dict of samples to DataFrame."""
+    if all([v.ndim == 1 for v in data.values()]):
+        df = pd.DataFrame(data)
+    else:
+        df = pd.DataFrame()
+        for k, v in data.items():
+            df_s = pd.DataFrame(v)
+
+            if v.ndim == 1:
+                df_s.columns=[k]
+            else:
+                df_s = df_s.add_prefix(k + '_')
+
+            if df.empty:
+                df = df_s
+            else:
+                df = df.join(df_s)
+    return df
 
 #==============================================================================
 #==============================================================================
