@@ -116,17 +116,11 @@ with the_model:
     # fun fact: the_model.mu.name = 'mu'
     quap = sts.quap(dict(alpha=the_model.alpha,
                          beta=the_model.beta,
-                         sigma=the_model.sigma))
-
-    # Fit a normal distribution using AVDI
-    # See: <https://docs.pymc.io/api/inference.html#pymc3.variational.inference.ADVI>
-    # approx = pm.fit()
-    # trace = approx.sample(Ns)
+                         sigma=the_model.sigma,
+                         mu=the_model.mu))
 
 post = sts.sample_quap(quap, Ns)
-tr = sts.sample_to_dataframe(post)
-# tr_a = pm.trace_to_dataframe(trace).filter(regex='^(?!mu)')
-# print(sts.precis(tr_a))
+tr = sts.sample_to_dataframe(post).filter(regex='^(?!mu)')
 print(sts.precis(tr))
 print('cov:')
 print(tr.cov())
@@ -135,15 +129,14 @@ print(tr.cov())
 #        Posterior Prediction
 #------------------------------------------------------------------------------
 # Figure 4.6
-with the_model:
-    map_est = pm.find_MAP()
-ax_d.plot(w, map_est['mu'], 'k', label='MAP Prediction')
+ax_d.plot(w, quap['mu'].mean(), 'k', label='MAP Prediction')
 ax_d.legend()
 
 # Plot the posterior prediction vs N data points
 N_test = [10, 50, 150, adults.shape[0]]
 N_lines = 20
 
+# FIgure 4.7
 fig = plt.figure(3, clear=True)
 gs = GridSpec(nrows=2, ncols=2)
 
@@ -153,14 +146,20 @@ for i, N in enumerate(N_test):
 
     the_model = linear_model(w, observed=df_n['height'])
     with the_model:
-        # Compute the MAP estimate of the mean
+        # Compute the MAP estimate of the parameters
         quap = sts.quap(dict(alpha=the_model.alpha,
                              beta=the_model.beta,
-                             sigma=the_model.sigma,
-                             mu=the_model.mu))
+                             sigma=the_model.sigma))
+
+        # Using MCMC sampling: (much slower, but no need to rewrite model)
+        # trace = pm.sample(Ns)
+        # post_pc = pm.sample_posterior_predictive(trace, sample=N_lines,
+        #                                          var_names=['mu'])
 
     # Sample the posterior distributions of parameters
     post = sts.sample_quap(quap, N_lines)  # only sample 20 lines
+    # Manually calculate the deterministic variable from the MAP estimates
+    post['mu'] = (post['alpha'] + post['beta'] * (w[:, None] - wbar)).T
 
     # Plot the raw data
     ax = fig.add_subplot(gs[i])
@@ -172,7 +171,7 @@ for i, N in enumerate(N_test):
 
     # Plot N_lines approximations
     for j in range(N_lines):
-        ax.plot(w, sorted(post['mu'][j]), 'k-', lw=1, alpha=0.3)
+        ax.plot(w, post['mu'][j], 'k-', lw=1, alpha=0.3)
 
     ax.set(title=f"N = {N}",
            xlabel='weight [kg]',
@@ -183,8 +182,11 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------ 
 #        Plot regression intervals
 #------------------------------------------------------------------------------
-tr = sts.sample_quap(quap, Ns)
-mu_at_50 = tr['alpha'] + tr['beta'] * (50 - wbar)
+# Get larger number of samples for regression interval calcs
+post = sts.sample_quap(quap, Ns)
+
+# Calculate mu for a single weight input
+mu_at_50 = post['alpha'] + post['beta'] * (50 - wbar)
 
 # Figure 4.8 (R code 4.50 -- 4.51)
 fig = plt.figure(4, clear=True)
@@ -199,13 +201,14 @@ sts.hpdi(mu_at_50, q=0.89, verbose=True)
 #   mu = sts.link(linear_model, Ns)
 # Generate samples, compute model output for even-interval input
 x = np.arange(25, 71)
-mu_samp = (tr['alpha'] + tr['beta'] * (x[:, None] - wbar)).T
+mu_samp = (post['alpha'] + post['beta'] * (x[:, None] - wbar)).T
 
 # Plot the credible interval for the mean of the height (not including sigma)
 q = 0.89
 mu_mean = mu_samp.mean(axis=0)  # (Nd,) average mu values for each data point
 mu_hpdi = sts.hpdi(mu_samp, q=q)
 
+# Figure 4.10
 fig = plt.figure(5, clear=True)
 ax = fig.add_subplot()
 ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
@@ -221,7 +224,7 @@ ax.legend()
 # Manually write code for: 
 #   h_samp = sts.sim(linear_model, Ns)
 # NOTE weird transpose combo to broadcast correctly into consistent shape
-h_samp = stats.norm(mu_samp.T, tr['sigma']).rvs().T
+h_samp = stats.norm(mu_samp.T, post['sigma']).rvs().T
 h_hpdi = sts.hpdi(h_samp, q=q)
 
 ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
