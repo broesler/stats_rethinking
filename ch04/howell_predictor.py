@@ -35,8 +35,8 @@ df = pd.read_csv(data_path + 'Howell1.csv')
 # Filter adults only
 adults = df[df['age'] >= 18]
 
-w = adults['weight']  # [kg] independent variable
-wbar = w.mean()
+weight = adults['weight']  # [kg] independent variable
+wbar = weight.mean()
 
 Ns = 10_000  # general number of samples to use
 
@@ -56,7 +56,7 @@ with pm.Model() as first_model:
     alpha = pm.Normal('alpha', mu=178, sigma=20)       # parameter priors
     beta = pm.Normal('beta', mu=0, sigma=10)
     sigma = pm.Uniform('sigma', 0, 50)              # std prior
-    mu = pm.Deterministic('mu', alpha + beta*(w - wbar))
+    mu = pm.Deterministic('mu', alpha + beta*(weight - wbar))
     h = pm.Normal('h', mu=mu, sigma=sigma, observed=adults['height'])
 
 #------------------------------------------------------------------------------ 
@@ -70,7 +70,7 @@ ax1 = fig.add_subplot(gs[1], sharex=ax0, sharey=ax0)
 for ax in [ax0, ax1]:
     ax.axhline(0, c='k', ls='--', lw=1)   # x-axis
     ax.axhline(272, c='k', ls='-', lw=1)  # Wadlow line
-    ax.set(xlim=(w.min(), w.max()),
+    ax.set(xlim=(weight.min(), weight.max()),
            ylim=(-100, 400),
            xlabel='weight [kg]',
            ylabel='height [cm]')
@@ -81,27 +81,29 @@ with first_model:
     prior_samp = pm.sample_prior_predictive(N)
 
 for i in range(N):
-    ax0.plot(w, prior_samp['mu'][i], 'k', alpha=0.2)
+    ax0.plot(weight, prior_samp['mu'][i], 'k', alpha=0.2)
 ax0.set_title('A poor prior')
 
 # Restrict beta to positive values in the new model
 # TODO use pm.Data() for x and observed, then use pm.set_data() later.
-def linear_model(x, observed):
+def linear_model(ind, obs):
     """Define a pymc3 model with the given data."""
     with pm.Model() as model:
+        ind = pm.Data('ind', ind)
+        obs = pm.Data('obs', obs)
         alpha = pm.Normal('alpha', mu=178, sigma=20)  # parameter priors
         beta = pm.Lognormal('beta', mu=0, sigma=1)    # new prior!
         sigma = pm.Uniform('sigma', 0, 50)            # std prior
-        mu = pm.Deterministic('mu', alpha + beta*(x - x.mean()))
-        h = pm.Normal('h', mu=mu, sigma=sigma, observed=observed)  # likelihood
+        mu = pm.Deterministic('mu', alpha + beta*(ind - ind.mean()))
+        h = pm.Normal('h', mu=mu, sigma=sigma, observed=obs)  # likelihood
     return model
 
-the_model = linear_model(w, observed=adults['height'])
+the_model = linear_model(weight, obs=adults['height'])
 with the_model:
     prior_samp = pm.sample_prior_predictive(N)
 
 for i in range(N):
-    ax1.plot(w, prior_samp['mu'][i], 'k', alpha=0.2)
+    ax1.plot(weight, prior_samp['mu'][i], 'k', alpha=0.2)
 ax1.set_title('A better prior')
 gs.tight_layout(fig)
 
@@ -122,7 +124,7 @@ print(tr.cov())
 #        Posterior Prediction
 #------------------------------------------------------------------------------
 # Figure 4.6
-ax_d.plot(w, quap['mu'].mean(), 'k', label='MAP Prediction')
+ax_d.plot(weight, quap['mu'].mean(), 'k', label='MAP Prediction')
 ax_d.legend()
 
 # Plot the posterior prediction vs N data points
@@ -137,7 +139,7 @@ for i, N in enumerate(N_test):
     df_n = adults[:N]
     w = df_n['weight']
 
-    the_model = linear_model(w, observed=df_n['height'])
+    the_model = linear_model(w, obs=df_n['height'])
     with the_model:
         # Compute the MAP estimate of the parameters
         quap = sts.quap(var_names=['alpha', 'beta', 'sigma'])
