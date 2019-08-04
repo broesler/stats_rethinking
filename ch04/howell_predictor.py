@@ -51,7 +51,7 @@ ax_d.set(xlabel='weight [kg]',
 #        Build a Model
 #------------------------------------------------------------------------------
 # Section 4.4.1 model description:
-with pm.Model() as model:
+with pm.Model() as first_model:
     # Define the model
     alpha = pm.Normal('alpha', mu=178, sd=20)       # parameter priors
     beta = pm.Normal('beta', mu=0, sd=10)
@@ -77,7 +77,7 @@ for ax in [ax0, ax1]:
 
 # Plot the model of mean height vs. weight
 N = 100
-with model:
+with first_model:
     prior_samp = pm.sample_prior_predictive(N)
 
 for i in range(N):
@@ -85,16 +85,17 @@ for i in range(N):
 ax0.set_title('A poor prior')
 
 # Restrict beta to positive values in the new model
-def linear_model(w, wbar):
+def linear_model(w, observed):
+    wbar = w.mean()
     with pm.Model() as model:
         alpha = pm.Normal('alpha', mu=178, sd=20)             # parameter priors
         beta = pm.Lognormal('beta', mu=0, sd=1)               # new prior!
         sigma = pm.Uniform('sigma', 0, 50)                    # std prior
         mu = pm.Deterministic('mu', alpha + beta*(w - wbar))
-        h = pm.Normal('h', mu=mu, sd=sigma, observed=adults['height'])
+        h = pm.Normal('h', mu=mu, sd=sigma, observed=observed)
     return model
 
-the_model = linear_model(w, wbar)
+the_model = linear_model(w, observed=adults['height'])
 with the_model:
     prior_samp = pm.sample_prior_predictive(N)
 
@@ -104,7 +105,7 @@ ax1.set_title('A better prior')
 gs.tight_layout(fig)
 
 #------------------------------------------------------------------------------ 
-#        Compute the Posterior
+#        Compute the Posterior Distribution
 #------------------------------------------------------------------------------
 with the_model:
     # Sample the posterior distributions of parameters
@@ -115,10 +116,10 @@ with the_model:
     # UserWarning: grad method was asked to compute the gradient with respect
     # to a variable that is not part of the computational graph of the cost, or
     # is used only by a non-differentiable operator: alpha
-    quap = sts.quap(dict(alpha=alpha, beta=beta, sigma=sigma))
-    tr = sts.sample_quap(quap, Ns)
+    # quap = sts.quap(dict(alpha=alpha, beta=beta, sigma=sigma))
+    # tr = sts.sample_quap(quap, Ns)
 
-tr = pm.trace_to_dataframe(trace).filter(regex='^(?!mu)')
+tr = pm.trace_to_dataframe(trace).filter(regex='^(?!mu)')  # ignore mu
 print(sts.precis(tr))
 print('cov:')
 print(tr.cov())
@@ -127,12 +128,14 @@ print(tr.cov())
 #        Posterior Prediction
 #------------------------------------------------------------------------------
 # Figure 4.6
-map_est = pm.find_MAP(model=the_model)
+with the_model:
+    map_est = pm.find_MAP()
 ax_d.plot(w, map_est['mu'], 'k', label='MAP Prediction')
 ax_d.legend()
 
 # Plot the posterior prediction vs N data points
 N_test = [10, 50, 150, adults.shape[0]]
+N_lines = 20
 
 fig = plt.figure(3, clear=True)
 gs = GridSpec(nrows=2, ncols=2)
@@ -140,13 +143,15 @@ gs = GridSpec(nrows=2, ncols=2)
 for i, N in enumerate(N_test):
     df_n = adults[:N]
     w = df_n['weight']
-    wbar = w.mean()
 
-    with linear_model(w, wbar):
+    the_model = linear_model(w, observed=df_n['height'])
+    with the_model:
         # Sample the posterior distributions of parameters
         # quap = sts.quap(dict(alpha=alpha, beta=beta, sigma=sigma))
         # post = sts.sample_quap(quap, 20)  # only sample 20 lines
-        post_samp = pm.sample_posterior_predictive(trace, 20)
+        trace = pm.sample(Ns)
+        post_samp = pm.sample_posterior_predictive(trace, N_lines, 
+                                                   vars=[the_model.mu])
 
     # Plot the raw data
     ax = fig.add_subplot(gs[i])
@@ -162,7 +167,7 @@ for i, N in enumerate(N_test):
     # broadcast operations with a numpy array, so need to get the values out
     # model = (post['alpha'].values + post['beta'].values * (w[:, None] - wbar)).T
 
-    for j in range(post.shape[0]):
+    for j in range(N_lines):
         # ax.plot(w, model[j, :], 'k-', lw=1, alpha=0.3)
         ax.plot(w, post_samp['mu'][j], 'k-', lw=1, alpha=0.3)
     ax.set(title=f"N = {N}",
@@ -174,7 +179,8 @@ gs.tight_layout(fig)
 #------------------------------------------------------------------------------ 
 #        Plot regression intervals
 #------------------------------------------------------------------------------
-tr = sts.sample_quap(quap, Ns)
+# tr = sts.sample_quap(quap, Ns)
+tr = pm.trace_to_dataframe(trace).filter(regex='^(?!mu)')
 mu_at_50 = tr['alpha'] + tr['beta'] * (50 - wbar)
 
 # Figure 4.8 (R code 4.50 -- 4.51)
@@ -183,6 +189,7 @@ ax = sns.distplot(mu_at_50)
 ax.set(xlabel='$\mu | w = 50$ [kg]',
        ylabel='density')
 
+print('mu @ w = 50 [kg]:')
 sts.hpdi(mu_at_50, q=0.89, verbose=True)
 
 # Manually write code for: 
@@ -190,15 +197,12 @@ sts.hpdi(mu_at_50, q=0.89, verbose=True)
 # Generate samples, compute model output for even-interval input
 # tr = sts.sample_quap(quap, Ns)
 x = np.arange(25, 71)
-with linear_model(x, wbar):
-    post_samp = pm.sample_posterior_predictive(Ns)
-    mu_samp = post_samp['mu']
-# mu_samp = tr['alpha'].values + tr['beta'].values * (x[:, None] - wbar)
+mu_samp = (tr['alpha'].values + tr['beta'].values * (x[:, None] - wbar)).T
 
 # Plot the credible interval for the mean of the height (not including sigma)
 q = 0.89
-mu_mean = mu_samp.mean(axis=1)  # (Nd, 1) average mu values for each data point
-mu_hpdi = sts.hpdi(mu_samp.T, q=q)
+mu_mean = mu_samp.mean(axis=0)  # (Nd,) average mu values for each data point
+mu_hpdi = sts.hpdi(mu_samp, q=q)
 
 fig = plt.figure(5, clear=True)
 ax = fig.add_subplot()
@@ -214,8 +218,9 @@ ax.legend()
 # Calculate the prediction interval, including sigma
 # Manually write code for: 
 #   h_samp = sts.sim(linear_model, Ns)
-h_samp = stats.norm(mu_samp, tr['sigma']).rvs()
-h_hpdi = sts.hpdi(h_samp.T, q=q)
+# NOTE weird transpose combo to broadcast correctly into consistent shape
+h_samp = stats.norm(mu_samp.T, tr['sigma']).rvs().T
+h_hpdi = sts.hpdi(h_samp, q=q)
 
 ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
                 facecolor='k', alpha=0.2, interpolate=True,
