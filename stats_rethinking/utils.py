@@ -277,10 +277,9 @@ def quap(vars=None, var_names=None, model=None, start=None):
 
     quap = dict()
     for v in mvars:
-        k = v.name
-        mean = map_est[k]
-        std = ((1 / pm.find_hessian(map_est, vars=[v], model=model))**0.5)[0,0]
-        quap[k] = stats.norm(loc=mean, scale=std)
+        mean = map_est[v.name]
+        std = (pm.find_hessian(map_est, vars=[v], model=model)**-0.5)[0,0]
+        quap[v.name] = stats.norm(loc=mean, scale=std)
     return quap
 
 
@@ -294,6 +293,8 @@ def sample_quap(quap, N=1000):
     for k, v in quap.items():
         # number of samples must be first dimension
         size = [N] + list(v.rvs().shape)
+        if len(size) == 1:
+            size += [1]  # guarantee at least column vector
         out[k] = v.rvs(size=size)
     return out
 

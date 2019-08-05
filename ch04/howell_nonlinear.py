@@ -65,24 +65,24 @@ fig = plt.figure(2, clear=True, figsize=(12, 6))
 gs = GridSpec(nrows=1, ncols=Np)
 
 for poly_order in range(1, Np+1):
-    # poly_order = 2
+    # poly_order = 1
 
     with pm.Model() as poly_model:
         sigma = pm.Uniform('sigma', 0, 50)
-
-        alpha = pm.Normal('alpha', 178, 20)
+        alpha = pm.Normal('alpha', mu=178, sigma=20)
         # TODO rewrite as a vector with lognorm for beta[0]
-        beta = pm.Normal('beta', 0, 10, shape=poly_order)
+        beta = pm.Normal('beta', mu=0, sigma=10, shape=poly_order)
         w_m = np.vstack([w_z**(i+1) for i in range(0, poly_order)])
         mu = pm.Deterministic('mu', alpha + pm.math.dot(beta, w_m))
-        h = pm.Normal('h', mu=mu, sd=sigma, observed=df['height'])
+        h = pm.Normal('h', mu=mu, sigma=sigma, observed=df['height'])
 
-        # quap = sts.quap(var)
-        # tr = sts.sample_quap(quap, Ns)
-        trace = pm.sample(Ns, tune=1000)
-        map_est = pm.find_MAP()
+        # map_est = pm.find_MAP()
+        # quap = sts.quap()
+        # post = sts.sample_quap(quap, Ns)
+        post = pm.sample(Ns, tune=1000)
 
-    tr = pm.trace_to_dataframe(trace).filter(regex='^(?!mu)')
+    # tr = sts.sample_to_dataframe(post).filter(regex='^(?!mu)')
+    tr = pm.trace_to_dataframe(post).filter(regex='^(?!mu)')
 
     print(f"poly order: {poly_order}")
     print(sts.precis(tr))
@@ -92,11 +92,11 @@ for poly_order in range(1, Np+1):
     z = (x - df['weight'].mean()) / df['weight'].std()
     z_m = np.vstack([z**(i+1) for i in range(0, poly_order)])
 
-    mu_samp = trace['alpha'][:, np.newaxis] + np.dot(trace['beta'], z_m)
+    mu_samp = post['alpha'][:, np.newaxis] + np.dot(post['beta'], z_m)
     mu_mean = mu_samp.mean(axis=0)  # [cm] mean height estimate vs. weight
 
     q = 0.89
-    h_samp = stats.norm(mu_samp.T, trace['sigma']).rvs().T
+    h_samp = stats.norm(mu_samp.T, post['sigma']).rvs().T
     h_hpdi = sts.hpdi(h_samp, q=q)
 
     # Plot vs the data (in non-normalized x-axis for readability)
