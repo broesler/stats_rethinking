@@ -65,25 +65,25 @@ for poly_order in range(1, Np+1):
     # Define the model
     with pm.Model() as poly_model:
         # Parameter priors
-        alpha = pm.Normal('alpha', mu=178, sigma=20)
-
+        alpha = pm.Normal('alpha', mu=178, sigma=20, shape=(1,))
         b0 = pm.Lognormal('b0', mu=0, sigma=1, shape=(1,))
         bn = pm.Normal('bn', mu=0, sigma=10, shape=(poly_order-1,))
-        beta = pm.Deterministic('beta', pm.math.concatenate([b0, bn]))
+        beta = pm.Deterministic('beta', pm.math.concatenate([alpha, b0, bn]))
 
         # sigma = pm.Uniform('sigma', 0, 50, testval=9)  # unstable with MAP
         sigma = pm.HalfNormal('sigma', sigma=25)  # choose wide Normal instead
 
         # Polynomial weights:
-        #   mu = alpha + w_m[0] * beta[0] + ... + w_m[n] * beta[n]
+        #   mu = beta[0] * w_m[0] + beta[1] * w_m[1] + ... + w_m[n] * beta[n]
+        # where beta[0] == alpha, w_m[0] = [1, ..., 1]
         w_m = sts.poly_weights(w_z, poly_order)  # [poly_order, Nd]
-        mu = pm.Deterministic('mu', alpha + pm.math.dot(beta, w_m))
+        mu = pm.Deterministic('mu', pm.math.dot(beta, w_m))
 
         # Likelihood
         h = pm.Normal('h', mu=mu, sigma=sigma, observed=df['height'])
 
         # Get the posterior approximation
-        quap = sts.quap(vars=[alpha, beta, sigma, mu])  # ignore b0, bn
+        quap = sts.quap(vars=[alpha, beta, sigma, mu])  # ignore a, b0, bn
         post = sts.sample_quap(quap, Ns)
 
     tr = sts.sample_to_dataframe(post).filter(regex='^(?!mu)')
@@ -96,8 +96,8 @@ for poly_order in range(1, Np+1):
     z = sts.standardize(x, df['weight'])
     z_m = sts.poly_weights(z, poly_order)  # (poly_order, x.size)
 
-    # (Ns, x.size) == (Ns, 1) + (Ns, poly_order) * (poly_order, x.size)
-    mu_samp = post['alpha'] + np.dot(post['beta'], z_m)
+    # (Ns, x.size) == Ns, poly_order) * (poly_order, x.size)
+    mu_samp = np.dot(post['beta'], z_m)
     mu_mean = mu_samp.mean(axis=0)  # [cm] mean height estimate vs. weight
 
     q = 0.89  # CI interval probability

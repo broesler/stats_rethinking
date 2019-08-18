@@ -340,16 +340,23 @@ def standardize(x, data=None, axis=0):
     return (x - data.mean(axis=axis)) / data.std(axis=axis)
 
 
-def poly_weights(w, poly_order=0):
+def poly_weights(w, poly_order=0, include_const=True):
     """Return array of polynomial weight vectors."""
     w = np.asarray(w)
+
     if poly_order == 0:
-        return w
+        out = w
     else:
         try:
-            return np.vstack([w**(i+1) for i in range(poly_order)])
+            out = np.vstack([w**(i+1) for i in range(poly_order)])
         except ValueError:
             raise ValueError(f"poly_order value '{poly_order}' is invalid")
+
+    if include_const:
+        out = np.vstack([np.ones_like(w), out])  # weight constant term == 1
+
+    return out
+
 
 
 #==============================================================================
