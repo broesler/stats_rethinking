@@ -20,7 +20,6 @@ from matplotlib.gridspec import GridSpec
 
 import stats_rethinking as sts
 
-plt.ion()
 plt.style.use('seaborn-darkgrid')
 np.random.seed(56)  # initialize random number generator
 
@@ -44,70 +43,66 @@ ax = fig.add_subplot()
 ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Adults')
 ax.scatter(children['weight'], children['height'], c='C3', alpha=0.5, 
            label='Children')
-ax.set(xlabel='weight [kg]',
-         ylabel='height [cm]')
+ax.set(xlim=(0, 1.05*df['weight'].max()),
+       xlabel='weight [kg]',
+       ylabel='height [cm]')
 ax.legend()
 
 #------------------------------------------------------------------------------ 
 #        Build a Polynomial Model of Height
 #------------------------------------------------------------------------------
 # Standardize the input
-w_z = (df['weight'] - df['weight'].mean()) / df['weight'].std() 
-# w_z =                    (w - w.mean()) / w.std() == stats.zscore(w, ddof=1)
-# w_z = (N / (N-1))**0.5 * (w - w.mean()) / w.std() == stats.zscore(w, ddof=0)
+w_z = sts.standardize(df['weight'])
 
 # Figure 4.11
 Np = 3  # max nummber of polynomial terms
-
 titles = dict({1: 'Linear', 2: 'Quadratic', 3: 'Cubic'})
 
-fig = plt.figure(2, clear=True)
+fig = plt.figure(2, clear=True, figsize=(max(Np*4, 8), 6))
 gs = GridSpec(nrows=1, ncols=Np)
 
 for poly_order in range(1, Np+1):
-
+    # Define the model
     with pm.Model() as poly_model:
-        sigma = pm.Uniform('sigma', 0, 50)
+        # Parameter priors
+        alpha = pm.Normal('alpha', mu=178, sigma=20, shape=(1,))
+        b0 = pm.Lognormal('b0', mu=0, sigma=1, shape=(1,))
+        bn = pm.Normal('bn', mu=0, sigma=10, shape=(poly_order-1,))
+        beta = pm.Deterministic('beta', pm.math.concatenate([alpha, b0, bn]))
 
-        alpha = pm.Normal('alpha', 178, 20)
-        beta_0 = pm.Lognormal('beta_0', 0, 1)
-        if poly_order == 1:
-            mu = alpha + beta_0 * w_z
-        elif poly_order == 2:
-            beta_1 = pm.Normal('beta_1', 0, 1)
-            mu = alpha + beta_0 * w_z + beta_1 * w_z**2
-        elif poly_order == 3:
-            beta_1 = pm.Normal('beta_1', 0, 1)
-            beta_2 = pm.Normal('beta_2', 0, 1)
-            mu = alpha + beta_0 * w_z + beta_1 * w_z**2 + beta_2 * w_z**3
+        # sigma = pm.Uniform('sigma', 0, 50, testval=9)  # unstable with MAP
+        sigma = pm.HalfNormal('sigma', sigma=25)  # choose wide Normal instead
 
-        h = pm.Normal('h', mu=mu, sd=sigma, observed=df['height'])
+        # Polynomial weights:
+        #   mu = beta[0] * w_m[0] + beta[1] * w_m[1] + ... + w_m[n] * beta[n]
+        # where beta[0] == alpha, w_m[0] = [1, ..., 1]
+        w_m = sts.poly_weights(w_z, poly_order)  # [poly_order, Nd]
+        mu = pm.Deterministic('mu', pm.math.dot(beta, w_m))
 
-        var = dict(sigma=sigma, alpha=alpha, beta_0=beta_0)
-        if poly_order > 1:
-            var['beta_1'] = beta_1
-        if poly_order > 2:
-            var['beta_2'] = beta_2
+        # Likelihood
+        h = pm.Normal('h', mu=mu, sigma=sigma, observed=df['height'])
 
-        quap = sts.quap(var)
-        tr = sts.sample_quap(quap, Ns)
+        # Get the posterior approximation
+        quap = sts.quap(vars=[alpha, beta, sigma, mu])  # ignore a, b0, bn
+        post = sts.sample_quap(quap, Ns)
 
-    print(f"poly order: {poly_order}")
+    tr = sts.sample_to_dataframe(post).filter(regex='^(?!mu)')
+
+    print(f"---------- poly order: {poly_order} ----------")
     print(sts.precis(tr))
 
     # Sample from normalized inputs
-    x = np.arange(0, 71)
-    z = (x - df['weight'].mean()) / df['weight'].std()
+    x = np.arange(0, 71)  # [kg] range of weight inputs
+    z = sts.standardize(x, df['weight'])
+    z_m = sts.poly_weights(z, poly_order)  # (poly_order, x.size)
 
-    mu_samp = tr['alpha'].values  # (Ns,)
-    for i in range(poly_order):
-        # Weird "+=" issue here
-        mu_samp = mu_samp + tr[f"beta_{i}"].values * z[:, None]**(i+1)
-    mu_mean = mu_samp.mean(axis=1)  # [cm] mean height estimate vs. weight
+    # (Ns, x.size) == Ns, poly_order) * (poly_order, x.size)
+    mu_samp = np.dot(post['beta'], z_m)
+    mu_mean = mu_samp.mean(axis=0)  # [cm] mean height estimate vs. weight
 
-    q = 0.89
-    h_samp = stats.norm(mu_samp, tr['sigma']).rvs()
-    h_hpdi = sts.hpdi(h_samp.T, q=q)
+    q = 0.89  # CI interval probability
+    h_samp = stats.norm(mu_samp, post['sigma']).rvs()
+    h_hpdi = sts.hpdi(h_samp, q=q)
 
     # Plot vs the data (in non-normalized x-axis for readability)
     ax = fig.add_subplot(gs[poly_order-1])
@@ -120,6 +115,26 @@ for poly_order in range(1, Np+1):
         xlabel='weight [kg]',
         ylabel='height [cm]')
     ax.legend()
+    gs.tight_layout(fig)
+
+# Plot parameter distributions
+# fig = plt.figure(3, clear=True)
+# gs = GridSpec(nrows=1, ncols=poly_order+2)
+# for i, col in enumerate(tr.columns):
+#     ax = fig.add_subplot(gs[i])  # left side plot
+#     sns.distplot(tr[col], fit=stats.norm)
+#     mu, sigma = stats.norm.fit(tr[col])
+#     print(f"{col}: mu = {mu:.4f}, sigma = {sigma:.4f}")
+# gs.tight_layout(fig)
+
+# TODO
+# * rewrite [alpha, beta] as a vector with np.ones for beta[0], lognorm for
+#   beta[1], norms for rest of betas
+# * test regular pm.Normal() in linear model
+# * try HalfNormal for sigma --> how to define halfnorm such that probability
+#   for a given value == specified value??
+
+plt.show()
 
 #==============================================================================
 #==============================================================================

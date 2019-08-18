@@ -119,13 +119,13 @@ def hpdi(data, alpha=None, q=None,
         else:
             alpha = 1 - q
     q = 1 - alpha  # alpha takes precedence if both are given
-    quantiles = pm.stats.hpd(data, alpha, **kwargs)
+    quantiles = pm.stats.hpd(data, alpha, **kwargs).squeeze()
     if verbose:
         fstr = f"{width}.{precision}f"
-        name_str = ' '.join([f"{100*(1-p):{width-1}g}%" for p in np.hstack((q, q))])
-        value_str = ' '.join([f"{q:{fstr}}" for q in quantiles])
+        name_str = ' '.join([f"{100*x:{width-1}g}%" for x in np.hstack((q, q))])
+        value_str = ' '.join([f"{x:{fstr}}" for x in quantiles])
         print(f"|{name_str}|\n{value_str}")
-    return quantiles.squeeze()
+    return quantiles
 
 
 def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
@@ -201,11 +201,7 @@ def expand_grid(**kwargs):
     """Return a DataFrame of points, where the columns are kwargs."""
     return pd.DataFrame(cartesian(kwargs.values()), columns=kwargs.keys())
 
-# TODO:
-#     * allow for numpy array of data (change ppf calls to quantile)
-#     * allow for DataFrame of samples (cols are variable names)
-#     * allow for non-dict (just data) input by excluding "index"
-#     parameter from DataFrame call.
+# TODO expand documentation with examples
 def precis(quap, p=0.89):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
@@ -247,26 +243,121 @@ def precis(quap, p=0.89):
         raise TypeError('quap of this type is unsupported!')
 
 
-# TODO expand documentation with examples
-def quap(varnames, start=None):
-    """Return quadratic approximation for the MAP estimate of each variable in
-    `varnames`. Must be called within a pymc3 context block.
+def quap(vars=None, var_names=None, model=None, start=None):
+    """Return quadratic approximation for the MAP estimate.
+
+    Parameters
+    ----------
+    vars : list, optional, default=model.unobserved_RVs
+        List of variables to optimize and set to optimum
+    var_names : list, optional
+        List of `str` of variables names specified by `model`
+    model : pymc3.Model (optional if in `with` context)
+    start : `dict` of parameter values, optional, default=`model.test_point`
+
+    Returns
+    -------
+    result : dict
+        Dictionary of `scipy.stats.rv_frozen` distributions corresponding to
+        the MAP estimates of `vars`.
     """
-    pm.init_nuts()  # initialize NUTS sampler
-    map_est = pm.find_MAP(start=start)  # use MAP estimation for mean
+    model = pm.modelcontext(model)
+
+    pm.init_nuts(model=model)
+    map_est = pm.find_MAP(start=start, model=model)
+
+    if vars is None:
+        if var_names is None:
+            # filter out internally used variables
+            mvars = [x for x in model.unobserved_RVs if not x.name.endswith('__')]
+        else:
+            mvars = [model[x] for x in var_names]
+    else:
+        mvars = vars
 
     quap = dict()
-    for k, v in varnames.items():
-        mean = map_est[k]
-        std = ((1 / pm.find_hessian(map_est, vars=[v]))**0.5)[0,0]
-        quap[k] = stats.norm(mean, std)
+    for v in mvars:
+        mean = map_est[v.name]
+        std = (pm.find_hessian(map_est, vars=[v], model=model)**-0.5)[0,0]
+        if np.isnan(std) or (std < 0) or np.isnan(mean).any():
+            raise ValueError(f"std('{v.name}') = {std} is invalid!"\
+                              +" Check testval of prior.")
+        quap[v.name] = stats.norm(loc=mean, scale=std)
     return quap
 
 
+# TODO
+#   * make NormApprox class that contains the dictionary + method to get sizes
+#     so we don't have to use `v.rvs().shape`
 def sample_quap(quap, N=1000):
-    """Sample each distribution in the `quap` dictionary."""
-    return pd.DataFrame(np.array([v.rvs(N) for v in quap.values()]).T,
-                        columns=quap.keys())
+    """Sample each distribution in the `quap` dict.
+    Return a dict like pm.sample_prior_predictive."""
+    out = dict()
+    for k, v in quap.items():
+        # number of samples must be first dimension
+        size = [N] + list(v.rvs().shape)
+        if len(size) == 1:
+            size += [1]  # guarantee at least column vector
+        out[k] = v.rvs(size=size)
+    return out
+
+
+def sample_to_dataframe(data):
+    """Convert dict of samples to DataFrame."""
+    try:
+        df = pd.DataFrame(data)
+    except:
+        # if data has more than one dimension, enumerate the columns
+        df = pd.DataFrame()
+        for k, v in data.items():
+            df_s = pd.DataFrame(v)
+
+            # name the columns
+            if v.ndim == 1:
+                df_s.columns=[k]
+            else:
+                df_s = df_s.add_prefix(k + '__')  # enumerate matrix variables
+
+            # concatenate into one DataFrame
+            if df.empty:
+                df = df_s
+            else:
+                df = df.join(df_s)
+    return df
+
+
+def standardize(x, data=None, axis=0):
+    """Standardize the input vector `x` by the mean and std of `data`.
+
+    .. note::
+        The following lines are equivalent:
+                           (x - x.mean()) / x.std() == stats.zscore(x, ddof=1)
+        (N / (N-1))**0.5 * (x - x.mean()) / x.std() == stats.zscore(x, ddof=0)
+        where N = x.size
+    """
+    if data is None:
+        data = x
+    return (x - data.mean(axis=axis)) / data.std(axis=axis)
+
+
+def poly_weights(w, poly_order=0, include_const=True):
+    """Return array of polynomial weight vectors."""
+    w = np.asarray(w)
+
+    if poly_order == 0:
+        out = w
+    else:
+        try:
+            out = np.vstack([w**(i+1) for i in range(poly_order)])
+        except ValueError:
+            raise ValueError(f"poly_order value '{poly_order}' is invalid")
+
+    if include_const:
+        out = np.vstack([np.ones_like(w), out])  # weight constant term == 1
+
+    return out
+
+
 
 #==============================================================================
 #==============================================================================
