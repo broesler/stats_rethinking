@@ -101,16 +101,16 @@ for poly_order in range(1, Np+1):
     # Sample from normalized inputs
     x = np.arange(0, 71)  # [kg] range of weight inputs
     z = sts.standardize(x, df['weight'])
-    z_m = sts.poly_weights(z, poly_order)
+    z_m = sts.poly_weights(z, poly_order)  # (poly_order, x.size)
 
-    mu_samp = post['alpha'][:, np.newaxis] + np.dot(post['beta'][:, np.newaxis], z_m)
+    # (Ns, x.size) == (Ns, 1) + (Ns, poly_order) * (poly_order, x.size)
+    mu_samp = post['alpha'] + np.dot(post['beta'], z_m)
     mu_mean = mu_samp.mean(axis=0)  # [cm] mean height estimate vs. weight
 
     q = 0.89  # CI interval probability
-    h_samp = stats.norm(mu_samp.T, post['sigma']).rvs().T
+    h_samp = stats.norm(mu_samp, post['sigma']).rvs()
     h_hpdi = sts.hpdi(h_samp, q=q)
 
-    print('plotting...')
     # Plot vs the data (in non-normalized x-axis for readability)
     ax = fig.add_subplot(gs[poly_order-1])
     ax.scatter(df['weight'], df['height'], alpha=0.5, label='Data')

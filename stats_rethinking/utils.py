@@ -119,13 +119,13 @@ def hpdi(data, alpha=None, q=None,
         else:
             alpha = 1 - q
     q = 1 - alpha  # alpha takes precedence if both are given
-    quantiles = pm.stats.hpd(data, alpha, **kwargs)
+    quantiles = pm.stats.hpd(data, alpha, **kwargs).squeeze()
     if verbose:
         fstr = f"{width}.{precision}f"
         name_str = ' '.join([f"{100*x:{width-1}g}%" for x in np.hstack((q, q))])
         value_str = ' '.join([f"{x:{fstr}}" for x in quantiles])
         print(f"|{name_str}|\n{value_str}")
-    return quantiles.squeeze()
+    return quantiles
 
 
 def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
@@ -296,8 +296,8 @@ def sample_quap(quap, N=1000):
     for k, v in quap.items():
         # number of samples must be first dimension
         size = [N] + list(v.rvs().shape)
-        # if len(size) == 1:
-        #     size += [1]  # guarantee at least column vector
+        if len(size) == 1:
+            size += [1]  # guarantee at least column vector
         out[k] = v.rvs(size=size)
     return out
 

@@ -152,7 +152,7 @@ for i, N in enumerate(N_test):
     # Sample the posterior distributions of parameters
     post = sts.sample_quap(quap, N_lines)  # only sample 20 lines
     # Manually calculate the deterministic variable from the MAP estimates
-    post['mu'] = (post['alpha'] + post['beta'] * (w[:, None] - wbar)).T
+    post['mu'] = post['alpha'] + post['beta'] * (w[np.newaxis, :] - wbar)  # (20, N)
 
     # Plot the raw data
     ax = fig.add_subplot(gs[i])
@@ -194,7 +194,7 @@ sts.hpdi(mu_at_50, q=0.89, verbose=True)
 #   mu = sts.link(linear_model, Ns)
 # Generate samples, compute model output for even-interval input
 x = np.arange(25, 71)
-mu_samp = (post['alpha'] + post['beta'] * (x[:, None] - wbar)).T
+mu_samp = post['alpha'] + post['beta'] * (x[np.newaxis, :] - wbar)
 
 # Plot the credible interval for the mean of the height (not including sigma)
 q = 0.89
@@ -216,8 +216,7 @@ ax.legend()
 # Calculate the prediction interval, including sigma
 # Manually write code for: 
 #   h_samp = sts.sim(linear_model, Ns)
-# NOTE weird transpose combo to broadcast correctly into consistent shape
-h_samp = stats.norm(mu_samp.T, post['sigma']).rvs().T
+h_samp = stats.norm(mu_samp, post['sigma']).rvs()
 h_hpdi = sts.hpdi(h_samp, q=q)
 
 ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
