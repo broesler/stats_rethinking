@@ -279,22 +279,25 @@ def quap(vars=None, var_names=None, model=None, start=None):
     for v in mvars:
         mean = map_est[v.name]
         std = (pm.find_hessian(map_est, vars=[v], model=model)**-0.5)[0,0]
+        if np.isnan(std) or (std < 0) or np.isnan(mean).any():
+            raise ValueError(f"std of '{v.name}' = {std} is invalid!"\
+                              +" Check testval of prior.")
         quap[v.name] = stats.norm(loc=mean, scale=std)
     return quap
 
 
 # TODO
 #   * make NormApprox class that contains the dictionary + method to get sizes
-#     so we don't have to use "v.rvs().shape"
+#     so we don't have to use `v.rvs().shape`
 def sample_quap(quap, N=1000):
     """Sample each distribution in the `quap` dict.
-    Return a dict like pm.sample_posterior_predictive."""
+    Return a dict like pm.sample_prior_predictive."""
     out = dict()
     for k, v in quap.items():
         # number of samples must be first dimension
         size = [N] + list(v.rvs().shape)
-        if len(size) == 1:
-            size += [1]  # guarantee at least column vector
+        # if len(size) == 1:
+        #     size += [1]  # guarantee at least column vector
         out[k] = v.rvs(size=size)
     return out
 
@@ -304,6 +307,7 @@ def sample_to_dataframe(data):
     try:
         df = pd.DataFrame(data)
     except:
+        # if data has more than one dimension, enumerate the columns
         df = pd.DataFrame()
         for k, v in data.items():
             df_s = pd.DataFrame(v)
@@ -320,6 +324,33 @@ def sample_to_dataframe(data):
             else:
                 df = df.join(df_s)
     return df
+
+
+def standardize(x, data=None, axis=0):
+    """Standardize the input vector `x` by the mean and std of `data`.
+
+    .. note::
+        The following lines are equivalent:
+                           (x - x.mean()) / x.std() == stats.zscore(x, ddof=1)
+        (N / (N-1))**0.5 * (x - x.mean()) / x.std() == stats.zscore(x, ddof=0)
+        where N = x.size
+    """
+    if data is None:
+        data = x
+    return (x - data.mean(axis=axis)) / data.std(axis=axis)
+
+
+def poly_weights(w, poly_order=0):
+    """Return array of polynomial weight vectors."""
+    w = np.asarray(w)
+    if poly_order == 0:
+        return w
+    else:
+        try:
+            return np.vstack([w**(i+1) for i in range(poly_order)])
+        except ValueError:
+            raise ValueError(f"poly_order value '{poly_order}' is invalid")
+
 
 #==============================================================================
 #==============================================================================
