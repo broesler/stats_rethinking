@@ -280,7 +280,7 @@ def quap(vars=None, var_names=None, model=None, start=None):
         mean = map_est[v.name]
         std = (pm.find_hessian(map_est, vars=[v], model=model)**-0.5)[0,0]
         if np.isnan(std) or (std < 0) or np.isnan(mean).any():
-            raise ValueError(f"std of '{v.name}' = {std} is invalid!"\
+            raise ValueError(f"std('{v.name}') = {std} is invalid!"\
                               +" Check testval of prior.")
         quap[v.name] = stats.norm(loc=mean, scale=std)
     return quap

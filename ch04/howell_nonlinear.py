@@ -62,38 +62,31 @@ fig = plt.figure(2, clear=True, figsize=(max(Np*4, 8), 6))
 gs = GridSpec(nrows=1, ncols=Np)
 
 for poly_order in range(1, Np+1):
-    # poly_order = 1
-
+    # Define the model
     with pm.Model() as poly_model:
-        # TODO rewrite as a vector with lognorm for beta[0]
+        # Parameter priors
         alpha = pm.Normal('alpha', mu=178, sigma=20)
-        beta = pm.Normal('beta', mu=0, sigma=10, shape=poly_order)
+
+        b0 = pm.Lognormal('b0', mu=0, sigma=1, shape=(1,))
+        bn = pm.Normal('bn', mu=0, sigma=10, shape=(poly_order-1,))
+        beta = pm.Deterministic('beta', pm.math.concatenate([b0, bn]))
+
         # sigma = pm.Uniform('sigma', 0, 50, testval=9)  # unstable with MAP
-        sigma = pm.HalfNormal('sigma', sigma=50)  # choose wide Normal instead
+        sigma = pm.HalfNormal('sigma', sigma=25)  # choose wide Normal instead
 
         # Polynomial weights:
         #   mu = alpha + w_m[0] * beta[0] + ... + w_m[n] * beta[n]
-        w_m = sts.poly_weights(w_z, poly_order)
+        w_m = sts.poly_weights(w_z, poly_order)  # [poly_order, Nd]
         mu = pm.Deterministic('mu', alpha + pm.math.dot(beta, w_m))
 
         # Likelihood
         h = pm.Normal('h', mu=mu, sigma=sigma, observed=df['height'])
 
-        # NOTE MAP fails for poly_order == 1:
-        # * "ValueError: Domain error in arguments." at `sts.sample_quap()` because
-        #   the quap values for sigma are NaNs.
-        # * quap works fine for poly_order > 1
-        # * pm.sample() works fine for any poly_order
-        #     - all parameters are normally distributed
-        # * sigma MAP value seems to be pegged at either end of Uniform or
-        #   middle, true value is ~9 for poly_order == 1.
-        # * works for testval={8, 9}, but not other values
-        quap = sts.quap()
+        # Get the posterior approximation
+        quap = sts.quap(vars=[alpha, beta, sigma, mu])  # ignore b0, bn
         post = sts.sample_quap(quap, Ns)
-        # post = pm.sample(Ns)
 
     tr = sts.sample_to_dataframe(post).filter(regex='^(?!mu)')
-    # tr = pm.trace_to_dataframe(post).filter(regex='^(?!mu)')
 
     print(f"---------- poly order: {poly_order} ----------")
     print(sts.precis(tr))
@@ -124,15 +117,6 @@ for poly_order in range(1, Np+1):
     ax.legend()
     gs.tight_layout(fig)
 
-#------------------------------------------------------------------------------ 
-#        DEBUG:
-#------------------------------------------------------------------------------
-# from pprint import pprint
-# with poly_model:
-#     map_est = pm.find_MAP()
-# print('map_est:')
-# pprint(map_est)
-
 # Plot parameter distributions
 # fig = plt.figure(3, clear=True)
 # gs = GridSpec(nrows=1, ncols=poly_order+2)
@@ -144,6 +128,8 @@ for poly_order in range(1, Np+1):
 # gs.tight_layout(fig)
 
 # TODO
+# * rewrite [alpha, beta] as a vector with np.ones for beta[0], lognorm for
+#   beta[1], norms for rest of betas
 # * test regular pm.Normal() in linear model
 # * try HalfNormal for sigma --> how to define halfnorm such that probability
 #   for a given value == specified value??
