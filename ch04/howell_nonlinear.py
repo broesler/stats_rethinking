@@ -20,6 +20,7 @@ from matplotlib.gridspec import GridSpec
 
 import stats_rethinking as sts
 
+plt.ion()
 plt.style.use('seaborn-darkgrid')
 np.random.seed(56)  # initialize random number generator
 
@@ -66,9 +67,9 @@ for poly_order in range(1, Np+1):
     with pm.Model() as poly_model:
         # Parameter priors
         alpha = pm.Normal('alpha', mu=178, sigma=20, shape=(1,))
-        b0 = pm.Lognormal('b0', mu=0, sigma=1, shape=(1,))
+        b1 = pm.Lognormal('b1', mu=0, sigma=1, shape=(1,))  # linear term > 0
         bn = pm.Normal('bn', mu=0, sigma=10, shape=(poly_order-1,))
-        beta = pm.Deterministic('beta', pm.math.concatenate([alpha, b0, bn]))
+        beta = pm.Deterministic('beta', pm.math.concatenate([alpha, b1, bn]))
 
         # sigma = pm.Uniform('sigma', 0, 50, testval=9)  # unstable with MAP
         sigma = pm.HalfNormal('sigma', sigma=25)  # choose wide Normal instead
@@ -83,7 +84,7 @@ for poly_order in range(1, Np+1):
         h = pm.Normal('h', mu=mu, sigma=sigma, observed=df['height'])
 
         # Get the posterior approximation
-        quap = sts.quap(vars=[alpha, beta, sigma, mu])  # ignore a, b0, bn
+        quap = sts.quap(vars=[beta, sigma, mu])  # ignore a, b1, bn
         post = sts.sample_quap(quap, Ns)
 
     tr = sts.sample_to_dataframe(post).filter(regex='^(?!mu)')
@@ -133,8 +134,6 @@ for poly_order in range(1, Np+1):
 # * test regular pm.Normal() in linear model
 # * try HalfNormal for sigma --> how to define halfnorm such that probability
 #   for a given value == specified value??
-
-plt.show()
 
 #==============================================================================
 #==============================================================================
