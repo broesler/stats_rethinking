@@ -201,7 +201,9 @@ def expand_grid(**kwargs):
     """Return a DataFrame of points, where the columns are kwargs."""
     return pd.DataFrame(cartesian(kwargs.values()), columns=kwargs.keys())
 
-# TODO expand documentation with examples
+# TODO 
+#   * expand documentation with examples
+#   * ignore unsupported columns like 'datetime' types
 def precis(quap, p=0.89):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
@@ -226,16 +228,16 @@ def precis(quap, p=0.89):
         df['mean'] = quap.mean()
         df['std'] = quap.std()
         for i in range(2):
-            df[f"{pp[i]:g}%"] = quap.apply(lambda x: np.percentile(x, pp[i]))
+            df[f"{pp[i]:g}%"] = quap.apply(lambda x: np.nanpercentile(x, pp[i]))
         return df
 
     # Numpy array of data points
     if isinstance(quap, np.ndarray):
         # Columns are data, ignore index
-        vals = np.vstack([quap.mean(axis=0),
-                          quap.std(axis=0),
-                          np.percentile(quap, pp[0], axis=0),
-                          np.percentile(quap, pp[1], axis=0)]).T
+        vals = np.vstack([np.nanmean(quap, axis=0),
+                          np.nanstd(quap, axis=0),
+                          np.nanpercentile(quap, pp[0], axis=0),
+                          np.nanpercentile(quap, pp[1], axis=0)]).T
         df = pd.DataFrame(vals,
                           columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"])
         return df
