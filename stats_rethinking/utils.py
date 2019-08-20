@@ -15,6 +15,7 @@ import pandas as pd
 import pymc3 as pm
 
 from scipy import stats
+from scipy.interpolate import BSpline
 from sklearn.utils.extmath import cartesian
 
 
@@ -346,6 +347,49 @@ def poly_weights(w, poly_order=0, include_const=True):
     return out
 
 
+def pad_knots(knots, k=3):
+    """Repeat first and last knots `k` times."""
+    knots = np.asarray(knots)
+    return np.concatenate([np.repeat(knots[0], k),
+                           knots,
+                           np.repeat(knots[-1], k)])
+
+
+def bspline_basis(x=None, t=None, k=3, padded_knots=False):
+    """Create the B-spline basis matrix of coefficients.
+
+    Parameters
+    ----------
+    x : array_like, optional
+        points at which to evaluate the B-spline bases. If `x` is not given,
+        a `scipy.interpolate.BSpline` object will be returned.
+    t : array_like, shape (n+k+1,)
+        internal knots
+    k : int, optional, default=3
+        B-spline order
+    padded_knots : bool, optional, default=False
+        if True, treat the input `t` as padded, otherwise, pad `t` with `k`
+        each of the leading and trailing "border knot" values.
+
+    Returns
+    -------
+    B : ndarray, shape (x.shape, n+k+1)
+        B-spline basis functions evaluated at the given points `x`. The last
+        dimension is the number of knots.
+    """
+    if t is None:
+        raise TypeError("bspline_basis() missing 1 required keyword argument: 't'")
+    if not padded_knots:
+        t = pad_knots(t, k)
+    m = len(t) - k - 1
+    c = np.eye(m)  # only activate one basis at a time
+    b = BSpline(t, c, k, extrapolate=False)
+    if x is None:
+        return b
+    else:
+        B = b(x)
+        B[np.isnan(B)] = 0.0
+        return B
 
 #==============================================================================
 #==============================================================================
