@@ -18,20 +18,6 @@ from scipy import stats
 from sklearn.utils.extmath import cartesian
 
 
-def annotate(text, ax, loc='upper left'):
-    """Add annotation `text` to upper left of `ax` frame."""
-    # TODO validate loc string first
-    # except KeyError:
-    #     raise KeyError(f'The location {loc} is not supported!')
-
-    yloc, xloc = loc.split()
-    XS = dict({ 'left': 0.05, 'center': 0.5, 'right': 0.95})
-    YS = dict({'lower': 0.05, 'center': 0.5, 'upper': 0.95})
-    YA = dict({'upper': 'top', 'center': 'center', 'lower': 'bottom'})
-    xc, yc, va = XS[xloc], YS[yloc], YA[yloc]
-    ax.text(x=xc, y=yc, s=text, ha=xloc, va=va, transform=ax.transAxes)
-
-
 def quantile(data, q=0.89, width=10, precision=8,
                  q_func=np.quantile, verbose=False, **kwargs):
     """Pretty-print the desired quantile values from the data.

@@ -92,7 +92,7 @@ indices = np.array([[p_grid < 0.5,
 titles = np.array([['$p < 0.50$', '$0.50 < p < 0.75$'],
                    ['lower 80%',  'middle 80%']])
 
-xticks = [0, 0.25, 0.5, 0.75, 1.0]  # custom axis labels
+xticks = [0, 0.25, 0.5, 0.75, 1]  # custom axis labels
 
 for i in range(2):
     for j in range(2):
@@ -100,16 +100,17 @@ for i in range(2):
 
         # Plot the exact analytical distribution
         ax.plot(p_grid, Beta.pdf(p_grid),
-                c='k', lw=1, label='Beta$(k+1, n-k+1)$')
+                c='k', lw=1, label=f'Beta$({k+1}, {n-k+1})$')
         ax.set(xlabel='$p$',
                ylabel='Density')
 
         # Fill in the percentiles
         idx = indices[i,j]
-        ax.fill_between(p_grid[idx], Beta.pdf(p_grid[idx]), alpha=0.5)
-        sts.annotate(titles[i,j], ax)
+        ax.fill_between(p_grid[idx], Beta.pdf(p_grid[idx]), alpha=0.5,
+                        label=titles[i,j])
 
         ax.set(xticks=xticks, xticklabels=(str(x) for x in xticks))
+        ax.legend(fontsize=11)
 
 gs.tight_layout(fig)
 
@@ -124,11 +125,11 @@ skewed_samples = np.random.choice(p_grid, p=skewed_posterior, size=Ns, replace=T
 Beta_skewed = stats.beta(k+1, n-k+1)  # n = k = 3
 
 print('----------Beta(3, 3) sample----------')
-percentile = 0.50  # [percentile] confidence interval
+percentile = 50  # [percentile] confidence interval
 print('Middle 50% PI:')
-perc_50 = sts.percentiles(skewed_samples, q=percentile)
+perc_50 = sts.percentiles(skewed_samples, q=percentile, verbose=True)
 print('HPDI 50%:')
-hpdi_50 = sts.hpdi(skewed_samples, q=percentile, verbose=True)
+hpdi_50 = sts.hpdi(skewed_samples, q=percentile/100, verbose=True)
 
 # Figure 3.3
 fig = plt.figure(3, figsize=(8,4), clear=True)
@@ -143,16 +144,17 @@ for i in range(2):
 
     # Plot distribution of samples
     ax.plot(p_grid, Beta_skewed.pdf(p_grid), 
-            c='k', lw=1, label='Beta$(k+1, n-k+1)$')
+            c='k', lw=1, label=f'Beta$({k+1}, {n-k+1})$')
     ax.set(xlabel='$p$',
            ylabel=f"$P(p | k={k}, n={n})$")
 
     # Fill in the percentiles
     idx = indices_skewed[i]
-    ax.fill_between(p_grid[idx], Beta_skewed.pdf(p_grid[idx]), alpha=0.5)
-    sts.annotate(titles_skewed[i], ax)
+    ax.fill_between(p_grid[idx], Beta_skewed.pdf(p_grid[idx]), alpha=0.5,
+                    label=titles_skewed[i])
 
     ax.set(xticks=xticks, xticklabels=(str(x) for x in xticks))
+    ax.legend(fontsize=11)
 
 gs.tight_layout(fig)
 
