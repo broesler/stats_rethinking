@@ -373,9 +373,13 @@ def bspline_basis(x=None, t=None, k=3, padded_knots=False):
 
     Returns
     -------
+    if `x` is given:
     B : ndarray, shape (x.shape, n+k+1)
         B-spline basis functions evaluated at the given points `x`. The last
         dimension is the number of knots.
+    else: 
+    b : :obj:scipy.interpolate.BSpline
+        B-spline basis function object with identity matrix as weights.
     """
     if t is None:
         raise TypeError("bspline_basis() missing 1 required keyword argument: 't'")
