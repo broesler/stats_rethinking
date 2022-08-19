@@ -57,7 +57,7 @@ ax.set_aspect('equal')
 ax.set_xlabel('$X_1$')
 ax.set_ylabel('$X_2$')
 
-cbar = fig.colorbar(cax, orientation='horizontal', pad=0.2)
+cbar = fig.colorbar(cax, orientation='horizontal', pad=0.1)
 cbar.set_label('$Y$')
 
 plt.show()

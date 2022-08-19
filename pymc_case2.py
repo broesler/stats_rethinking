@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-#==============================================================================
-#     File: pymc3_case2.py
+# =============================================================================
+#     File: pymc_case2.py
 #  Created: 2019-06-20 23:24
 #   Author: Bernie Roesler
 #
 """
   Description: Case study of coal mine accident data.
+  See: <https://www.kaggle.com/code/billbasener/switchpoint-analysis-of-mining-disasters-in-pymc3/notebook>
+  for data.
 """
-#==============================================================================
+# =============================================================================
 
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pymc3 as pm
-import seaborn as sns
+import pymc as pm
 
 plt.style.use('seaborn-darkgrid')
-np.random.seed(123)  # initialize random number generator
 
 disaster_data = pd.Series([4, 5, 4, 0, 1, 4, 3, 4, 0, 6, 3, 3, 4, 0, 2, 6,
                            3, 3, 5, 4, 5, 3, 1, 4, 4, 1, 5, 5, 3, 4, 2, 5,
@@ -25,16 +26,19 @@ disaster_data = pd.Series([4, 5, 4, 0, 1, 4, 3, 4, 0, 6, 3, 3, 4, 0, 2, 6,
                            0, 1, 0, 1, 0, 0, 0, 2, 1, 0, 0, 0, 1, 1, 0, 2,
                            3, 3, 1, np.nan, 2, 1, 1, 1, 1, 2, 4, 2, 0, 0, 1, 4,
                            0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1])
+
 years = np.arange(1851, 1962)
 
-fig, ax = plt.subplots(num=1, clear=True)
+fig = plt.figure(1, clear=True, constrained_layout=True)
+ax = fig.add_subplot()
 ax.plot(years, disaster_data, 'o', markersize=8)
 ax.set(ylabel='Disaster count',
        xlabel='Year')
 
 with pm.Model() as disaster_model:
     # Switch point when disaster rate reduced, ensure test value in range
-    s = pm.DiscreteUniform('s', lower=years.min(), upper=years.max(), testval=1900)
+    s = pm.DiscreteUniform('s', lower=years.min(), upper=years.max(),
+                           initval=1900)
 
     # Priors for pre- and post-switch rates number of disasters
     early_rate = pm.Exponential('early_rate', 1)
@@ -51,29 +55,37 @@ Ns = 10000
 with disaster_model:
     trace = pm.sample(Ns)
 
-# pm.traceplot(trace)  # plot the convergence of parameters
+# az.plot_trace(trace)  # plot the convergence of parameters
 
-fig = plt.figure(3, figsize=(10,8), clear=True)
-ax = fig.add_subplot(111)
-ax.scatter(years, disaster_data)
+fig = plt.figure(3, clear=True, constrained_layout=True)
+fig.set_size_inches((8, 6), forward=True)
+ax = fig.add_subplot()
 ax.set_xlabel('Year')
 ax.set_ylabel('Number of Accidents')
 
-ax.axvline(trace['s'].mean(), disaster_data.min(), disaster_data.max(), color='C1')
+# Plot raw data
+ax.scatter(years, disaster_data)
+
+ax.axvline(trace.posterior.s.mean(),
+           disaster_data.min(), disaster_data.max(), color='C1')
+
 avg_disasters = np.zeros_like(disaster_data, dtype='float')
 for i, year in enumerate(years):
-    idx = year < trace['s']
-    avg_disasters[i] =  (trace['early_rate'][idx].sum()\
-                       + trace['late_rate'][~idx].sum())\
-                       / (len(trace) * trace.nchains)
+    idx = year < trace.posterior.s.values
+    avg_disasters[i] = ((trace.posterior.early_rate.values[idx].sum()
+                        + trace.posterior.late_rate.values[~idx].sum())
+                        / (len(trace.sample_stats.chain)
+                           * len(trace.sample_stats.draw)))
 
 # Highest Posterior Density (minimum width Bayesian credible interval)
-sp_hpd = pm.hpd(trace['s'])
-plt.fill_betweenx(x1=sp_hpd[0], x2=sp_hpd[1],
+# sp_hpd = pm.stats.hpd(trace.posterior.s)
+sp_df = az.summary(trace.posterior.s)
+ax.fill_betweenx(x1=sp_df['hdi_3%'], x2=sp_df['hdi_97%'],
                   y=[disaster_data.min(), disaster_data.max()],
                   alpha=0.5, color='C1')
-plt.plot(years, avg_disasters, 'k--', lw=2)
+
+ax.plot(years, avg_disasters, 'k--', lw=2)
 
 plt.show()
-#==============================================================================
-#==============================================================================
+# =============================================================================
+# =============================================================================
