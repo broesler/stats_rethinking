@@ -47,14 +47,26 @@ Nps = [5, 20]  # range of grid sizes to try
 # Compute quadratic approximation
 # MAP estimation of the parameter mean
 with pm.Model() as normal_approx:
-    p = pm.Uniform('p', 0, 1)  # prior distribution of p
+    p = pm.Uniform('p', 0, 1)                   # prior distribution of p
     w = pm.Binomial('w', n=n, p=p, observed=k)  # likelihood
-    pm.sample()  # initialize NUTS
-    map_est = pm.find_MAP()  # use MAP estimation for mean
-    mean_p = map_est['p']  # extract desired value
+    # pm.sample()                                 # initialize NUTS
+    map_est = pm.find_MAP()                     # use MAP estimation for mean
+    mean_p = map_est['p']                       # extract desired value
 
+    # Try code from here:
+    # <https://discourse.pymc.io/t/find-hessian-version-differences/10737/2>
+    # pymc>3 perfoms Hessian on *transformed* space, which differs from pymc3.
+    # Doesn't work?
+    # p_value = normal_approx.rvs_to_values[p]
+    # p_value.tag.transform = None
+    # p_value.name = p.name
+
+# Instead, recreate the model with `transform=None`
+with pm.Model() as untransformed_m:
+    p = pm.Uniform('p', 0, 1, transform=None)
+    w = pm.Binomial('w', n=n, p=p, observed=k, transform=None)
     # The Hessian of a Gaussian == "precision" == 1 / sigma**2
-    std_p = ((1 / pm.find_hessian(map_est, vars=[p]))**0.5)[0,0]
+    std_p = ((1 / pm.find_hessian(map_est, vars=[p]))**0.5)[0, 0]
 
 # Calculate percentile interval, assuming normal distribution
 prob = 0.89
