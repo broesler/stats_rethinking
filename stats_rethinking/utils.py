@@ -12,7 +12,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pymc3 as pm
+import pymc as pm
 
 from scipy import stats
 from scipy.interpolate import BSpline
@@ -92,7 +92,7 @@ def hpdi(data, alpha=None, q=None,
     """Compute highest probability density interval.
 
     .. note::
-        This function calls `sts.quantile` with `pymc3.stats.hpd` function.
+        This function calls `sts.quantile` with `pymc.stats.hpd` function.
 
     Examples
     --------
@@ -241,7 +241,7 @@ def quap(vars=None, var_names=None, model=None, start=None):
         List of variables to optimize and set to optimum
     var_names : list, optional
         List of `str` of variables names specified by `model`
-    model : pymc3.Model (optional if in `with` context)
+    model : pymc.Model (optional if in `with` context)
     start : `dict` of parameter values, optional, default=`model.test_point`
 
     Returns
@@ -293,6 +293,7 @@ def sample_quap(quap, N=1000):
 
 def sample_to_dataframe(data):
     """Convert dict of samples to DataFrame."""
+    # FIXME remove bare except and explicitly check for data dimensions.
     try:
         df = pd.DataFrame(data)
     except:
