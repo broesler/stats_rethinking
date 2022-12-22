@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pymc as pm
 
-from matplotlib.gridspec import GridSpec
 from scipy import stats
 
 plt.style.use('seaborn-v0_8-darkgrid')

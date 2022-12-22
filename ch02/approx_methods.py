@@ -41,7 +41,7 @@ k = 6  # number of event occurrences, i.e. "heads"
 n = 9  # number of trials, i.e. "tosses"
 
 # Grid-search parameters
-prior_key = 'uniform'  # 'uniform', 'step', 'exp'
+PRIOR_KEY = 'uniform'  # 'uniform', 'step', 'exp'
 Nps = [5, 20]  # range of grid sizes to try
 
 # Compute quadratic approximation
@@ -49,7 +49,13 @@ Nps = [5, 20]  # range of grid sizes to try
 with pm.Model() as normal_approx:
     p = pm.Uniform('p', 0, 1)                   # prior distribution of p
     w = pm.Binomial('w', n=n, p=p, observed=k)  # likelihood
-    # pm.sample()                                 # initialize NUTS
+
+    # # Could use package functions to replace explicit code below:
+    # globe_qa = sts.quap()
+    # norm_a = globe_qa['p']
+    # mean_p, std_p = norm_a.mean(), norm_a.std()
+    # print(sts.precis(globe_qa))
+
     map_est = pm.find_MAP()                     # use MAP estimation for mean
     mean_p = map_est['p']                       # extract desired value
 
@@ -95,6 +101,7 @@ norm_a = stats.norm(mean_p, std_p)
 # MCMC estimation of parameter mean (Stats Rethinking R code 2.8)
 Ns = 1000  # number of samples
 
+# Manually do the sampling:
 # p_trace = np.empty(Ns)  # initialize array of samples
 # p_trace[0] = 0.5
 # for i in range(1, Ns):
@@ -122,11 +129,11 @@ Beta = stats.beta(k+1, n-k+1)  # Beta(\alpha = 1, \beta = 1) == U(0, 1)
 fig = plt.figure(1, figsize=(8, 6), clear=True)
 ax = fig.add_subplot(111)
 
-prior_func = PRIOR_D[prior_key]['prior']
+prior_func = PRIOR_D[PRIOR_KEY]['prior']
 
 # TODO remake figures 2.x in the book
 
-# Plot grid approximation posteriors
+# Plot grid approximation posteriors (see R code 2.3)
 for i, Np in enumerate(reversed(Nps)):
     # Generate the posterior samples on a grid of parameter values
     p_grid, posterior, prior = sts.grid_binom_posterior(Np, k, n,
@@ -175,7 +182,7 @@ ax.axvline(p_max, c='C4', ls='--', lw=1)
 ax.plot(p_fine, prior_func(p_fine), c=0.4*np.array([1, 1, 1]), label='prior')
 
 # Plot formatting
-title = rf"$P \sim $ {PRIOR_D[prior_key]['title']} |  trials: {n}, events: {k}"
+title = rf"$P \sim $ {PRIOR_D[PRIOR_KEY]['title']} |  trials: {n}, events: {k}"
 ax.set_title(title)
 ax.set_xlabel(r'probability of water, $p$')
 ax.set_ylabel(r'non-normalized posterior probability of $p$')

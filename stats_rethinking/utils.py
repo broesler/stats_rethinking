@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
+import warnings
 
 from scipy import stats
 from scipy.interpolate import BSpline
@@ -141,14 +142,11 @@ def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
         Vector of posterior probability values.
     """
     p_grid = np.linspace(0, 1, Np)  # vector of possible parameter values
-    if prior_func is None:
-        prior = np.ones(Np)  # default uniform prior
-    else:
-        prior = prior_func(p_grid)
+    # default uniform prior
+    prior = np.ones(Np) if prior_func is None else prior_func(p_grid)
     likelihood = stats.binom.pmf(k=k, n=n, p=p_grid)  # binomial distribution
-    posterior = likelihood * prior
-    if norm_post:
-        posterior = posterior / np.sum(posterior)
+    unstd_post = likelihood * prior                   # unstandardized posterior
+    posterior = unstd_post / np.sum(unstd_post) if norm_post else unstd_post
     return p_grid, posterior, prior
 
 
@@ -189,8 +187,10 @@ def expand_grid(**kwargs):
     return pd.DataFrame(cartesian(kwargs.values()), columns=kwargs.keys())
 
 # TODO 
+#   * pass format string "4.2f", or precision? "2" -> ".2g"
 #   * expand documentation with examples
 #   * ignore unsupported columns like 'datetime' types
+#   * remove dependence on input type. pd.DataFrame.from_dict? or kwarg?
 def precis(quap, p=0.89):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
@@ -267,10 +267,22 @@ def quap(vars=None, var_names=None, model=None, start=None):
     quap = dict()
     for v in mvars:
         mean = map_est[v.name]
-        std = (pm.find_hessian(map_est, vars=[v], model=model)**-0.5)[0,0]
+        try:
+            # FIXME need to compute *untransformed* Hessian! See ch02/quad_approx.py
+            # See: <https://github.com/pymc-devs/pymc/issues/5443>
+            # Remove transform from the variable `v`
+            model.rvs_to_transforms[v] = None
+            # Change name so that we can use `map_est['v']` value
+            v_value = model.rvs_to_values[v]
+            v_value.name = v.name
+        except KeyError:
+            warnings.warn(f"Hessian for {v.name} may be incorrect!")
+            continue
+        # Compute std of `v` in *untransformed* space
+        std = (pm.find_hessian(map_est, vars=[v], model=model)**-0.5)[0, 0]
         if np.isnan(std) or (std < 0) or np.isnan(mean).any():
-            raise ValueError(f"std('{v.name}') = {std} is invalid!"\
-                              +" Check testval of prior.")
+            raise ValueError(f"std('{v.name}') = {std} is invalid!"
+                             + " Check testval of prior.")
         quap[v.name] = stats.norm(loc=mean, scale=std)
     return quap
 
@@ -285,15 +297,14 @@ def sample_quap(quap, N=1000):
     for k, v in quap.items():
         # number of samples must be first dimension
         size = [N] + list(v.rvs().shape)
-        if len(size) == 1:
-            size += [1]  # guarantee at least column vector
+        # if len(size) == 1:
+        #     size += [1]  # guarantee at least column vector
         out[k] = v.rvs(size=size)
     return out
 
 
 def sample_to_dataframe(data):
     """Convert dict of samples to DataFrame."""
-    # FIXME remove bare except and explicitly check for data dimensions.
     try:
         df = pd.DataFrame(data)
     except:
