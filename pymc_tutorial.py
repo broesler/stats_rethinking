@@ -18,7 +18,7 @@ import pymc as pm
 
 from matplotlib import cm
 
-plt.style.use('seaborn-darkgrid')
+plt.style.use('seaborn-v0_8-darkgrid')
 rng = np.random.default_rng(123)  # initialize random number generator
 
 N = 100  # size of dataset
@@ -60,8 +60,6 @@ ax.set_ylabel('$X_2$')
 cbar = fig.colorbar(cax, orientation='horizontal', pad=0.1)
 cbar.set_label('$Y$')
 
-plt.show()
-
 # -----------------------------------------------------------------------------
 #        Create the model
 # -----------------------------------------------------------------------------
@@ -96,6 +94,8 @@ with basic_model:
 
 az.plot_trace(trace)
 pm.summary(trace).round(2)
+
+plt.show()
 
 # =============================================================================
 # =============================================================================
