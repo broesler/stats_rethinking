@@ -61,12 +61,22 @@ with pm.Model() as normal_approx:
     # p_value.tag.transform = None
     # p_value.name = p.name
 
-# Instead, recreate the model with `transform=None`
-with pm.Model() as untransformed_m:
-    p = pm.Uniform('p', 0, 1, transform=None)
-    w = pm.Binomial('w', n=n, p=p, observed=k, transform=None)
-    # The Hessian of a Gaussian == "precision" == 1 / sigma**2
+    # See: <https://github.com/pymc-devs/pymc/issues/5443>
+    # Remove transform from the variable `p`
+    normal_approx.rvs_to_transforms[p] = None
+
+    # Change name so that we can use `map_est['p']` value
+    p_value = normal_approx.rvs_to_values[p]
+    p_value.name = p.name
+
     std_p = ((1 / pm.find_hessian(map_est, vars=[p]))**0.5)[0, 0]
+
+# # Instead, recreate the model with `transform=None`
+# with pm.Model() as untransformed_m:
+#     p = pm.Uniform('p', 0, 1, transform=None)
+#     w = pm.Binomial('w', n=n, p=p, observed=k, transform=None)
+#     # The Hessian of a Gaussian == "precision" == 1 / sigma**2
+#     std_p = ((1 / pm.find_hessian(map_est, vars=[p]))**0.5)[0, 0]
 
 # Calculate percentile interval, assuming normal distribution
 prob = 0.89
