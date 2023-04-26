@@ -83,7 +83,7 @@ for i, (k, n) in enumerate(zip(ks, ns)):
     ax.grid(True)
     ax.set(title=f'trials: {n}, events: {k}',
            xlabel='probability of water, $p$',
-           ylabel='non-normalized posterior probability of $p$')
+           ylabel='posterior probability density of $p$')
 
     # Plot the error vs p
     ax21.plot(p_fine, np.abs(norm_ap - beta_p), label=f'N = {n}')
