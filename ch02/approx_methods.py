@@ -9,13 +9,11 @@
 """
 # =============================================================================
 
-import arviz as az
+# import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pymc as pm
-# import seaborn as sns
 
-# from matplotlib.gridspec import GridSpec
 from scipy import stats
 
 import stats_rethinking as sts
@@ -37,57 +35,57 @@ PRIOR_D = dict({'uniform': {'prior': lambda p: np.ones(p.shape),
 #        Define Parameters
 # -----------------------------------------------------------------------------
 # Data
-k = 6  # number of event occurrences, i.e. "heads"
-n = 9  # number of trials, i.e. "tosses"
+k = 6  # number of event occurrences, i.e. "heads", or "W" == "water" in book
+n = 9  # number of trials, i.e. "tosses", or "W + L" == "water + land" in book
 
 # Grid-search parameters
 PRIOR_KEY = 'uniform'  # 'uniform', 'step', 'exp'
 Nps = [5, 20]  # range of grid sizes to try
 
-# Compute quadratic approximation
+# Compute quadratic approximation (see R code 2.6)
 # MAP estimation of the parameter mean
 with pm.Model() as normal_approx:
     p = pm.Uniform('p', 0, 1)                   # prior distribution of p
     w = pm.Binomial('w', n=n, p=p, observed=k)  # likelihood
 
-    # # Could use package functions to replace explicit code below:
-    # globe_qa = sts.quap()
-    # norm_a = globe_qa['p']
-    # mean_p, std_p = norm_a.mean(), norm_a.std()
-    # print(sts.precis(globe_qa))
+    # Compute quadratic approximation (see R code 2.6)
+    globe_qa = sts.quap()
+    norm_a = globe_qa['p']
+    mean_p, std_p = norm_a.mean(), norm_a.std()
+    print(sts.precis(globe_qa))
 
-    map_est = pm.find_MAP()                     # use MAP estimation for mean
-    mean_p = map_est['p']                       # extract desired value
+    # OR compute using MAP estimation (inside `quap`)
+    # map_est = pm.find_MAP()                     # use MAP estimation for mean
+    # mean_p = map_est['p']                       # extract desired value
 
-    # Try code from here:
-    # <https://discourse.pymc.io/t/find-hessian-version-differences/10737/2>
-    # pymc>3 perfoms Hessian on *transformed* space, which differs from pymc3.
-    # Doesn't work?
-    # p_value = normal_approx.rvs_to_values[p]
-    # p_value.tag.transform = None
-    # p_value.name = p.name
+    # # Try code from here:
+    # # <https://discourse.pymc.io/t/find-hessian-version-differences/10737/2>
+    # # pymc>3 gets Hessian on *transformed* space, which differs from pymc3.
+    # # Doesn't work?
+    # # p_value = normal_approx.rvs_to_values[p]
+    # # p_value.tag.transform = None
+    # # p_value.name = p.name
 
     # See: <https://github.com/pymc-devs/pymc/issues/5443>
     # Remove transform from the variable `p`
-    normal_approx.rvs_to_transforms[p] = None
+    # normal_approx.rvs_to_transforms[p] = None
 
     # Change name so that we can use `map_est['p']` value
-    p_value = normal_approx.rvs_to_values[p]
-    p_value.name = p.name
+    # p_value = normal_approx.rvs_to_values[p]
+    # p_value.name = p.name
 
-    std_p = ((1 / pm.find_hessian(map_est, vars=[p]))**0.5)[0, 0]
+    # std_p = ((pm.find_hessian(map_est, vars=[p]))**-0.5)[0, 0]
 
-# # Instead, recreate the model with `transform=None`
-# with pm.Model() as untransformed_m:
-#     p = pm.Uniform('p', 0, 1, transform=None)
-#     w = pm.Binomial('w', n=n, p=p, observed=k, transform=None)
-#     # The Hessian of a Gaussian == "precision" == 1 / sigma**2
-#     std_p = ((1 / pm.find_hessian(map_est, vars=[p]))**0.5)[0, 0]
+# # # Instead, recreate the model with `transform=None`
+# # with pm.Model() as untransformed_m:
+# #     p = pm.Uniform('p', 0, 1, transform=None)
+# #     w = pm.Binomial('w', n=n, p=p, observed=k, transform=None)
+# #     # The Hessian of a Gaussian == "precision" == 1 / sigma**2
+# #     std_p = ((pm.find_hessian(map_est, vars=[p]))**-0.5)[0, 0]
 
 # Calculate percentile interval, assuming normal distribution
 prob = 0.89
-norm = stats.norm(mean_p, std_p)
-z = stats.norm.ppf([(1 - prob)/2, (1 + prob)/2])
+z = stats.norm.ppf([(1 - prob)/2, (1 + prob)/2])  # Φ^{-1} values
 ci = mean_p + std_p * z
 
 print('MAP Estimate')
@@ -96,9 +94,11 @@ print('  mean   std  5.5%  94.5%')
 print(f"p {mean_p:4.2f}  {std_p:4.2f}  {ci[0]:4.2f}   {ci[1]:4.2f}")
 
 # Normal approximation to the posterior
-norm_a = stats.norm(mean_p, std_p)
+# norm_a = stats.norm(mean_p, std_p)
 
-# MCMC estimation of parameter mean (Stats Rethinking R code 2.8)
+# ----------------------------------------------------------------------------- 
+#         MCMC estimation of parameter mean (see R code 2.8)
+# -----------------------------------------------------------------------------
 Ns = 1000  # number of samples
 
 # Manually do the sampling:
@@ -127,18 +127,16 @@ Beta = stats.beta(k+1, n-k+1)  # Beta(\alpha = 1, \beta = 1) == U(0, 1)
 # -----------------------------------------------------------------------------
 # Figure 2.7
 fig = plt.figure(1, figsize=(8, 6), clear=True)
-ax = fig.add_subplot(111)
+ax = fig.add_subplot()
 
 prior_func = PRIOR_D[PRIOR_KEY]['prior']
 
-# TODO remake figures 2.x in the book
-
 # Plot grid approximation posteriors (see R code 2.3)
-for i, Np in enumerate(reversed(Nps)):
+for i, Np in enumerate(Nps):
     # Generate the posterior samples on a grid of parameter values
     p_grid, posterior, prior = sts.grid_binom_posterior(Np, k, n,
                                                         prior_func=prior_func,
-                                                        norm_post=False)
+                                                        norm_post=True)
     p_max = p_grid[np.argmax(posterior)]
     p_max = p_max.mean() if p_max.size > 1 else p_max.item()
 
@@ -185,10 +183,12 @@ ax.plot(p_fine, prior_func(p_fine), c=0.4*np.array([1, 1, 1]), label='prior')
 title = rf"$P \sim $ {PRIOR_D[PRIOR_KEY]['title']} |  trials: {n}, events: {k}"
 ax.set_title(title)
 ax.set_xlabel(r'probability of water, $p$')
-ax.set_ylabel(r'non-normalized posterior probability of $p$')
+ax.set_ylabel(r'posterior probability of $p$')
 ax.grid(True)
 ax.legend(loc='upper left')
 plt.tight_layout()
+
+plt.ion()
 plt.show()
 
 # =============================================================================

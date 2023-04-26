@@ -35,9 +35,7 @@ gs2 = fig2.add_gridspec(nrows=1, ncols=2)
 ax21 = fig2.add_subplot(gs2[0])
 err = np.empty(Nd)
 
-for i, data in enumerate(zip(ks, ns)):
-    k, n = data[0], data[1]
-
+for i, (k, n) in enumerate(zip(ks, ns)):
     # Compute quadratic approximation
     with pm.Model() as normal_approx:
         p = pm.Uniform('p', 0, 1)                   # prior distribution of p
@@ -110,6 +108,8 @@ gs2.tight_layout(fig2)
 # Plot formatting
 gs.tight_layout(fig)
 ax.legend(loc=2)
+
+plt.ion()
 plt.show()
 
 # =============================================================================
