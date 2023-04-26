@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#==============================================================================
+# =============================================================================
 #     File: utils.py
 #  Created: 2019-06-24 21:35
 #   Author: Bernie Roesler
@@ -7,8 +7,9 @@
 """
   Description: Utility functions for Statistical Rethinking code.
 """
-#==============================================================================
+# =============================================================================
 
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -21,7 +22,7 @@ from sklearn.utils.extmath import cartesian
 
 
 def quantile(data, q=0.89, width=10, precision=8,
-                 q_func=np.quantile, verbose=False, **kwargs):
+             q_func=np.quantile, verbose=False, **kwargs):
     """Pretty-print the desired quantile values from the data.
 
     Parameters
@@ -62,7 +63,7 @@ def quantile(data, q=0.89, width=10, precision=8,
 
 
 def percentiles(data, q=50, **kwargs):
-    """Pretty-print the desired percentile values from the data.
+    r"""Pretty-print the desired percentile values from the data.
 
     .. note:: A wrapper around `quantile`, where the arguments are forced
         to take the form:
@@ -88,7 +89,7 @@ def percentiles(data, q=50, **kwargs):
     return quantiles
 
 
-def hpdi(data, alpha=None, q=None, 
+def hpdi(data, alpha=None, q=None,
          verbose=False, width=10, precision=8, **kwargs):
     """Compute highest probability density interval.
 
@@ -107,7 +108,8 @@ def hpdi(data, alpha=None, q=None,
         else:
             alpha = 1 - q
     q = 1 - alpha  # alpha takes precedence if both are given
-    quantiles = pm.stats.hpd(data, alpha, **kwargs).squeeze()
+    # quantiles = pm.stats.hpd(data, alpha, **kwargs).squeeze()
+    quantiles = az.hdi(data, alpha, **kwargs).squeeze()
     if verbose:
         fstr = f"{width}.{precision}f"
         name_str = ' '.join([f"{100*x:{width-1}g}%" for x in np.hstack((q, q))])
@@ -161,7 +163,7 @@ def density(data, adjust=1.0, **kwargs):
     adjust : float, optional, default=1.0
         Multiplicative factor for the bandwidth.
     **kwargs : optional
-        Additional arguments passed to `scipy.stats.gaussian_kde`. 
+        Additional arguments passed to `scipy.stats.gaussian_kde`.
 
     .. note:: This function overrides the `bw_method` argument. The
       stats_rethinking "dens" (R code 2.9) function calls the following
@@ -186,14 +188,27 @@ def expand_grid(**kwargs):
     """Return a DataFrame of points, where the columns are kwargs."""
     return pd.DataFrame(cartesian(kwargs.values()), columns=kwargs.keys())
 
-# TODO 
-#   * pass format string "4.2f", or precision? "2" -> ".2g"
+
+# TODO
 #   * expand documentation with examples
 #   * ignore unsupported columns like 'datetime' types
 #   * remove dependence on input type. pd.DataFrame.from_dict? or kwarg?
 def precis(quap, p=0.89):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
+
+    Parameters
+    ----------
+    quap : array-like, DataFrame, or dict
+        The model.
+    p : float in [0, 1]
+        The percentile of which to compute the interval.
+
+    Returns
+    -------
+    result : DataFrame
+        A DataFrame with a row for each variable, and columns for mean,
+        standard deviation, and low/high percentiles of the variable.
     """
     a = (1-p)/2
     pp = 100*np.array([a, 1-a])  # percentages for printing
@@ -203,9 +218,10 @@ def precis(quap, p=0.89):
         index = quap.keys()
         vals = np.empty((len(quap), 4))
         for i, v in enumerate(quap.values()):
-            vals[i,:] = [v.mean(), v.std(), v.ppf(a), v.ppf(1-a)]
+            vals[i, :] = [v.mean(), v.std(), v.ppf(a), v.ppf(1-a)]
         df = pd.DataFrame(vals, index=index,
-                          columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"])
+                          columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
+                          )
         return df
 
     # DataFrame of data points
@@ -226,7 +242,8 @@ def precis(quap, p=0.89):
                           np.nanpercentile(quap, pp[0], axis=0),
                           np.nanpercentile(quap, pp[1], axis=0)]).T
         df = pd.DataFrame(vals,
-                          columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"])
+                          columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
+                          )
         return df
     else:
         raise TypeError('quap of this type is unsupported!')
@@ -268,7 +285,7 @@ def quap(vars=None, var_names=None, model=None, start=None):
     for v in mvars:
         mean = map_est[v.name]
         try:
-            # FIXME need to compute *untransformed* Hessian! See ch02/quad_approx.py
+            # Need to compute *untransformed* Hessian! See ch02/quad_approx.py
             # See: <https://github.com/pymc-devs/pymc/issues/5443>
             # Remove transform from the variable `v`
             model.rvs_to_transforms[v] = None
@@ -315,7 +332,7 @@ def sample_to_dataframe(data):
 
             # name the columns
             if v.ndim == 1:
-                df_s.columns=[k]
+                df_s.columns = [k]
             else:
                 df_s = df_s.add_prefix(k + '__')  # enumerate matrix variables
 
@@ -389,7 +406,7 @@ def bspline_basis(x=None, t=None, k=3, padded_knots=False):
     B : ndarray, shape (x.shape, n+k+1)
         B-spline basis functions evaluated at the given points `x`. The last
         dimension is the number of knots.
-    else: 
+    else:
     b : :obj:scipy.interpolate.BSpline
         B-spline basis function object with identity matrix as weights.
     """
@@ -407,5 +424,5 @@ def bspline_basis(x=None, t=None, k=3, padded_knots=False):
         B[np.isnan(B)] = 0.0
         return B
 
-#==============================================================================
-#==============================================================================
+# =============================================================================
+# =============================================================================
