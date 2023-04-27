@@ -18,7 +18,6 @@ from scipy import stats
 
 import stats_rethinking as sts
 
-
 plt.style.use('seaborn-v0_8-darkgrid')
 np.random.seed(123)  # initialize random number generator
 
@@ -96,7 +95,7 @@ print(f"p {mean_p:4.2f}  {std_p:4.2f}  {ci[0]:4.2f}   {ci[1]:4.2f}")
 # Normal approximation to the posterior
 # norm_a = stats.norm(mean_p, std_p)
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         MCMC estimation of parameter mean (see R code 2.8)
 # -----------------------------------------------------------------------------
 Ns = 1000  # number of samples

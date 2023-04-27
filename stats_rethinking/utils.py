@@ -250,7 +250,7 @@ def precis(quap, p=0.89):
 
 
 def quap(vars=None, var_names=None, model=None, start=None):
-    """Return quadratic approximation for the MAP estimate.
+    """Compute the quadratic approximation for the MAP estimate.
 
     Parameters
     ----------
@@ -296,7 +296,8 @@ def quap(vars=None, var_names=None, model=None, start=None):
             warnings.warn(f"Hessian for {v.name} may be incorrect!")
             continue
         # Compute std of `v` in *untransformed* space
-        std = (pm.find_hessian(map_est, vars=[v], model=model)**-0.5)[0, 0]
+        # The Hessian of a Gaussian == "precision" == 1 / sigma**2
+        std = np.squeeze(pm.find_hessian(map_est, vars=[v], model=model)**-0.5)
         if np.isnan(std) or (std < 0) or np.isnan(mean).any():
             raise ValueError(f"std('{v.name}') = {std} is invalid!"
                              + " Check testval of prior.")
