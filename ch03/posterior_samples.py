@@ -30,7 +30,7 @@ given_data = np.array([1, 0, 1, 1, 1, 0, 1, 0, 1])
 p_grid, posterior, prior = sts.grid_binom_posterior(Np, k, n)
 
 # Sample the posterior distribution
-Ns = 100_000
+Ns = 10_000
 samples = np.random.choice(p_grid, p=posterior, size=Ns, replace=True)
 
 # Exact analytical posterior for comparison
@@ -68,7 +68,7 @@ ax1.set(xlabel='Sample number',
 
 # Plot distribution of samples
 ax2 = fig.add_subplot(gs[1])
-sns.distplot(samples, ax=ax2)
+sns.histplot(samples, stat='probability', kde=True, ax=ax2)
 ax2.set(xlabel='$p$',
         ylabel=f"$P(p | k={k}, n={n})$")
 
@@ -171,7 +171,7 @@ print(f"MAP estimate of posterior: {p_map:{fstr}}")
 # R code 3.15 and 3.16
 print(f"Mean:   {np.mean(skewed_samples):{fstr}}")
 print(f"Median: {np.median(skewed_samples):{fstr}}")
-print(f"Mode:   {stats.mode(skewed_samples).mode[0]:{fstr}}")
+print(f"Mode:   {stats.mode(skewed_samples, keepdims=True).mode[0]:{fstr}}")
 
 
 def loss_func(posterior, p_grid, kind='abs'):
@@ -184,8 +184,9 @@ def loss_func(posterior, p_grid, kind='abs'):
         _loss_func = LOSS_FUNCS[kind]
     except KeyError:
         raise KeyError(f'The loss function {kind} is not supported!')
-    # return np.array([_loss_func(x) for x in p_grid])
-    return _loss_func(p_grid)
+    # TODO vectorize me cap'n!
+    return np.array([_loss_func(x) for x in p_grid])
+    # return _loss_func(p_grid)
 
 
 abs_loss = loss_func(skewed_posterior, p_grid, kind='abs')
@@ -204,7 +205,7 @@ ax0.set(xlabel='$p$',
 
 ax0.axvline(np.mean(skewed_samples),         c='C0', ls='--', label='Mean')
 ax0.axvline(np.median(skewed_samples),       c='C1', ls='--', label='Median')
-ax0.axvline(stats.mode(skewed_samples).mode, c='C2', ls='--', label='Mode')
+ax0.axvline(stats.mode(skewed_samples, keepdims=True).mode, c='C2', ls='--', label='Mode')
 ax0.legend(loc='upper left')
 
 # Plot expected loss
@@ -262,7 +263,7 @@ fig = plt.figure(5, figsize=(8, 4), clear=True)
 gs = fig.add_gridspec(nrows=1, ncols=2)
 for i in range(2):
     ax = fig.add_subplot(gs[i])
-    ax.stem(counts[i], basefmt='none', use_line_collection=True)
+    ax.stem(counts[i], basefmt='none')
 
     xticks = range(n + 1)
     ax.set(xticks=xticks, xticklabels=(str(x) for x in xticks))
@@ -318,7 +319,7 @@ for i in range(2):
                               linefmt='k',
                               markerfmt='none',
                               basefmt='none',
-                              use_line_collection=True)
+                              )
     plt.setp(stemlines, lw=1)
 
     # highlight the actual data value
@@ -326,7 +327,7 @@ for i in range(2):
             linefmt='C0',
             markerfmt='none',
             basefmt='none',
-            use_line_collection=True)
+            )
 
     xticks = range(n + 1)
     ax.set(xticks=xticks, xticklabels=(str(x) for x in xticks))
@@ -334,6 +335,8 @@ for i in range(2):
 
 gs.tight_layout(fig)
 
+plt.ion()
 plt.show()
+
 # =============================================================================
 # =============================================================================
