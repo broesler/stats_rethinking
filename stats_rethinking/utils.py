@@ -89,12 +89,29 @@ def percentiles(data, q=50, **kwargs):
     return quantiles
 
 
+# TODO remove width and precision arguments and just take fstr='8.2f', e.g.
 def hpdi(data, alpha=None, q=None,
          verbose=False, width=10, precision=8, **kwargs):
     """Compute highest probability density interval.
 
     .. note::
         This function calls `sts.quantile` with `pymc.stats.hpd` function.
+
+    Parameters
+    ----------
+    data : (M, N) array_like
+        Matrix of M vectors in N dimensions
+    alpha : array_like
+    q : array_like
+    verbose : bool
+    width : int
+    precision : int
+    kwargs : dict_like
+
+    Returns
+    -------
+    quantiles : (M, N) ndarray
+        Matrix of M vectors in N dimensions
 
     Examples
     --------
@@ -107,14 +124,15 @@ def hpdi(data, alpha=None, q=None,
             alpha = 0.05
         else:
             alpha = 1 - q
+    alpha = np.asarray(alpha)
     q = 1 - alpha  # alpha takes precedence if both are given
-    # quantiles = pm.stats.hpd(data, alpha, **kwargs).squeeze()
-    quantiles = az.hdi(data, alpha, **kwargs).squeeze()
+    quantiles = np.array([az.hdi(data, x, **kwargs).squeeze() for x in alpha])
     if verbose:
-        fstr = f"{width}.{precision}f"
-        name_str = ' '.join([f"{100*x:{width-1}g}%" for x in np.hstack((q, q))])
-        value_str = ' '.join([f"{x:{fstr}}" for x in quantiles])
-        print(f"|{name_str}|\n{value_str}")
+        for i in range(len(alpha)):
+            fstr = f"{width}.{precision}f"
+            name_str = ' '.join([f"{100*x:{width-2}g}%" for x in np.hstack((q[i], q[i]))])
+            value_str = ' '.join([f"{x:{fstr}}" for x in quantiles[i]])
+            print(f"|{name_str}|\n{value_str}")
     return quantiles
 
 

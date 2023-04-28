@@ -62,7 +62,7 @@ gs = fig.add_gridspec(nrows=1, ncols=2)
 
 # Plot actual sample values
 ax1 = fig.add_subplot(gs[0])
-ax1.plot(samples, '.', markeredgewidth=0, alpha=0.1)
+ax1.plot(samples, '.', markeredgewidth=0, alpha=0.3)
 ax1.set(xlabel='Sample number',
         ylabel='$p$')
 
@@ -177,16 +177,14 @@ print(f"Mode:   {stats.mode(skewed_samples, keepdims=True).mode[0]:{fstr}}")
 def loss_func(posterior, p_grid, kind='abs'):
     """Compute the expected loss function."""
     # R code 3.17 and 3.18
-    LOSS_FUNCS = dict({'abs': lambda d: np.sum(posterior * np.abs(d - p_grid)),
-                       'quad': lambda d: np.sum(posterior * np.abs(d - p_grid)**2)
+    LOSS_FUNCS = dict({'abs': lambda d: np.sum(posterior * np.abs(d - p_grid), axis=-1),
+                       'quad': lambda d: np.sum(posterior * np.abs(d - p_grid)**2, axis=-1)
                        })
     try:
         _loss_func = LOSS_FUNCS[kind]
     except KeyError:
         raise KeyError(f'The loss function {kind} is not supported!')
-    # TODO vectorize me cap'n!
-    return np.array([_loss_func(x) for x in p_grid])
-    # return _loss_func(p_grid)
+    return _loss_func(np.c_[p_grid])
 
 
 abs_loss = loss_func(skewed_posterior, p_grid, kind='abs')
@@ -233,7 +231,7 @@ print('----------Sampling for Simulation----------')
 # R code 3.22 - 3.25
 n = 2
 p = 0.7
-binom2 = stats.binom(n=n, p=p)   # frozen distribution 
+binom2 = stats.binom(n=n, p=p)   # frozen distribution
 
 print(f"P(X = {0, 1, 2}), X ~ Bin(n={n}, p={p}):")
 print(binom2.pmf(range(n+1)))  # (R code 3.20)
@@ -252,7 +250,7 @@ n = 9
 p = 0.7
 dummy9 = stats.binom.rvs(size=N, n=n, p=p)
 
-# Generate posterior predictive distribution
+# Generate posterior predictive distribution (R code 3.26)
 w = stats.binom.rvs(size=Ns, n=n, p=samples)  # [# successes] == k_s
 
 counts = [np.bincount(dummy9), np.bincount(w) / Ns]

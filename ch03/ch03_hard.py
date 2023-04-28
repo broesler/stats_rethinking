@@ -19,7 +19,7 @@ from scipy import stats
 
 import stats_rethinking as sts
 
-plt.style.use('seaborn-darkgrid')
+plt.style.use('seaborn-v0_8-darkgrid')
 np.random.seed(56)  # initialize random number generator
 
 # Load the given data: 1 == 'boy', 0 == 'girl'
@@ -38,7 +38,7 @@ birth2 = np.array([0, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1,
     1, 0, 0, 0, 0])
 
 # Compute the posterior distribution for:
-#   P(boy | data) ∝ P(data | boy) * P(boy)  
+#   P(boy | data) ∝ P(data | boy) * P(boy)
 #
 Np = 1000                        # [-] size of parameter grid
 n = birth1.size + birth2.size    # trials
@@ -58,25 +58,27 @@ samples = np.random.choice(p_grid, p=posterior, size=Ns, replace=True)
 hpdi_qs = [0.50, 0.89, 0.97]
 hpdi = sts.hpdi(samples, hpdi_qs, width=6, precision=4, verbose=True)
 
+
 # 3H3
 def model_compare(n=0, k=0, p=0.5, ax=None):
     """Plot binomial distribution vs actual data."""
     if ax is None:
         ax = plt.gca()
 
-    binom = stats.binom(n=n, p=p).rvs(Ns)  # counts of # boys in n births 
-    mode = stats.mode(binom).mode[0]
+    binom = stats.binom(n=n, p=p).rvs(Ns)  # counts of # boys in n births
+    mode = stats.mode(binom, keepdims=True).mode[0]
 
     # Plot the distribution vs the value from the data
     counts = np.bincount(binom)
     idx = np.where(counts > 0)[0]  # only want where condition is True
     counts = counts[idx]
-    ax.stem(idx, counts, 
-            basefmt='none', use_line_collection=True, markerfmt='none',
+    ax.stem(idx, counts,
+            basefmt='none', markerfmt='none',
             label=f"$B({n}, {p:.2f})$ | Theory: $k = {mode}$")
     ax.axvline(k, c='C1', ls='--', label=f"Data: $k = {k}$")
     ax.set(xlabel='Number of Boys', ylabel='Frequency')
     ax.legend()
+
 
 # Simulate 10,000 replicas of 200 births
 p = p_max  # use MAP estimate from the data
@@ -100,6 +102,7 @@ model_compare(n=ng, k=kg, p=p, ax=ax)
 
 # Model far underpredicts boys following girls!
 
+plt.ion()
 plt.show()
 # =============================================================================
 # =============================================================================
