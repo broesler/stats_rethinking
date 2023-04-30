@@ -11,10 +11,8 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-# import pandas as pd
-# import seaborn as sns
+import pandas as pd
 
-# from matplotlib.gridspec import GridSpec
 from scipy import stats
 
 import stats_rethinking as sts
@@ -25,17 +23,10 @@ np.random.seed(56)  # initialize random number generator
 # Load the given data: 1 == 'boy', 0 == 'girl'
 #   birth1[i]: first  child for family i
 #   birth2[i]: second child for family i
-birth1 = np.array([1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0,
-    1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1,
-    0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0,
-    0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1,
-    0, 1, 1, 1, 1])
-
-birth2 = np.array([0, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1,
-    0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1,
-    1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1,
-    1, 0, 0, 0, 0])
+df = pd.read_csv('./birth_data.csv')
+birth1 = df['birth1']
+birth2 = df['birth2']
+del df
 
 # Compute the posterior distribution for:
 #   P(boy | data) ∝ P(data | boy) * P(boy)
@@ -49,7 +40,7 @@ p_grid, posterior, prior = sts.grid_binom_posterior(Np, k, n)
 
 # 3H1: MAP estimation
 p_max = p_grid[np.argmax(posterior)]
-print(f"P(boy | data) = {p_max:10.8f}")
+print(f"P(boy | data) = {p_max:10.8f}")  # == 0.55455455
 
 # 3H2: sample from the posterior
 Ns = 10_000
@@ -57,6 +48,13 @@ samples = np.random.choice(p_grid, p=posterior, size=Ns, replace=True)
 
 hpdi_qs = [0.50, 0.89, 0.97]
 hpdi = sts.hpdi(samples, hpdi_qs, width=6, precision=4, verbose=True)
+# Output:
+# |  50%   50%|
+# 0.5255 0.5726
+# |  11%   11%|
+# 0.4985 0.6086
+# |   3%    3%|
+# 0.4785 0.6276
 
 
 # 3H3
