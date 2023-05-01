@@ -122,12 +122,13 @@ def hpdi(data, alpha=None, q=None,
     """
     if alpha is None:
         if q is None:
-            alpha = 0.05
+            alpha = 0.11
         else:
             alpha = 1 - q
     alpha = np.atleast_1d(alpha)
     q = 1 - alpha  # alpha takes precedence if both are given
-    quantiles = np.array([az.hdi(data, x, **kwargs).squeeze() for x in alpha])
+    quantiles = np.array([az.hdi(np.asarray(data), hdi_prob=x, **kwargs).squeeze()
+                          for x in q])
     if verbose:
         for i in range(len(alpha)):
             fstr = f"{width}.{precision}f"
