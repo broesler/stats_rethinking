@@ -328,7 +328,7 @@ def quap(vars=None, var_names=None, model=None, start=None):
             v_value = model.rvs_to_values[v]
             v_value.name = v.name
         except KeyError:
-            warnings.warn(f"Hessian for {v.name} may be incorrect!")
+            warnings.warn(f"Hessian for '{v.name}' may be incorrect!")
             continue
         # Compute std of `v` in *untransformed* space
         # The Hessian of a Gaussian == "precision" == 1 / sigma**2
