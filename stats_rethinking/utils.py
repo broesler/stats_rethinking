@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
+import seaborn as sns
 import warnings
 
 from scipy import stats
@@ -321,6 +322,18 @@ def quap(vars=None, var_names=None, model=None, start=None):
                              + " Check testval of prior.")
         quap[v.name] = stats.norm(loc=mean, scale=std)
     return quap
+
+
+def norm_fit(data, ax=None):
+    """Plot a histogram and a normal curve fit to the data."""
+    if ax is None:
+        ax = plt.gca()
+    sns.histplot(data, stat='density', alpha=0.4, ax=ax)
+    norm = stats.norm(data.mean(), data.std())
+    x = np.linspace(norm.ppf(0.001), norm.ppf(0.999), 1000)
+    y = norm.pdf(x)
+    ax.plot(x, y, 'C0')
+    return ax
 
 
 # TODO

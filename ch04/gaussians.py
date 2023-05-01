@@ -11,23 +11,11 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-# import pandas as pd
 import seaborn as sns
 
 from scipy import stats
 
-# import stats_rethinking as sts
-
-
-def norm_fit(data, ax=None):
-    """Plot a histogram and a normal curve fit to the data."""
-    if ax is None:
-        ax = plt.gca()
-    sns.histplot(data, stat='density', alpha=0.4, ax=ax)
-    norm = stats.norm(data.mean(), data.std())
-    x = np.linspace(norm.ppf(0.001), norm.ppf(0.999), 1000)
-    y = norm.pdf(x)
-    ax.plot(x, y, 'C0')
+import stats_rethinking as sts
 
 
 plt.style.use('seaborn-v0_8-darkgrid')
@@ -76,7 +64,7 @@ for i, n in enumerate([4, 8, 16]):
 
     # Generate the kernel density estimate, and normal fit
     data = players[:, n]  # select the relevant column
-    norm_fit(data, ax=ax)
+    sts.norm_fit(data, ax=ax)
     ax.set_title(f"{n} steps", fontsize=12)
     ax.set(xlabel='position',
            ylabel='Density')
@@ -99,7 +87,7 @@ gs = fig.add_gridspec(nrows=1, ncols=3)
 
 for i, p in enumerate([0.01, 0.1, 0.5]):
     ax = fig.add_subplot(gs[i])
-    norm_fit(prod_dist(p), ax=ax)
+    sts.norm_fit(prod_dist(p), ax=ax)
     ax.set(title=f"$p = {p}$",
            xlabel='value',
            ylabel='density')
@@ -108,7 +96,7 @@ for i, p in enumerate([0.01, 0.1, 0.5]):
 p = 0.5
 fig = plt.figure(3, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
-norm_fit(np.log(prod_dist(p)), ax=ax)
+sts.norm_fit(np.log(prod_dist(p)), ax=ax)
 ax.set(title=f"$p = {p}$",
        xlabel='value',
        ylabel='log(density)')
