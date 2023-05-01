@@ -71,8 +71,7 @@ for i, n in enumerate([4, 8, 16]):
     # Add secondary subplot
     ax = fig.add_subplot(gs[1, i])
     if i > 0:
-        # FIXME .join is deprecated
-        ax.get_shared_x_axes().join(ax, axes[i-1])
+        ax.sharex(axes[i-1])
     axes.append(ax)
 
     # Generate the kernel density estimate, and normal fit
