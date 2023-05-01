@@ -26,7 +26,7 @@ from scipy import stats
 
 import stats_rethinking as sts
 
-# Set to True for "Overthinking" R code 4.24
+# Set to True for "Overthinking" (R code 4.23 - 4.25)
 SAMPLE_SIZE_FLAG = False  # if True, take only 20 data points
 
 plt.style.use('seaborn-v0_8-darkgrid')
@@ -49,7 +49,7 @@ adults = df.loc[df['age'] >= 18]
 # Inspect the data
 col = 'height'
 
-fig = plt.figure(1, clear=True)
+fig = plt.figure(1, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 sts.norm_fit(adults[col], ax=ax)
 ax.set(title='Raw data',
@@ -149,22 +149,22 @@ print_percentiles(WADLOW_HEIGHT)
 # -----------------------------------------------------------------------------
 #         4.3.3 Grid approximation of the posterior distribution (R code 4.16)
 # -----------------------------------------------------------------------------
-# P(h | data) ∝ P(data | h) * P(h) 
+# P(h | data) ∝ P(data | h) * P(h)
 #             = P(data | h) * P(h | mu, sigma) * P(mu) * P(sigma)
 #             = P(data | h) * N(N(m, s), U(0, v))
-Np = 200  # number of parameters values to test
-# return a DataFrame of the input data
-if SAMPLE_SIZE_FLAG:
-    mu_stop, sigma_stop = 170, 20
-else:
-    mu_stop, sigma_stop = 160, 9
 
-mu_list = np.linspace(140, mu_stop, Np)
-sigma_list = np.linspace(4, sigma_stop, Np)
+Np = 200  # number of parameters values to test
+
+if SAMPLE_SIZE_FLAG:
+    mu_start, mu_stop = 140, 170
+    sigma_start, sigma_stop = 4, 20
+else:
+    mu_start, mu_stop = 140, 160
+    sigma_start, sigma_stop = 4, 9
+
+mu_list = np.linspace(mu_start, mu_stop, Np)
+sigma_list = np.linspace(sigma_start, sigma_stop, Np)
 post = sts.expand_grid(mu=mu_list, sigma=sigma_list)
-# NOTE compare to:
-# xx, yy = np.meshgrid(mu_list, sigma_list)
-# expand_grid returns the transpose of meshgrid.
 
 
 def log_likelihood(data):
@@ -172,7 +172,7 @@ def log_likelihood(data):
     parameters:
 
     ..math::
-        f(x) = P(data | x),
+        f(x) = \log(P(data | x)),
 
     where :math:`x = (\mu, \sigma)`, for example.
     """
@@ -180,6 +180,8 @@ def log_likelihood(data):
 
 
 post['log_likelihood'] = post.apply(log_likelihood(adults[col]), axis=1)
+
+# Equivalent code:
 # post['log_likelihood'] = post.apply(lambda x: stats.norm.logpdf(adults[col],
 #                                     loc=x['mu'], scale=x['sigma']).sum(),
 #                                     axis=1)
@@ -198,7 +200,7 @@ post['posterior'] = np.exp(post['prod'] - post['prod'].max())
 xx, yy, zz = (np.reshape(np.asarray(m), (Np, Np))
               for m in [post['mu'], post['sigma'], post['posterior']])
 
-fig = plt.figure(4, clear=True)
+fig = plt.figure(4, figsize=(14, 4), clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 cs = ax.contour(xx, yy, zz, cmap='viridis')
 ax.clabel(cs, inline=1, fontsize=10)
@@ -208,13 +210,13 @@ ax.set(xlabel=r'$\mu$',
        aspect='equal')
 
 # -----------------------------------------------------------------------------
-#         Sample from the posterior
+#         Sample from the posterior (R code 4.19 - 22)
 # -----------------------------------------------------------------------------
 Ns = 10_000
 samples = post.sample(n=Ns, replace=True, weights='posterior')
 
 # Plot the samples
-fig = plt.figure(5, clear=True)
+fig = plt.figure(5, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 ax.scatter(samples['mu'], samples['sigma'], alpha=0.4)
 ax.set(title='Posterior Samples',
@@ -224,13 +226,19 @@ ax.set(title='Posterior Samples',
 
 # Plot the marginal posterior densities of mu and sigma
 fig = plt.figure(6, clear=True, constrained_layout=True)
+fig.set_size_inches((12, 5), forward=True)
 fig.suptitle('Marginal Posterior Density')
 gs = fig.add_gridspec(nrows=1, ncols=2)
 for i, c in enumerate(['mu', 'sigma']):
     ax = fig.add_subplot(gs[i])
-    sts.norm_fit(samples[c], ax=ax)
+    sts.norm_fit(samples[c], ax=ax, hist_kws=dict(bins=50))
     ax.set(xlabel=f"$\\{c}$",
            ylabel='density')
+
+# NOTE az.hdi cannot accept a DataFrame/Series, accepts the values only.
+print('---------- HPDI of Posterior Samples ----------')
+sts.hpdi(samples['mu'].values, verbose=True)
+sts.hpdi(samples['sigma'].values, verbose=True)
 
 plt.ion()
 plt.show()

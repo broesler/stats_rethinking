@@ -68,7 +68,7 @@ def percentiles(data, q=50, **kwargs):
 
     .. note:: A wrapper around `quantile`, where the arguments are forced
         to take the form:
-    ..math:: a = \frac{1 - q}{2}
+    .. math:: a = \frac{1 - q}{2}
         and called with :math:\mathtt{quantile(data, (a, 1-a))}
 
     Parameters
@@ -83,7 +83,7 @@ def percentiles(data, q=50, **kwargs):
 
     See Also
     --------
-    `quantile`
+    quantile
     """
     a = (1 - (q/100)) / 2
     quantiles = quantile(data, (a, 1-a), **kwargs)
@@ -125,7 +125,7 @@ def hpdi(data, alpha=None, q=None,
             alpha = 0.05
         else:
             alpha = 1 - q
-    alpha = np.asarray(alpha)
+    alpha = np.atleast_1d(alpha)
     q = 1 - alpha  # alpha takes precedence if both are given
     quantiles = np.array([az.hdi(data, x, **kwargs).squeeze() for x in alpha])
     if verbose:
@@ -203,13 +203,23 @@ def density(data, adjust=1.0, **kwargs):
 
 
 # TODO expand documentation with examples
-# NOTE compare to:
-# xx, yy = np.meshgrid(mu_list, sigma_list)
-# expand_grid returns the *transpose* of meshgrid.
-# See: <https://numpy.org/doc/stable/reference/generated/numpy.meshgrid.html#numpy.meshgrid>
-# 
 def expand_grid(**kwargs):
-    """Return a DataFrame of points, where the columns are kwargs."""
+    """Return a DataFrame of points, where the columns are kwargs.
+
+    Notes
+    -----
+    Compare to `numpy.meshgrid`[0]:
+        xx, yy = np.meshgrid(mu_list, sigma_list)  # == (..., index='xy')
+    `expand_grid` returns the *transpose* of meshgrid's default xy orientation.
+    `expand_grid` matches:
+        xx, yy = np.meshgrid(mu_list, sigma_list, index='ij')
+
+    .. [0]: <https://numpy.org/doc/stable/reference/generated/numpy.meshgrid.html#numpy.meshgrid>
+    
+    See Also
+    --------
+    numpy.meshgrid
+    """
     return pd.DataFrame(cartesian(kwargs.values()), columns=kwargs.keys())
 
 
