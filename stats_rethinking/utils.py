@@ -203,6 +203,11 @@ def density(data, adjust=1.0, **kwargs):
 
 
 # TODO expand documentation with examples
+# NOTE compare to:
+# xx, yy = np.meshgrid(mu_list, sigma_list)
+# expand_grid returns the *transpose* of meshgrid.
+# See: <https://numpy.org/doc/stable/reference/generated/numpy.meshgrid.html#numpy.meshgrid>
+# 
 def expand_grid(**kwargs):
     """Return a DataFrame of points, where the columns are kwargs."""
     return pd.DataFrame(cartesian(kwargs.values()), columns=kwargs.keys())
@@ -324,11 +329,13 @@ def quap(vars=None, var_names=None, model=None, start=None):
     return quap
 
 
-def norm_fit(data, ax=None):
+def norm_fit(data, hist_kws=None, ax=None):
     """Plot a histogram and a normal curve fit to the data."""
     if ax is None:
         ax = plt.gca()
-    sns.histplot(data, stat='density', alpha=0.4, ax=ax)
+    if hist_kws is None:
+        hist_kws = dict()
+    sns.histplot(data, stat='density', alpha=0.4, ax=ax, **hist_kws)
     norm = stats.norm(data.mean(), data.std())
     x = np.linspace(norm.ppf(0.001), norm.ppf(0.999), 1000)
     y = norm.pdf(x)

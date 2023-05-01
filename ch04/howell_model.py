@@ -4,7 +4,7 @@
 #  Created: 2019-07-16 21:56
 #   Author: Bernie Roesler
 #
-"""
+r"""
 Description: Section 4.3.
 
 Build a model of the distribution of human heights:
@@ -67,6 +67,22 @@ sig_c = 50  # [cm] maximum value for height-stdev prior
 mu = stats.norm(mu_c, mus_c)
 sigma = stats.uniform(0, sig_c)  # sigma must be positive!
 
+# Sample from the joint prior distribution (R code 4.14)
+N = 10_000
+sample_mu = mu.rvs(N)
+sample_sigma = sigma.rvs(N)
+prior_h = stats.norm(sample_mu, sample_sigma)
+sample_h = prior_h.rvs(N)
+
+# Compare to a wider distribution (R code 4.15)
+sample_mu_wide = stats.norm(178, 100).rvs(N)
+sample_h_wide = stats.norm(sample_mu_wide, sample_sigma).rvs(N)
+
+WADLOW_HEIGHT = 272  # tallest man ever
+
+# -----------------------------------------------------------------------------
+#        Prior-Predictive Simulation
+# -----------------------------------------------------------------------------
 # Combine data for plotting convenience
 priors = dict(mu=dict(dist=mu, lims=(100, 250),
                       title=rf"$\mu \sim \mathcal{{N}}({mu_c}, {mus_c})$"),
@@ -87,22 +103,6 @@ for i, (name, d) in enumerate(priors.items()):
            ylabel='density')
     ax.ticklabel_format(axis='y', style='sci', scilimits=(-1, 1))
 
-# Sample from the joint prior distribution (R code 4.14)
-N = 10_000
-sample_mu = mu.rvs(N)
-sample_sigma = sigma.rvs(N)
-prior_h = stats.norm(sample_mu, sample_sigma)
-sample_h = prior_h.rvs(N)
-
-# Compare to a wider distribution (R code 4.15)
-sample_mu_wide = stats.norm(178, 100).rvs(N)
-sample_h_wide = stats.norm(sample_mu_wide, sample_sigma).rvs(N)
-
-WADLOW_HEIGHT = 272  # tallest man ever
-
-# -----------------------------------------------------------------------------
-#        Prior-Predictive Simulation
-# -----------------------------------------------------------------------------
 # Plot with the desired joint prior
 ax = fig.add_subplot(gs[1, 0])
 sts.norm_fit(sample_h, ax=ax)
@@ -138,15 +138,20 @@ def print_percentiles(test_height):
 
 print_percentiles(0.0)
 print_percentiles(WADLOW_HEIGHT)
+# Output:
+# ---------- Percentile of 0.0 ----------
+#          N(mu, sigma): 0.00
+# N(N(178, 100), sigma): 4.31
+# ---------- Percentile of 272.0 ----------
+#          N(mu, sigma): 99.25
+# N(N(178, 100), sigma): 81.49
 
 # -----------------------------------------------------------------------------
-#        Grid approximation of the posterior
+#         4.3.3 Grid approximation of the posterior distribution (R code 4.16)
 # -----------------------------------------------------------------------------
-# P(h | data) ∝ P(data | h) * P(h) = P(data | h) * N(N(m, s), U(0, v))
-
-# -----------------------------------------------------------------------------
-#         Grid approximation of the posterior distribution
-# -----------------------------------------------------------------------------
+# P(h | data) ∝ P(data | h) * P(h) 
+#             = P(data | h) * P(h | mu, sigma) * P(mu) * P(sigma)
+#             = P(data | h) * N(N(m, s), U(0, v))
 Np = 200  # number of parameters values to test
 # return a DataFrame of the input data
 if SAMPLE_SIZE_FLAG:
@@ -154,8 +159,12 @@ if SAMPLE_SIZE_FLAG:
 else:
     mu_stop, sigma_stop = 160, 9
 
-post = sts.expand_grid(mu=np.linspace(140, mu_stop, Np),
-                       sigma=np.linspace(4, sigma_stop, Np))
+mu_list = np.linspace(140, mu_stop, Np)
+sigma_list = np.linspace(4, sigma_stop, Np)
+post = sts.expand_grid(mu=mu_list, sigma=sigma_list)
+# NOTE compare to:
+# xx, yy = np.meshgrid(mu_list, sigma_list)
+# expand_grid returns the transpose of meshgrid.
 
 
 def log_likelihood(data):
@@ -185,17 +194,18 @@ post['prod'] = (post['log_likelihood']
 # Un-logify to get the actual posterior probability values
 post['posterior'] = np.exp(post['prod'] - post['prod'].max())
 
-# Contour plot of the results
+# Contour plot of the results (R code 4.17)
 xx, yy, zz = (np.reshape(np.asarray(m), (Np, Np))
               for m in [post['mu'], post['sigma'], post['posterior']])
 
 fig = plt.figure(4, clear=True)
 ax = fig.add_subplot()
-cs = plt.contour(xx, yy, zz, cmap='viridis')
+cs = ax.contour(xx, yy, zz, cmap='viridis')
 ax.clabel(cs, inline=1, fontsize=10)
-ax.set_title('Contours of Posterior')
-ax.set_xlabel(r'$\mu$')
-ax.set_ylabel(r'$\sigma$')
+ax.set_title('Contours of Posterior Probability')
+ax.set(xlabel=r'$\mu$',
+       ylabel=r'$\sigma$',
+       aspect='equal')
 
 # -----------------------------------------------------------------------------
 #         Sample from the posterior
@@ -206,19 +216,20 @@ samples = post.sample(n=Ns, replace=True, weights='posterior')
 # Plot the samples
 fig = plt.figure(5, clear=True)
 ax = fig.add_subplot()
-ax.scatter(samples['mu'], samples['sigma'], alpha=0.05)
+ax.scatter(samples['mu'], samples['sigma'], alpha=0.4)
 ax.set(title='Posterior Samples',
        xlabel=r'$\mu$',
-       ylabel=r'$\sigma$')
+       ylabel=r'$\sigma$',
+       aspect='equal')
 
 # Plot the marginal posterior densities of mu and sigma
 fig = plt.figure(6, clear=True, constrained_layout=True)
+fig.suptitle('Marginal Posterior Density')
 gs = fig.add_gridspec(nrows=1, ncols=2)
 for i, c in enumerate(['mu', 'sigma']):
     ax = fig.add_subplot(gs[i])
     sts.norm_fit(samples[c], ax=ax)
-    ax.set(title='Marginal Posterior Density',
-           xlabel=f"$\\{c}$",
+    ax.set(xlabel=f"$\\{c}$",
            ylabel='density')
 
 plt.ion()
