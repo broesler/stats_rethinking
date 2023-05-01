@@ -227,6 +227,7 @@ def expand_grid(**kwargs):
 #   * expand documentation with examples
 #   * ignore unsupported columns like 'datetime' types
 #   * remove dependence on input type. pd.DataFrame.from_dict? or kwarg?
+#   * built-in verbose flag to print output with desired precision
 def precis(quap, p=0.89):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
