@@ -229,16 +229,21 @@ fig = plt.figure(6, clear=True, constrained_layout=True)
 fig.set_size_inches((12, 5), forward=True)
 fig.suptitle('Marginal Posterior Density')
 gs = fig.add_gridspec(nrows=1, ncols=2)
-for i, c in enumerate(['mu', 'sigma']):
-    ax = fig.add_subplot(gs[i])
-    sts.norm_fit(samples[c], ax=ax, hist_kws=dict(bins=50))
-    ax.set(xlabel=f"$\\{c}$",
-           ylabel='density')
+
+ax0 = fig.add_subplot(gs[0])
+sts.norm_fit(samples['mu'], ax=ax0, hist_kws=dict(bins=45))
+ax0.set(xlabel=f"$\mu$",
+        ylabel='density')
+
+ax1 = fig.add_subplot(gs[1], sharey=ax0)
+sts.norm_fit(samples['sigma'], ax=ax1, hist_kws=dict(bins=45))
+ax1.set(xlabel=f"$\sigma$", ylabel=None)
+ax1.tick_params(axis='y', labelleft=False)
 
 # NOTE az.hdi cannot accept a DataFrame/Series, accepts the values only.
 print('---------- HPDI of Posterior Samples ----------')
-sts.hpdi(samples['mu'].values, verbose=True)
-sts.hpdi(samples['sigma'].values, verbose=True)
+sts.hpdi(samples['mu'], verbose=True)
+sts.hpdi(samples['sigma'], verbose=True)
 
 plt.ion()
 plt.show()
