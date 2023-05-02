@@ -17,7 +17,7 @@ import pymc as pm
 import seaborn as sns
 import warnings
 
-from scipy import stats
+from scipy import stats, linalg
 from scipy.interpolate import BSpline
 from sklearn.utils.extmath import cartesian
 
@@ -216,7 +216,7 @@ def expand_grid(**kwargs):
         xx, yy = np.meshgrid(mu_list, sigma_list, index='ij')
 
     .. [0]: <https://numpy.org/doc/stable/reference/generated/numpy.meshgrid.html#numpy.meshgrid>
-    
+
     See Also
     --------
     numpy.meshgrid
@@ -285,6 +285,10 @@ def precis(quap, p=0.89):
         raise TypeError('quap of this type is unsupported!')
 
 
+# TODO currently returns marginal posterior distributions of each variable, but
+# could return joint distribution stats.multivariate_normal(mean, cov), where:
+#   mean = np.r_[[map_est[v.name] for v in mvars]]
+#   cov = linalg.inv(H)
 def quap(vars=None, var_names=None, model=None, start=None):
     """Compute the quadratic approximation for the MAP estimate.
 
@@ -303,7 +307,8 @@ def quap(vars=None, var_names=None, model=None, start=None):
         Dictionary of `scipy.stats.rv_frozen` distributions corresponding to
         the MAP estimates of `vars`.
     """
-    model = pm.modelcontext(model)
+    if model is None:
+        model = pm.modelcontext(model)
 
     pm.init_nuts(model=model)
     map_est = pm.find_MAP(start=start, model=model)
@@ -317,12 +322,10 @@ def quap(vars=None, var_names=None, model=None, start=None):
     else:
         mvars = vars
 
-    quap = dict()
+    # Need to compute *untransformed* Hessian! See ch02/quad_approx.py
+    # See: <https://github.com/pymc-devs/pymc/issues/5443>
     for v in mvars:
-        mean = map_est[v.name]
         try:
-            # Need to compute *untransformed* Hessian! See ch02/quad_approx.py
-            # See: <https://github.com/pymc-devs/pymc/issues/5443>
             # Remove transform from the variable `v`
             model.rvs_to_transforms[v] = None
             # Change name so that we can use `map_est['v']` value
@@ -331,28 +334,28 @@ def quap(vars=None, var_names=None, model=None, start=None):
         except KeyError:
             warnings.warn(f"Hessian for '{v.name}' may be incorrect!")
             continue
-        # Compute std of `v` in *untransformed* space
-        # The Hessian of a Gaussian == "precision" == 1 / sigma**2
-        std = np.squeeze(pm.find_hessian(map_est, vars=[v], model=model)**-0.5)
+
+    # FIXME adding this as a dictionary item breaks precis (and probably other
+    # functions) since the multivariate normal has different attributes from
+    # the marginal distributions. Make `QuadApprox` class instead.
+    # Entire posterior distribution estimate
+    quap = dict()
+    means = np.r_[[map_est[v.name] for v in mvars]]
+    # The Hessian of a Gaussian == "precision" == 1 / sigma**2
+    H = pm.find_hessian(map_est, vars=mvars, model=model)
+    cov = linalg.inv(H)
+    quap['posterior'] = stats.multivariate_normal(mean=means, cov=cov)
+
+    # Create marginal distribution estimates
+    stds = np.sqrt(np.diag(cov))
+
+    for v, mean, std in zip(mvars, means, stds):
         if np.isnan(std) or (std < 0) or np.isnan(mean).any():
             raise ValueError(f"std('{v.name}') = {std} is invalid!"
                              + " Check testval of prior.")
         quap[v.name] = stats.norm(loc=mean, scale=std)
+
     return quap
-
-
-def norm_fit(data, hist_kws=None, ax=None):
-    """Plot a histogram and a normal curve fit to the data."""
-    if ax is None:
-        ax = plt.gca()
-    if hist_kws is None:
-        hist_kws = dict()
-    sns.histplot(data, stat='density', alpha=0.4, ax=ax, **hist_kws)
-    norm = stats.norm(data.mean(), data.std())
-    x = np.linspace(norm.ppf(0.001), norm.ppf(0.999), 1000)
-    y = norm.pdf(x)
-    ax.plot(x, y, 'C0')
-    return ax
 
 
 # TODO
@@ -369,6 +372,20 @@ def sample_quap(quap, N=1000):
         #     size += [1]  # guarantee at least column vector
         out[k] = v.rvs(size=size)
     return out
+
+
+def norm_fit(data, hist_kws=None, ax=None):
+    """Plot a histogram and a normal curve fit to the data."""
+    if ax is None:
+        ax = plt.gca()
+    if hist_kws is None:
+        hist_kws = dict()
+    sns.histplot(data, stat='density', alpha=0.4, ax=ax, **hist_kws)
+    norm = stats.norm(data.mean(), data.std())
+    x = np.linspace(norm.ppf(0.001), norm.ppf(0.999), 1000)
+    y = norm.pdf(x)
+    ax.plot(x, y, 'C0')
+    return ax
 
 
 def sample_to_dataframe(data):

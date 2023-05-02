@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-  Description: Make a linear model of the Howell data.
+  Description: Make a linear model of the Howell data. Section 4.4.
 """
 # =============================================================================
 
@@ -15,7 +15,7 @@ import pandas as pd
 import pymc as pm
 import seaborn as sns
 
-from scipy import stats
+from scipy import stats, linalg
 
 import stats_rethinking as sts
 
@@ -81,6 +81,7 @@ with first_model:
 
 for i in range(N):
     ax0.plot(weight, prior_samp.prior['mu'][0, i], 'k', alpha=0.2)
+
 ax0.set(title=r"""A poor prior
 $\beta \sim \mathcal{N}(0, 10)$""",
         ylabel='height [cm]')
@@ -88,9 +89,10 @@ $\beta \sim \mathcal{N}(0, 10)$""",
 
 # Restrict beta to positive values in the new model (R code 4.41 - 4.42)
 # TODO use pm.Data() for x and observed, then use pm.set_data() later.
-def linear_model(ind, obs):
-    """Define a PyMC model with the given data."""
-    with pm.Model() as model:
+def build_linear_model(ind, obs):
+    """Define a linear model with the given data."""
+    model = pm.Model()
+    with model:
         ind = pm.ConstantData('ind', ind)
         obs = pm.ConstantData('obs', obs)
         alpha = pm.Normal('alpha', mu=178, sigma=20)  # parameter priors
@@ -102,7 +104,7 @@ def linear_model(ind, obs):
 
 
 # Create the linear model ("m4.3" in R code 4.42)
-the_model = linear_model(ind=weight, obs=adults['height'])
+the_model = build_linear_model(ind=weight, obs=adults['height'])
 with the_model:
     prior_samp = pm.sample_prior_predictive(N)
 
@@ -115,124 +117,124 @@ $\log \beta \sim \mathcal{N}(0, 1)$""")
 ax1.tick_params(axis='y', labelleft=False)
 
 # -----------------------------------------------------------------------------
-#        Compute the Posterior Distribution (R code 4.42)
+#        Approximate the Posterior Distribution
 # -----------------------------------------------------------------------------
 with the_model:
-    # Sample the posterior distributions of parameters
-    # FIXME
-    #   * sts.quap() fails on finding Hessian of 'mu', since it is deterministic
-    #   * or, quap['mu'] below fails because sts.quap skips 'mu'.
-    # quap = sts.quap()
+    # Compute the quadratic approximation to the posterior (R code 4.42)
     quap = sts.quap(var_names=['alpha', 'beta', 'sigma'])
-    # quap = sts.quap(vars=[alpha, beta, sigma])
 
-post = sts.sample_quap(quap, Ns)
-tr = sts.sample_to_dataframe(post).filter(regex='^(?!mu)')
-print(sts.precis(tr))
-print('cov:')
-print(tr.cov())
+# FIXME passing variable objects does not work unless in context of model
+# definition
+# quap = sts.quap(vars=[alpha, beta, sigma], model=the_model)
 
-# -----------------------------------------------------------------------------
-#        Posterior Prediction
-# -----------------------------------------------------------------------------
-# Figure 4.6
-# ax_d.plot(weight, quap['mu'].mean(), 'k', label='MAP Prediction')
-ax_d.legend()
+# Sample the posterior
+# post = sts.sample_quap(quap, Ns)
+# tr = sts.sample_to_dataframe(post).filter(regex='^(?!mu)')
+# print(sts.precis(tr))
+# print('cov:')
+# print(tr.cov())
 
-# Plot the posterior prediction vs N data points
-N_test = [10, 50, 150, adults.shape[0]]
-N_lines = 20
+# # -----------------------------------------------------------------------------
+# #        Posterior Prediction
+# # -----------------------------------------------------------------------------
+# # Figure 4.6
+# # ax_d.plot(weight, quap['mu'].mean(), 'k', label='MAP Prediction')
+# ax_d.legend()
 
-# Figure 4.7
-fig = plt.figure(3, clear=True, constrained_layout=True)
-gs = fig.add_gridspec(nrows=2, ncols=2)
+# # Plot the posterior prediction vs N data points
+# N_test = [10, 50, 150, adults.shape[0]]
+# N_lines = 20
 
-for i, N in enumerate(N_test):
-    df_n = adults[:N]
-    w = df_n['weight']
+# # Figure 4.7
+# fig = plt.figure(3, clear=True, constrained_layout=True)
+# gs = fig.add_gridspec(nrows=2, ncols=2)
 
-    the_model = linear_model(w, obs=df_n['height'])
-    with the_model:
-        # Compute the MAP estimate of the parameters
-        quap = sts.quap(var_names=['alpha', 'beta', 'sigma'])
+# for i, N in enumerate(N_test):
+#     df_n = adults[:N]
+#     w = df_n['weight']
 
-        # Using MCMC sampling: (much slower, but no need to rewrite model)
-        # trace = pm.sample(Ns)
-        # post_pc = pm.sample_posterior_predictive(trace, sample=N_lines,
-        #                                          var_names=['mu'])
+#     the_model = build_linear_model(w, obs=df_n['height'])
+#     with the_model:
+#         # Compute the MAP estimate of the parameters
+#         quap = sts.quap(var_names=['alpha', 'beta', 'sigma'])
 
-    # Sample the posterior distributions of parameters
-    post = sts.sample_quap(quap, N_lines)  # only sample 20 lines
-    # Manually calculate the deterministic variable from the MAP estimates
-    post['mu'] = post['alpha'] + post['beta'] * (w[np.newaxis, :] - wbar)  # (20, N)
+#         # Using MCMC sampling: (much slower, but no need to rewrite model)
+#         # trace = pm.sample(Ns)
+#         # post_pc = pm.sample_posterior_predictive(trace, sample=N_lines,
+#         #                                          var_names=['mu'])
 
-    # Plot the raw data
-    ax = fig.add_subplot(gs[i])
-    ax.get_shared_x_axes().join(ax)
-    ax.get_shared_y_axes().join(ax)
+#     # Sample the posterior distributions of parameters
+#     post = sts.sample_quap(quap, N_lines)  # only sample 20 lines
+#     # Manually calculate the deterministic variable from the MAP estimates
+#     post['mu'] = post['alpha'] + post['beta'] * (w[np.newaxis, :] - wbar)  # (20, N)
 
-    # Plot the raw data
-    ax.scatter(df_n['weight'], df_n['height'], alpha=0.5, label='Raw Data')
+#     # Plot the raw data
+#     ax = fig.add_subplot(gs[i])
+#     ax.get_shared_x_axes().join(ax)
+#     ax.get_shared_y_axes().join(ax)
 
-    # Plot N_lines approximations
-    for j in range(N_lines):
-        ax.plot(w, post['mu'][j], 'k-', lw=1, alpha=0.3)
+#     # Plot the raw data
+#     ax.scatter(df_n['weight'], df_n['height'], alpha=0.5, label='Raw Data')
 
-    ax.set(title=f"N = {N}",
-           xlabel='weight [kg]',
-           ylabel='height [cm]')
+#     # Plot N_lines approximations
+#     for j in range(N_lines):
+#         ax.plot(w, post['mu'][j], 'k-', lw=1, alpha=0.3)
 
-# -----------------------------------------------------------------------------
-#        Plot regression intervals
-# -----------------------------------------------------------------------------
-# Get larger number of samples for regression interval calcs
-post = sts.sample_quap(quap, Ns)
+#     ax.set(title=f"N = {N}",
+#            xlabel='weight [kg]',
+#            ylabel='height [cm]')
 
-# Calculate mu for a single weight input
-mu_at_50 = post['alpha'] + post['beta'] * (50 - wbar)
+# # -----------------------------------------------------------------------------
+# #        Plot regression intervals
+# # -----------------------------------------------------------------------------
+# # Get larger number of samples for regression interval calcs
+# post = sts.sample_quap(quap, Ns)
 
-# Figure 4.8 (R code 4.50 -- 4.51)
-fig = plt.figure(4, clear=True, constrained_layout=True)
-ax = sns.distplot(mu_at_50)
-ax.set(xlabel=r'$\mu | w = 50$ [kg]',
-       ylabel='density')
+# # Calculate mu for a single weight input
+# mu_at_50 = post['alpha'] + post['beta'] * (50 - wbar)
 
-print('mu @ w = 50 [kg]:')
-sts.hpdi(mu_at_50, q=0.89, verbose=True)
+# # Figure 4.8 (R code 4.50 -- 4.51)
+# fig = plt.figure(4, clear=True, constrained_layout=True)
+# ax = sns.distplot(mu_at_50)
+# ax.set(xlabel=r'$\mu | w = 50$ [kg]',
+#        ylabel='density')
 
-# Manually write code for:
-#   mu = sts.link(linear_model, Ns)
-# Generate samples, compute model output for even-interval input
-x = np.arange(25, 71)
-mu_samp = post['alpha'] + post['beta'] * (x[np.newaxis, :] - wbar)
+# print('mu @ w = 50 [kg]:')
+# sts.hpdi(mu_at_50, q=0.89, verbose=True)
 
-# Plot the credible interval for the mean of the height (not including sigma)
-q = 0.89
-mu_mean = mu_samp.mean(axis=0)  # (Nd,) average mu values for each data point
-mu_hpdi = sts.hpdi(mu_samp, q=q)
+# # Manually write code for:
+# #   mu = sts.link(build_linear_model, Ns)
+# # Generate samples, compute model output for even-interval input
+# x = np.arange(25, 71)
+# mu_samp = post['alpha'] + post['beta'] * (x[np.newaxis, :] - wbar)
 
-# Figure 4.10
-fig = plt.figure(5, clear=True, constrained_layout=True)
-ax = fig.add_subplot()
-ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
-ax.plot(x, mu_mean, 'k', label='MAP Estimate')
-ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
-                facecolor='k', alpha=0.3, interpolate=True,
-                label=rf"{100*q:g}% Credible Interval of $\mu$")
-ax.set(xlabel='weight [kg]',
-       ylabel='height [cm]')
-ax.legend()
+# # Plot the credible interval for the mean of the height (not including sigma)
+# q = 0.89
+# mu_mean = mu_samp.mean(axis=0)  # (Nd,) average mu values for each data point
+# mu_hpdi = sts.hpdi(mu_samp, q=q)
 
-# Calculate the prediction interval, including sigma
-# Manually write code for:
-#   h_samp = sts.sim(linear_model, Ns)
-h_samp = stats.norm(mu_samp, post['sigma']).rvs()
-h_hpdi = sts.hpdi(h_samp, q=q)
+# # Figure 4.10
+# fig = plt.figure(5, clear=True, constrained_layout=True)
+# ax = fig.add_subplot()
+# ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
+# ax.plot(x, mu_mean, 'k', label='MAP Estimate')
+# ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
+#                 facecolor='k', alpha=0.3, interpolate=True,
+#                 label=rf"{100*q:g}% Credible Interval of $\mu$")
+# ax.set(xlabel='weight [kg]',
+#        ylabel='height [cm]')
+# ax.legend()
 
-ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
-                facecolor='k', alpha=0.2, interpolate=True,
-                label=f"{100*q:g}% Credible Interval of Height")
-ax.legend()
+# # Calculate the prediction interval, including sigma
+# # Manually write code for:
+# #   h_samp = sts.sim(build_linear_model, Ns)
+# h_samp = stats.norm(mu_samp, post['sigma']).rvs()
+# h_hpdi = sts.hpdi(h_samp, q=q)
 
-# =============================================================================
-# =============================================================================
+# ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
+#                 facecolor='k', alpha=0.2, interpolate=True,
+#                 label=f"{100*q:g}% Credible Interval of Height")
+# ax.legend()
+
+# # =============================================================================
+# # =============================================================================

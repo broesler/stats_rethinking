@@ -115,7 +115,7 @@ Ns = 1000  # number of samples
 #     p_trace[i] = p_new if t < q1/q0 else p_trace[i-1]
 
 with normal_approx:
-    p_samp = pm.sample(Ns)
+    p_samp = pm.sample(Ns, cores=1)
     p_trace = p_samp.posterior['p']  # extract relevant values
 
 # Analytical Posterior
