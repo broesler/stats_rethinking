@@ -166,25 +166,10 @@ mu_list = np.linspace(mu_start, mu_stop, Np)
 sigma_list = np.linspace(sigma_start, sigma_stop, Np)
 post = sts.expand_grid(mu=mu_list, sigma=sigma_list)
 
-
-def log_likelihood(data):
-    r"""Compute the joint (log) probability of the data given each set of
-    parameters:
-
-    ..math::
-        f(x) = \log(P(data | x)),
-
-    where :math:`x = (\mu, \sigma)`, for example.
-    """
-    return lambda x: stats.norm(x['mu'], x['sigma']).logpdf(data).sum()
-
-
-post['log_likelihood'] = post.apply(log_likelihood(adults[col]), axis=1)
-
-# Equivalent code:
-# post['log_likelihood'] = post.apply(lambda x: stats.norm.logpdf(adults[col],
-#                                     loc=x['mu'], scale=x['sigma']).sum(),
-#                                     axis=1)
+# Compute the joint (log) probability of the data given each set of parameters
+post['log_likelihood'] = post.apply(lambda x: stats.norm.logpdf(adults[col],
+                                    loc=x['mu'], scale=x['sigma']).sum(),
+                                    axis=1)
 
 # Bayes' rule numerator:
 #   P(p | data) ∝ P(data | p)*P(p),
