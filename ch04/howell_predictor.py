@@ -120,22 +120,20 @@ ax1.tick_params(axis='y', labelleft=False)
 # -----------------------------------------------------------------------------
 with the_model:
     # Compute the quadratic approximation to the posterior (R code 4.42)
-    # quap = sts.quap()
-    quap = sts.quap(var_names=['alpha', 'beta', 'sigma'])
+    quap = sts.quap()
 
 # Sample the posterior
-# post = sts.sample_quap(quap, Ns)
-# tr = sts.sample_to_dataframe(post).filter(regex='^(?!mu)')
-# print(sts.precis(tr))
-# print('cov:')
-# print(tr.cov())
+post = quap.sample(Ns)
+sts.precis(post)
+print('covariance:')
+print(post.cov())
 
-# # -----------------------------------------------------------------------------
-# #        Posterior Prediction
-# # -----------------------------------------------------------------------------
-# # Figure 4.6
-# # ax_d.plot(weight, quap['mu'].mean(), 'k', label='MAP Prediction')
-# ax_d.legend()
+# -----------------------------------------------------------------------------
+#        Posterior Prediction
+# -----------------------------------------------------------------------------
+# Figure 4.6
+ax_d.plot(weight, quap.map_est['mu'], 'k', label='MAP Prediction')
+ax_d.legend()
 
 # # Plot the posterior prediction vs N data points
 # N_test = [10, 50, 150, adults.shape[0]]

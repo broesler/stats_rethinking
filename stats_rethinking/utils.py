@@ -305,16 +305,21 @@ class Quap():
         Covariance matrix.
     data : (M, N) array_like
         Matrix of the data used to compute the likelihood.
+    map_est : dict
+        Maximum *a posteriori* estimates of any Deterministic or Potential
+        variables.
     model : :obj:`pymc.Model`
         The pymc model object used to define the posterior.
     start : dict 
         Initial parameter values for the MAP optimization. Defaults to
         `model.initial_point`.
     """
-    def __init__(self, coef=None, cov=None, data=None, model=None, start=None):
+    def __init__(self, coef=None, cov=None, data=None, map_est=None,
+                 model=None, start=None):
         self.coef = coef
         self.cov = cov
         self.data = data
+        self.map_est = map_est
         self.model = model
         self.start = start
 
@@ -395,12 +400,16 @@ def quap(vars=None, var_names=None, model=None, start=None):
 
     # Build output structure
     quap = Quap()
-    names = [v.name for v in mvars]
-    quap.coef = pd.Series({x: float(map_est[x]) for x in names})
+    vnames = [v.name for v in model.value_vars]
+    dnames = list(set([v.name for v in model.unobserved_RVs]) - set(vnames))
+
+    # Coefficients are just the value variables, not all unobserved RVs
+    quap.coef = pd.Series({x: float(map_est[x]) for x in vnames})
     # The Hessian of a Gaussian == "precision" == 1 / sigma**2
-    H = pm.find_hessian(map_est, vars=mvars, model=model)
-    quap.cov = pd.DataFrame(linalg.inv(H), index=names, columns=names)
-    quap.std = pd.Series(np.sqrt(np.diag(quap.cov)), index=names)
+    H = pm.find_hessian(map_est, model=model)
+    quap.cov = pd.DataFrame(linalg.inv(H), index=vnames, columns=vnames)
+    quap.std = pd.Series(np.sqrt(np.diag(quap.cov)), index=vnames)
+    quap.map_est = {k: map_est[k] for k in dnames}
     quap.model = model
     quap.start = model.initial_point if start is None else start
     return quap
