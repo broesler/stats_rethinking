@@ -141,7 +141,7 @@ def post_mu(w, alpha, beta):
     """Compute linear model of 'mu'."""
     res = (np.asarray(alpha)
            + np.asarray(beta) * (np.atleast_1d(w)[:, np.newaxis] - wbar_n))
-    return np.squeeze(res)
+    return np.squeeze(res.T)
 
 
 # Figure 4.7
@@ -173,7 +173,7 @@ for i, N in enumerate(N_test):
 
     # Plot N_lines approximations
     for j in range(N_lines):
-        ax.plot(w, post_mu_calc[:, j], 'k-', lw=1, alpha=0.3)
+        ax.plot(w, post_mu_calc[j], 'k-', lw=1, alpha=0.3)
 
     ax.plot(w, quap.map_est['mu'], 'C3-', label='MAP Estimate')
 
@@ -209,8 +209,8 @@ mu_samp = post_mu(x, post['alpha'], post['beta'])
 
 # Plot the credible interval for the mean of the height (not including sigma)
 # NOTE hdi takes 1st dimension, so transpose to get correct output
-mu_mean = mu_samp.mean(axis=1)      # (Nd,) average values for each data point
-mu_hpdi = sts.hpdi(mu_samp.T, q=q)  # (Nd, 2)
+mu_mean = mu_samp.mean(axis=0)    # (Nd,) average values for each data point
+mu_hpdi = sts.hpdi(mu_samp, q=q)  # (Nd, 2)
 
 # Figure 4.10
 fig = plt.figure(5, clear=True, constrained_layout=True)
@@ -227,8 +227,8 @@ ax.legend()
 # Calculate the prediction interval, including sigma
 # Manually write code for:
 #   h_samp = sts.sim(define_linear_model, Ns)
-h_samp = stats.norm(mu_samp, post['sigma']).rvs()
-h_hpdi = sts.hpdi(h_samp.T, q=q)
+h_samp = stats.norm(mu_samp, post['sigma'].values[:, None]).rvs()  # (Nd, Ns)
+h_hpdi = sts.hpdi(h_samp, q=q)  # (Nd, 2)
 
 ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
                 facecolor='k', alpha=0.2, interpolate=True,
