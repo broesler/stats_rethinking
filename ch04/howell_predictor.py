@@ -91,8 +91,7 @@ $\beta \sim \mathcal{N}(0, 10)$""",
 # TODO use pm.Data() for x and observed, then use pm.set_data() later.
 def build_linear_model(ind, obs):
     """Define a linear model with the given data."""
-    model = pm.Model()
-    with model:
+    with pm.Model() as model:
         ind = pm.ConstantData('ind', ind)
         obs = pm.ConstantData('obs', obs)
         alpha = pm.Normal('alpha', mu=178, sigma=20)  # parameter priors
@@ -121,11 +120,8 @@ ax1.tick_params(axis='y', labelleft=False)
 # -----------------------------------------------------------------------------
 with the_model:
     # Compute the quadratic approximation to the posterior (R code 4.42)
+    # quap = sts.quap()
     quap = sts.quap(var_names=['alpha', 'beta', 'sigma'])
-
-# FIXME passing variable objects does not work unless in context of model
-# definition
-# quap = sts.quap(vars=[alpha, beta, sigma], model=the_model)
 
 # Sample the posterior
 # post = sts.sample_quap(quap, Ns)

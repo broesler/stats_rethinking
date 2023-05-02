@@ -49,9 +49,9 @@ with pm.Model() as normal_approx:
 
     # Compute quadratic approximation (see R code 2.6)
     globe_qa = sts.quap()
-    norm_a = globe_qa['p']
-    mean_p, std_p = norm_a.mean(), norm_a.std()
-    print(sts.precis(globe_qa))
+    mean_p, std_p = globe_qa.coef['p'], globe_qa.std['p']
+    norm_a = stats.norm(mean_p, std_p)
+    sts.precis(globe_qa)
 
     # OR compute using MAP estimation (inside `quap`)
     # map_est = pm.find_MAP()                     # use MAP estimation for mean
@@ -125,7 +125,7 @@ Beta = stats.beta(k+1, n-k+1)  # Beta(\alpha = 1, \beta = 1) == U(0, 1)
 #        Plot Results
 # -----------------------------------------------------------------------------
 # Figure 2.7
-fig = plt.figure(1, figsize=(8, 6), clear=True)
+fig = plt.figure(1, figsize=(8, 6), clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 
 prior_func = PRIOR_D[PRIOR_KEY]['prior']
@@ -185,7 +185,6 @@ ax.set_xlabel(r'probability of water, $p$')
 ax.set_ylabel(r'posterior probability of $p$')
 ax.grid(True)
 ax.legend(loc='upper left')
-plt.tight_layout()
 
 plt.ion()
 plt.show()

@@ -37,9 +37,11 @@ col = 'height'
 # Specify the priors for each parameter:
 mu_c = 178   # [cm] chosen mean for the height-mean prior
 # TODO code both of these into a function.
-# mus_c = 20  # [cm] chosen std for the height-mean prior
-mus_c = 0.1  # [cm] (R code 4.31) test with narrow prior for the mean
+mus_c = 20  # [cm] ("m4.1" R code 4.28) chosen std for the height-mean prior
+# mus_c = 0.1  # [cm] ("m4.2" R code 4.31) test with narrow prior for the mean
 sig_c = 50   # [cm] chosen maximum value for height-stdev prior
+
+print(f"{mus_c = }:")
 
 Ns = 10_000  # number of samples
 
@@ -59,7 +61,7 @@ with pm.Model() as normal_approx:
     # normal approximation to the posterior
     quap = sts.quap([mu, sigma], start=start)
 
-print(sts.precis(quap))  # (R code 4.29)
+sts.precis(quap)  # (R code 4.29)
 # # Output:
 # With mus_c = 20:
 #                mean       std        5.5%       94.5%
@@ -72,21 +74,33 @@ print(sts.precis(quap))  # (R code 4.29)
 
 # Sample from the multivariate posterior (R code 4.34)
 #   (other option: use pm.sample() -> trace_to_dataframe())
-post = sts.sample_to_dataframe(sts.sample_quap(quap, Ns))
+post = quap.sample(Ns)
 
 print('covariance:')
 print(post.cov())
+# With mus_c = 20:
+# covariance:
+             # mu     sigma
+# mu     0.168657 -0.001608
+# sigma -0.001608  0.085674
+# With mus_c = 0.1:
 # covariance:
 #              mu     sigma
-# mu     0.169549 -0.000837
-# sigma -0.000837  0.085236
+# mu     0.010169  0.010876
+# sigma  0.010876  0.857316
 
 print('correlation coeff:')
 print(post.corr())
+# With mus_c = 20:
 # correlation coeff:
-#              mu     sigma
+             # mu     sigma
 # mu     1.000000 -0.006959
 # sigma -0.006959  1.000000
+# With mus_c = 0.1:
+# correlation coeff:
+#              mu     sigma
+# mu     1.000000  0.116487
+# sigma  0.116487  1.000000
 
 # =============================================================================
 # =============================================================================

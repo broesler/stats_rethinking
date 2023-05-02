@@ -228,8 +228,11 @@ def expand_grid(**kwargs):
 #   * expand documentation with examples
 #   * ignore unsupported columns like 'datetime' types
 #   * remove dependence on input type. pd.DataFrame.from_dict? or kwarg?
+#       R version uses a LOT of "setMethod" calls to allow function to work
+#       with many different datatypes.
+#       See: <https://github.com/rmcelreath/rethinking/blob/master/R/precis.r>
 #   * built-in verbose flag to print output with desired precision
-def precis(quap, p=0.89):
+def precis(obj, p=0.89, digits=4, verbose=True):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
 
@@ -239,6 +242,10 @@ def precis(quap, p=0.89):
         The model.
     p : float in [0, 1]
         The percentile of which to compute the interval.
+    digits : int
+        Number of digits in the printed output if `verbose=True`.
+    verbose : bool
+        If True, print the output.
 
     Returns
     -------
@@ -246,49 +253,97 @@ def precis(quap, p=0.89):
         A DataFrame with a row for each variable, and columns for mean,
         standard deviation, and low/high percentiles of the variable.
     """
+    if not isinstance(obj, (Quap, pd.DataFrame, np.ndarray)):
+        raise TypeError(f"quap of type '{type(quap)}' is unsupported!")
+
     a = (1-p)/2
     pp = 100*np.array([a, 1-a])  # percentages for printing
 
-    # dictionary of `rv_frozen` distributions
-    if isinstance(quap, dict):
-        index = quap.keys()
-        vals = np.empty((len(quap), 4))
-        for i, v in enumerate(quap.values()):
-            vals[i, :] = [v.mean(), v.std(), v.ppf(a), v.ppf(1-a)]
-        df = pd.DataFrame(vals, index=index,
-                          columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
-                          )
-        return df
+    if isinstance(obj, Quap):
+        # Compute density intervals
+        z = stats.norm.ppf(1 - a)
+        lo = obj.coef - z * obj.std
+        hi = obj.coef + z * obj.std
+        df = pd.concat([obj.coef, obj.std, lo, hi], axis=1)
+        df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
 
     # DataFrame of data points
-    if isinstance(quap, pd.DataFrame):
-        index = quap.keys()
+    if isinstance(obj, pd.DataFrame):
         df = pd.DataFrame()
-        df['mean'] = quap.mean()
-        df['std'] = quap.std()
+        df['mean'] = obj.mean()
+        df['std'] = obj.std()
         for i in range(2):
-            df[f"{pp[i]:g}%"] = quap.apply(lambda x: np.nanpercentile(x, pp[i]))
-        return df
+            df[f"{pp[i]:g}%"] = obj.apply(lambda x: np.nanpercentile(x, pp[i]))
 
     # Numpy array of data points
-    if isinstance(quap, np.ndarray):
+    if isinstance(obj, np.ndarray):
         # Columns are data, ignore index
-        vals = np.vstack([np.nanmean(quap, axis=0),
-                          np.nanstd(quap, axis=0),
-                          np.nanpercentile(quap, pp[0], axis=0),
-                          np.nanpercentile(quap, pp[1], axis=0)]).T
+        vals = np.vstack([np.nanmean(obj, axis=0),
+                          np.nanstd(obj, axis=0),
+                          np.nanpercentile(obj, pp[0], axis=0),
+                          np.nanpercentile(obj, pp[1], axis=0)]).T
         df = pd.DataFrame(vals,
                           columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
                           )
-        return df
-    else:
-        raise TypeError('quap of this type is unsupported!')
+
+    if verbose:
+        with pd.option_context('display.float_format',
+                               f"{{:.{digits}f}}".format):
+            print(df)
+
+    return df
 
 
-# TODO currently returns marginal posterior distributions of each variable, but
-# could return joint distribution stats.multivariate_normal(mean, cov), where:
-#   mean = np.r_[[map_est[v.name] for v in mvars]]
-#   cov = linalg.inv(H)
+class Quap():
+    """The quadratic (*i.e.* Gaussian) approximation of the posterior.
+
+    Attributes
+    ----------
+    coef : dict
+        Dictionary of maximum *a posteriori* (MAP) coefficient values.
+    cov : (M, M) DataFrame
+        Covariance matrix.
+    data : (M, N) array_like
+        Matrix of the data used to compute the likelihood.
+    model : :obj:`pymc.Model`
+        The pymc model object used to define the posterior.
+    start : dict 
+        Initial parameter values for the MAP optimization. Defaults to
+        `model.initial_point`.
+    """
+    def __init__(self, coef=None, cov=None, data=None, model=None, start=None):
+        self.coef = coef
+        self.cov = cov
+        self.data = data
+        self.model = model
+        self.start = start
+
+    def __str__(self):
+        # TODO
+        #   * compute log-likelihood?
+        with pd.option_context('display.float_format', '{:.4f}'.format):
+            # remove "dtype: object" line from the Series repr
+            meanstr = repr(self.coef).rsplit('\n', 1)[0]
+
+        out = f"""Quadratic Approximate Posterior Distribution
+
+Formula:
+{self.model.str_repr()}
+
+Posterior Means:
+{meanstr}
+"""
+        return out
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__}: {self.__str__()}>"
+
+    def sample(self, N):
+        """Sample the posterior approximation."""
+        posterior = stats.multivariate_normal(mean=self.coef, cov=self.cov)
+        return pd.DataFrame(posterior.rvs(N), columns=self.coef.index)
+
+
 def quap(vars=None, var_names=None, model=None, start=None):
     """Compute the quadratic approximation for the MAP estimate.
 
@@ -299,7 +354,7 @@ def quap(vars=None, var_names=None, model=None, start=None):
     var_names : list, optional
         List of `str` of variables names specified by `model`
     model : pymc.Model (optional if in `with` context)
-    start : `dict` of parameter values, optional, default=`model.test_point`
+    start : `dict` of parameter values, optional, default=`model.initial_point`
 
     Returns
     -------
@@ -308,19 +363,22 @@ def quap(vars=None, var_names=None, model=None, start=None):
         the MAP estimates of `vars`.
     """
     if model is None:
-        model = pm.modelcontext(model)
-
-    pm.init_nuts(model=model)
-    map_est = pm.find_MAP(start=start, model=model)
+        model = pm.modelcontext(None)
 
     if vars is None:
         if var_names is None:
             # filter out internally used variables
-            mvars = [x for x in model.unobserved_RVs if not x.name.endswith('__')]
+            mvars = [x for x in model.unobserved_RVs 
+                     if not x.name.endswith('__')]
         else:
             mvars = [model[x] for x in var_names]
     else:
+        if var_names is not None:
+            warnings.warn("`var_names` and `vars` set, ignoring `var_names`.")
         mvars = vars
+
+    # pm.init_nuts(model=model)  # necessary??
+    map_est = pm.find_MAP(start=start, vars=mvars, model=model)
 
     # Need to compute *untransformed* Hessian! See ch02/quad_approx.py
     # See: <https://github.com/pymc-devs/pymc/issues/5443>
@@ -335,43 +393,22 @@ def quap(vars=None, var_names=None, model=None, start=None):
             warnings.warn(f"Hessian for '{v.name}' may be incorrect!")
             continue
 
-    # FIXME adding this as a dictionary item breaks precis (and probably other
-    # functions) since the multivariate normal has different attributes from
-    # the marginal distributions. Make `QuadApprox` class instead.
-    # Entire posterior distribution estimate
-    quap = dict()
-    means = np.r_[[map_est[v.name] for v in mvars]]
+    # Build output structure
+    quap = Quap()
+    names = [v.name for v in mvars]
+    quap.coef = pd.Series({x: float(map_est[x]) for x in names})
     # The Hessian of a Gaussian == "precision" == 1 / sigma**2
     H = pm.find_hessian(map_est, vars=mvars, model=model)
-    cov = linalg.inv(H)
-    quap['posterior'] = stats.multivariate_normal(mean=means, cov=cov)
-
-    # Create marginal distribution estimates
-    stds = np.sqrt(np.diag(cov))
-
-    for v, mean, std in zip(mvars, means, stds):
-        if np.isnan(std) or (std < 0) or np.isnan(mean).any():
-            raise ValueError(f"std('{v.name}') = {std} is invalid!"
-                             + " Check testval of prior.")
-        quap[v.name] = stats.norm(loc=mean, scale=std)
-
+    quap.cov = pd.DataFrame(linalg.inv(H), index=names, columns=names)
+    quap.std = pd.Series(np.sqrt(np.diag(quap.cov)), index=names)
+    quap.model = model
+    quap.start = model.initial_point if start is None else start
     return quap
 
 
-# TODO
-#   * make NormApprox class that contains the dictionary + method to get sizes
-#     so we don't have to use `v.rvs().shape`
 def sample_quap(quap, N=1000):
-    """Sample each distribution in the `quap` dict.
-    Return a dict like pm.sample_prior_predictive."""
-    out = dict()
-    for k, v in quap.items():
-        # number of samples must be first dimension
-        size = [N] + list(v.rvs().shape)
-        # if len(size) == 1:
-        #     size += [1]  # guarantee at least column vector
-        out[k] = v.rvs(size=size)
-    return out
+    """Return a DataFrame with samples of the posterior in `quap`."""
+    return quap.sample(N)
 
 
 def norm_fit(data, hist_kws=None, ax=None):
