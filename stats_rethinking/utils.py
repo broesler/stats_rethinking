@@ -91,6 +91,7 @@ def percentiles(data, q=50, **kwargs):
 
 
 # TODO remove width and precision arguments and just take fstr='8.2f', e.g.
+# * add axis=1 argument
 def hpdi(data, alpha=None, q=None,
          verbose=False, width=10, precision=8, **kwargs):
     """Compute highest probability density interval.
@@ -129,6 +130,9 @@ def hpdi(data, alpha=None, q=None,
     q = 1 - alpha  # alpha takes precedence if both are given
     quantiles = np.array([az.hdi(np.asarray(data), hdi_prob=x, **kwargs).squeeze()
                           for x in q])
+    # need at least 2 dimensions for printing
+    if quantiles.ndim >= 3:
+        quantiles = quantiles.squeeze()
     if verbose:
         for i in range(len(alpha)):
             fstr = f"{width}.{precision}f"
@@ -343,7 +347,7 @@ Posterior Means:
     def __repr__(self):
         return f"<{self.__class__.__name__}: {self.__str__()}>"
 
-    def sample(self, N):
+    def sample(self, N=10_000):
         """Sample the posterior approximation."""
         posterior = stats.multivariate_normal(mean=self.coef, cov=self.cov)
         return pd.DataFrame(posterior.rvs(N), columns=self.coef.index)
@@ -395,7 +399,7 @@ def quap(vars=None, var_names=None, model=None, start=None):
             v_value = model.rvs_to_values[v]
             v_value.name = v.name
         except KeyError:
-            warnings.warn(f"Hessian for '{v.name}' may be incorrect!")
+            # warnings.warn(f"Hessian for '{v.name}' may be incorrect!")
             continue
 
     # Build output structure
