@@ -315,7 +315,7 @@ class Quap():
         variables.
     model : :obj:`pymc.Model`
         The pymc model object used to define the posterior.
-    start : dict 
+    start : dict
         Initial parameter values for the MAP optimization. Defaults to
         `model.initial_point`.
     """
@@ -378,7 +378,7 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
     if vars is None:
         if var_names is None:
             # filter out internally used variables
-            mvars, var_names = zip(*[(x, x.name) for x in model.unobserved_RVs 
+            mvars, var_names = zip(*[(x, x.name) for x in model.unobserved_RVs
                                      if not x.name.endswith('__')])
         else:
             mvars = [model[x] for x in var_names]
@@ -408,11 +408,6 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
     quap = Quap()
 
     # Filter variables for output
-    # NOTE works for individually-defined variables, like b1, b2, b3, but not
-    # for bn = [b1, b2, b3]. Desired output:
-    # alpha b1 bn0__ bn1__ bn2__ ...
-    # shapes = model.eval_rv_shapes()  # {'a': (1,), 'b': (2,), etc}
-
     basic_vars = set(model.basic_RVs) - set(model.observed_RVs)
     basics = {x.name: x for x in basic_vars}
     deter_vars = set(model.unobserved_RVs) - set(model.basic_RVs)
@@ -433,7 +428,8 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
                 cvals.append(float(x))
                 hnames.append(v)
             elif x.size > 1:
-                cnames.extend([f"{v}{k}__" for k in range(len(x))])
+                fmt = '02d' if x.size > 10 else 'd'
+                cnames.extend([f"{v}{k:{fmt}}__" for k in range(len(x))])
                 cvals.extend(x)
                 hnames.append(v)
 
