@@ -123,11 +123,11 @@ Beta_skewed = stats.beta(k+1, n-k+1)  # n = k = 3
 
 print('----------Beta(3, 3) sample----------')
 # R code 3.12 and 3.13
-percentile = 50  # [percentile] confidence interval
+percentile = 0.50  # [percentile] confidence interval
 print('Middle 50% PI:')
 perc_50 = sts.percentiles(skewed_samples, q=percentile, verbose=True)
 print('HPDI 50%:')
-hpdi_50 = sts.hpdi(skewed_samples, q=percentile/100, verbose=True)
+hpdi_50 = sts.hpdi(skewed_samples, q=percentile, verbose=True)
 
 # Figure 3.3
 fig = plt.figure(3, figsize=(8, 4), clear=True)

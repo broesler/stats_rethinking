@@ -63,7 +63,7 @@ def quantile(data, q=0.89, width=10, precision=8,
     return quantiles
 
 
-def percentiles(data, q=50, **kwargs):
+def percentiles(data, q=0.89, **kwargs):
     r"""Pretty-print the desired percentile values from the data.
 
     .. note:: A wrapper around `quantile`, where the arguments are forced
@@ -77,7 +77,7 @@ def percentiles(data, q=50, **kwargs):
         Matrix of M vectors in N dimensions.
     q : array_like of float
         Percentile or sequence of percentiles to compute, which must be between
-        0 and 100, inclusive.
+        0 and 1, inclusive.
     **kwargs
         See `quantile` for additional options.
 
@@ -85,15 +85,15 @@ def percentiles(data, q=50, **kwargs):
     --------
     quantile
     """
-    a = (1 - (q/100)) / 2
+    a = (1 - (q)) / 2
     quantiles = quantile(data, (a, 1-a), **kwargs)
     return quantiles
 
 
 # TODO remove width and precision arguments and just take fstr='8.2f', e.g.
 # * add axis=1 argument
-def hpdi(data, alpha=None, q=None,
-         verbose=False, width=10, precision=8, **kwargs):
+# * allow multiple qs, but print them "nested" like on an x-axis.
+def hpdi(data, q=0.89, verbose=False, width=6, precision=4, **kwargs):
     """Compute highest probability density interval.
 
     .. note::
@@ -103,7 +103,6 @@ def hpdi(data, alpha=None, q=None,
     ----------
     data : (M, N) array_like
         Matrix of M vectors in N dimensions
-    alpha : array_like
     q : array_like
     verbose : bool
     width : int
@@ -114,31 +113,18 @@ def hpdi(data, alpha=None, q=None,
     -------
     quantiles : (M, N) ndarray
         Matrix of M vectors in N dimensions
-
-    Examples
-    --------
-    >>> arr = np.random.random((100, 1))
-    >>> (sts.hpdi(arr, q=0.89) ==  sts.hpdi(arr, alpha=1-0.89)).all()
-    True
     """
-    if alpha is None:
-        if q is None:
-            alpha = 0.11
-        else:
-            alpha = 1 - q
-    alpha = np.atleast_1d(alpha)
-    q = 1 - alpha  # alpha takes precedence if both are given
+    q = np.atleast_1d(q)
     quantiles = np.array([az.hdi(np.asarray(data), hdi_prob=x, **kwargs).squeeze()
-                          for x in q])
+                          for x in q]).squeeze()
     # need at least 2 dimensions for printing
-    if quantiles.ndim >= 3:
-        quantiles = quantiles.squeeze()
+    # if quantiles.ndim >= 3:
+    #     quantiles = quantiles.squeeze()
     if verbose:
-        for i in range(len(alpha)):
-            fstr = f"{width}.{precision}f"
-            name_str = ' '.join([f"{100*x:{width-2}g}%" for x in np.hstack((q[i], q[i]))])
-            value_str = ' '.join([f"{x:{fstr}}" for x in quantiles[i]])
-            print(f"|{name_str}|\n{value_str}")
+        fstr = f"{width}.{precision}f"
+        name_str = ' '.join([f"{100*x:{width-2}g}%" for x in np.r_[q, q]])
+        value_str = ' '.join([f"{x:{fstr}}" for x in quantiles])
+        print(f"|{name_str}|\n{value_str}")
     return quantiles
 
 

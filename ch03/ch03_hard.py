@@ -47,7 +47,8 @@ Ns = 10_000
 samples = np.random.choice(p_grid, p=posterior, size=Ns, replace=True)
 
 hpdi_qs = [0.50, 0.89, 0.97]
-hpdi = sts.hpdi(samples, hpdi_qs, width=6, precision=4, verbose=True)
+for q in hpdi_qs:
+    sts.hpdi(samples, q, width=6, precision=4, verbose=True)
 # Output:
 # |  50%   50%|
 # 0.5255 0.5726
