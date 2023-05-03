@@ -298,6 +298,7 @@ def precis(obj, p=0.89, digits=4, verbose=True):
     return df
 
 
+# TODO `pairs` method to plot pair-wise covariance
 class Quap():
     """The quadratic (*i.e.* Gaussian) approximation of the posterior.
 
@@ -353,7 +354,7 @@ Posterior Means:
         return pd.DataFrame(posterior.rvs(N), columns=self.coef.index)
 
 
-def quap(vars=None, var_names=None, model=None, start=None):
+def quap(vars=None, var_names=None, model=None, data=None, start=None):
     """Compute the quadratic approximation for the MAP estimate.
 
     Parameters
@@ -377,14 +378,15 @@ def quap(vars=None, var_names=None, model=None, start=None):
     if vars is None:
         if var_names is None:
             # filter out internally used variables
-            mvars = [x for x in model.unobserved_RVs 
-                     if not x.name.endswith('__')]
+            mvars, var_names = zip(*[(x, x.name) for x in model.unobserved_RVs 
+                                     if not x.name.endswith('__')])
         else:
             mvars = [model[x] for x in var_names]
     else:
         if var_names is not None:
             warnings.warn("`var_names` and `vars` set, ignoring `var_names`.")
         mvars = vars
+        var_names = [x.name for x in mvars]
 
     # pm.init_nuts(model=model)  # necessary??
     map_est = pm.find_MAP(start=start, vars=mvars, model=model)
@@ -404,15 +406,44 @@ def quap(vars=None, var_names=None, model=None, start=None):
 
     # Build output structure
     quap = Quap()
-    vnames = [v.name for v in model.value_vars]
-    dnames = list(set([v.name for v in model.unobserved_RVs]) - set(vnames))
 
-    # Coefficients are just the value variables, not all unobserved RVs
-    quap.coef = pd.Series({x: float(map_est[x]) for x in vnames})
+    # Filter variables for output
+    # NOTE works for individually-defined variables, like b1, b2, b3, but not
+    # for bn = [b1, b2, b3]. Desired output:
+    # alpha b1 bn0__ bn1__ bn2__ ...
+    # shapes = model.eval_rv_shapes()  # {'a': (1,), 'b': (2,), etc}
+
+    basic_vars = set(model.basic_RVs) - set(model.observed_RVs)
+    basics = {x.name: x for x in basic_vars}
+    deter_vars = set(model.unobserved_RVs) - set(model.basic_RVs)
+    dnames = [x.name for x in deter_vars]
+
+    # If requested variables are not basic, just return all of them
+    if not set(mvars).intersection(set(basic_vars)):
+        var_names = basics.keys()
+
+    cnames = []
+    hnames = []
+    cvals = []
+    for v in basics:
+        if v in var_names:
+            x = map_est[v]
+            if x.size == 1:
+                cnames.append(v)
+                cvals.append(float(x))
+                hnames.append(v)
+            elif x.size > 1:
+                cnames.extend([f"{v}{k}__" for k in range(len(x))])
+                cvals.extend(x)
+                hnames.append(v)
+
+    # Coefficients are just the basic RVs, without the observed RVs
+    quap.coef = pd.Series({x: v for x, v in zip(cnames, cvals)}).sort_index()
     # The Hessian of a Gaussian == "precision" == 1 / sigma**2
-    H = pm.find_hessian(map_est, model=model)
-    quap.cov = pd.DataFrame(linalg.inv(H), index=vnames, columns=vnames)
-    quap.std = pd.Series(np.sqrt(np.diag(quap.cov)), index=vnames)
+    H = pm.find_hessian(map_est, vars=[model[x] for x in hnames], model=model)
+    quap.cov = (pd.DataFrame(linalg.inv(H), index=cnames, columns=cnames)
+                  .sort_index(axis=0) .sort_index(axis=1))
+    quap.std = pd.Series(np.sqrt(np.diag(quap.cov)), index=cnames).sort_index()
     quap.map_est = {k: map_est[k] for k in dnames}
     quap.model = model
     quap.start = model.initial_point if start is None else start
@@ -442,7 +473,7 @@ def sample_to_dataframe(data):
     """Convert dict of samples to DataFrame."""
     try:
         df = pd.DataFrame(data)
-    except:
+    except ValueError:
         # if data has more than one dimension, enumerate the columns
         df = pd.DataFrame()
         for k, v in data.items():
@@ -476,21 +507,30 @@ def standardize(x, data=None, axis=0):
     return (x - data.mean(axis=axis)) / data.std(axis=axis)
 
 
-def poly_weights(w, poly_order=0, include_const=True):
-    """Return array of polynomial weight vectors."""
-    w = np.asarray(w)
+def design_matrix(x, poly_order=0, include_const=True):
+    """Return array of polynomial weight vectors.
 
-    if poly_order == 0:
-        out = w
-    else:
-        try:
-            out = np.vstack([w**(i+1) for i in range(poly_order)])
-        except ValueError:
-            raise ValueError(f"poly_order value '{poly_order}' is invalid")
+    Parameters
+    ----------
+    x : (M,) array_like
+        Vector of polynomial inputs.
+    poly_order : int
+        Highest-ordered term exponent.
+    include_const : bool
+        If True, include a first column of all ones.
 
-    if include_const:
-        out = np.vstack([np.ones_like(w), out])  # weight constant term == 1
-
+    Returns
+    -------
+    result : (M, poly_order+1) ndarray
+        A Vandermonde matrix of increasing powers of `x`.
+    """
+    x = np.asarray(x)
+    try:
+        out = np.vander(x, poly_order+1, increasing=True)
+    except ValueError:
+        raise ValueError(f"poly_order value '{poly_order}' is invalid")
+    if not include_const:
+        out = out[:, 1:]
     return out
 
 

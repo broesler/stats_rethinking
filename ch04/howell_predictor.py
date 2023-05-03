@@ -216,7 +216,7 @@ mu_hpdi = sts.hpdi(mu_samp, q=q)  # (Nd, 2)
 fig = plt.figure(5, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
-ax.plot(x, mu_mean, 'k', label='MAP Estimate')
+ax.plot(x, mu_mean, 'C3', label='MAP Estimate')
 ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
                 facecolor='k', alpha=0.3, interpolate=True,
                 label=rf"{100*q:g}% Credible Interval of $\mu$")
@@ -227,7 +227,7 @@ ax.legend()
 # Calculate the prediction interval, including sigma
 # Manually write code for:
 #   h_samp = sts.sim(define_linear_model, Ns)
-h_samp = stats.norm(mu_samp, post['sigma'].values[:, None]).rvs()  # (Nd, Ns)
+h_samp = stats.norm(mu_samp, post['sigma'].values[:, np.newaxis]).rvs()  # (Nd, Ns)
 h_hpdi = sts.hpdi(h_samp, q=q)  # (Nd, 2)
 
 ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
