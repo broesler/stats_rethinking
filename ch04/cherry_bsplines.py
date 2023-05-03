@@ -68,7 +68,7 @@ k = 3           # degree of spline (3 == cubic)
 knots = sts.quantile(x, q=np.linspace(0, 1, Nk))
 
 # Build the basis functions
-B = sts.bspline_basis(x, t=knots, k=k)
+B = sts.bspline_basis(t=knots, x=x, k=k)
 
 # Figure 4.12: Plot each basis function
 fig = plt.figure(2, clear=True, figsize=(8, 6), constrained_layout=True)

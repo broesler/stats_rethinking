@@ -60,7 +60,6 @@ titles = dict({1: 'Linear', 2: 'Quadratic', 3: 'Cubic'})
 fig = plt.figure(2, figsize=(max(Np*4, 8), 6),
                  clear=True, constrained_layout=True)
 gs = fig.add_gridspec(nrows=1, ncols=Np)
-sharey = None
 for poly_order in range(1, Np+1):
     # Define the model
     with pm.Model() as poly_model:
@@ -105,8 +104,7 @@ for poly_order in range(1, Np+1):
     h_hpdi = sts.hpdi(h_samp, q=q)
 
     # Plot vs the data (in non-normalized x-axis for readability)
-    ax = fig.add_subplot(gs[poly_order-1], sharey=sharey)
-    sharey = ax
+    ax = fig.add_subplot(gs[poly_order-1], sharey=ax)
     ax.scatter(df['weight'], df['height'], alpha=0.5, label='Data')
     ax.plot(x, mu_mean, 'k', label='Model')
     ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
@@ -114,7 +112,7 @@ for poly_order in range(1, Np+1):
                     label=f"{100*q:g}% CI")
     ax.set(title=titles[poly_order],
            xlabel='weight [kg]',
-           ylabel='height [cm]')
+           ylabel='height [cm]', ylim=(45, 185))
 
     if poly_order > 1:
         ax.tick_params(axis='y', labelleft=False)

@@ -115,8 +115,11 @@ def hpdi(data, q=0.89, verbose=False, width=6, precision=4, **kwargs):
         Matrix of M vectors in N dimensions
     """
     q = np.atleast_1d(q)
-    quantiles = np.array([az.hdi(np.asarray(data), hdi_prob=x, **kwargs).squeeze()
-                          for x in q]).squeeze()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=FutureWarning)
+        quantiles = np.array([az.hdi(np.asarray(data), hdi_prob=x, **kwargs)
+                                .squeeze()
+                            for x in q]).squeeze()
     # need at least 2 dimensions for printing
     # if quantiles.ndim >= 3:
     #     quantiles = quantiles.squeeze()
@@ -157,7 +160,7 @@ def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
     # default uniform prior
     prior = np.ones(Np) if prior_func is None else prior_func(p_grid)
     likelihood = stats.binom.pmf(k=k, n=n, p=p_grid)  # binomial distribution
-    unstd_post = likelihood * prior                   # unstandardized posterior
+    unstd_post = likelihood * prior                   # unnormalized posterior
     posterior = unstd_post / np.sum(unstd_post) if norm_post else unstd_post
     return p_grid, posterior, prior
 
@@ -199,13 +202,11 @@ def expand_grid(**kwargs):
 
     Notes
     -----
-    Compare to `numpy.meshgrid`[0]:
+    Compare to `numpy.meshgrid`:
         xx, yy = np.meshgrid(mu_list, sigma_list)  # == (..., index='xy')
     `expand_grid` returns the *transpose* of meshgrid's default xy orientation.
     `expand_grid` matches:
         xx, yy = np.meshgrid(mu_list, sigma_list, index='ij')
-
-    .. [0]: <https://numpy.org/doc/stable/reference/generated/numpy.meshgrid.html#numpy.meshgrid>
 
     See Also
     --------
@@ -315,13 +316,11 @@ class Quap():
         self.start = start
 
     def __str__(self):
-        # TODO
-        #   * compute log-likelihood?
         with pd.option_context('display.float_format', '{:.4f}'.format):
             # remove "dtype: object" line from the Series repr
             meanstr = repr(self.coef).rsplit('\n', 1)[0]
 
-        out = f"""Quadratic Approximate Posterior Distribution
+        return f"""Quadratic Approximate Posterior Distribution
 
 Formula:
 {self.model.str_repr()}
@@ -329,7 +328,6 @@ Formula:
 Posterior Means:
 {meanstr}
 """
-        return out
 
     def __repr__(self):
         return f"<{self.__class__.__name__}: {self.__str__()}>"
@@ -374,8 +372,9 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
         mvars = vars
         var_names = [x.name for x in mvars]
 
-    # pm.init_nuts(model=model)  # necessary??
-    map_est = pm.find_MAP(start=start, vars=mvars, model=model)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=UserWarning)
+        map_est = pm.find_MAP(start=start, vars=mvars, model=model)
 
     # Need to compute *untransformed* Hessian! See ch02/quad_approx.py
     # See: <https://github.com/pymc-devs/pymc/issues/5443>
@@ -415,7 +414,7 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
                 hnames.append(v)
             elif x.size > 1:
                 fmt = '02d' if x.size > 10 else 'd'
-                cnames.extend([f"{v}{k:{fmt}}__" for k in range(len(x))])
+                cnames.extend([f"{v}__{k:{fmt}}" for k in range(len(x))])
                 cvals.extend(x)
                 hnames.append(v)
 
@@ -449,30 +448,6 @@ def norm_fit(data, hist_kws=None, ax=None):
     y = norm.pdf(x)
     ax.plot(x, y, 'C0')
     return ax
-
-
-def sample_to_dataframe(data):
-    """Convert dict of samples to DataFrame."""
-    try:
-        df = pd.DataFrame(data)
-    except ValueError:
-        # if data has more than one dimension, enumerate the columns
-        df = pd.DataFrame()
-        for k, v in data.items():
-            df_s = pd.DataFrame(v)
-
-            # name the columns
-            if v.ndim == 1:
-                df_s.columns = [k]
-            else:
-                df_s = df_s.add_prefix(k + '__')  # enumerate matrix variables
-
-            # concatenate into one DataFrame
-            if df.empty:
-                df = df_s
-            else:
-                df = df.join(df_s)
-    return df
 
 
 def standardize(x, data=None, axis=0):
@@ -524,16 +499,16 @@ def pad_knots(knots, k=3):
                            np.repeat(knots[-1], k)])
 
 
-def bspline_basis(x=None, t=None, k=3, padded_knots=False):
+def bspline_basis(t, x=None, k=3, padded_knots=False):
     """Create the B-spline basis matrix of coefficients.
 
     Parameters
     ----------
+    t : array_like, shape (n+k+1,)
+        internal knots
     x : array_like, optional
         points at which to evaluate the B-spline bases. If `x` is not given,
         a `scipy.interpolate.BSpline` object will be returned.
-    t : array_like, shape (n+k+1,)
-        internal knots
     k : int, optional, default=3
         B-spline order
     padded_knots : bool, optional, default=False
@@ -550,8 +525,6 @@ def bspline_basis(x=None, t=None, k=3, padded_knots=False):
     b : :obj:scipy.interpolate.BSpline
         B-spline basis function object with identity matrix as weights.
     """
-    if t is None:
-        raise TypeError("bspline_basis() missing 1 required keyword argument: 't'")
     if not padded_knots:
         t = pad_knots(t, k)
     m = len(t) - k - 1
