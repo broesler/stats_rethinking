@@ -9,6 +9,7 @@
 """
 # =============================================================================
 
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -73,11 +74,12 @@ for ax in [ax0, ax1]:
            ylim=(-100, 400),
            xlabel='weight [kg]')
 
-# Plot the model of mean height vs. weight
+# Plot the model of mean height vs. weight (R code 4.38)
 N = 100
 with first_model:
     prior_samp = pm.sample_prior_predictive(N)
 
+# (R code 4.39)
 for i in range(N):
     ax0.plot(weight, prior_samp.prior['mu'][0, i], 'k', alpha=0.2)
 
@@ -90,7 +92,7 @@ $\beta \sim \mathcal{N}(0, 10)$""",
 def define_linear_model(ind, obs):
     """Define a linear model with the given data."""
     with pm.Model() as model:
-        ind = pm.ConstantData('ind', ind)
+        ind = pm.MutableData('ind', ind)
         obs = pm.ConstantData('obs', obs)
         alpha = pm.Normal('alpha', mu=178, sigma=20)  # parameter priors
         beta = pm.Lognormal('beta', mu=0, sigma=1)    # new prior!
@@ -102,10 +104,11 @@ def define_linear_model(ind, obs):
 
 # Create the linear model ("m4.3" in R code 4.42)
 the_model = define_linear_model(ind=weight, obs=adults['height'])
+
+# Sample the prior and plot (like R Code 4.38 - 4.39, but with new model)
 with the_model:
     prior_samp = pm.sample_prior_predictive(N)
 
-# Plot the prior predictive lines for the log-normal prior (Figure 4.5)
 for i in range(N):
     ax1.plot(weight, prior_samp.prior['mu'][0, i], 'k', alpha=0.2)
 
@@ -128,15 +131,16 @@ print(post.cov())
 # -----------------------------------------------------------------------------
 #        Posterior Prediction
 # -----------------------------------------------------------------------------
-# Figure 4.6
+# Figure 4.6 (R code 4.46)
 ax_d.plot(weight, quap.map_est['mu'], 'k', label='MAP Prediction')
 ax_d.legend()
 
-# Plot the posterior prediction vs N data points
+# Plot the posterior prediction vs N data points (R code 4.48 - 4.49)
 N_test = [10, 50, 150, adults.shape[0]]
 N_lines = 20
 
 
+# TODO rwwrite using xarrays to avoid ugly array conversions
 def post_mu(w, alpha, beta):
     """Compute linear model of 'mu'."""
     res = (np.asarray(alpha)
@@ -161,7 +165,7 @@ for i, N in enumerate(N_test):
     post = quap.sample(N_lines)  # only sample 20 lines
 
     # Manually calculate the deterministic variable from the MAP estimates
-    post_mu_calc = post_mu(w, post['alpha'], post['beta']) # (N_lines, N)
+    post_mu_calc = post_mu(w, post['alpha'], post['beta'])  # (N_lines, N)
 
     # Plot the raw data
     sharex = ax if i > 0 else None
@@ -185,7 +189,7 @@ for i, N in enumerate(N_test):
 # -----------------------------------------------------------------------------
 #        Plot regression intervals
 # -----------------------------------------------------------------------------
-# Get larger number of samples for regression interval calcs
+# Get larger number of samples for regression interval calcs (R code 4.50)
 post = quap.sample(Ns)
 
 # Calculate mu for a single weight input
@@ -201,18 +205,39 @@ print('mu @ w = 50 [kg]:')
 q = 0.89
 sts.hpdi(mu_at_50, q=q, verbose=True)
 
-# Manually write code for:
+# Manually write code for: (R code 4.53 - 4.54)
 #   mu = sts.link(quap, Ns)
 # Generate samples, compute model output for even-interval input
 x = np.arange(25, 71)
 mu_samp = post_mu(x, post['alpha'], post['beta'])
 
+# NOTE Possibility: Use pm.set_data({'ind': np.arange(25, 71)}) to update the
+# model's independent variable values. Then,
+#   h_samp = pm.sample_posterior_predictive(trace)
+#   h_mean = h_samp.posterior_predictive['h'].mean(('chain', 'draw'))
+# The catch: we need a posterior sample `trace`. Since we want the quap, not
+# the actual MCMC samples, can we fake the
+# arviz.data.inference_data.InferenceData structure using the normal
+# approximation samples we already have in the post df?
+# Needs coordinates: ('chain' = 0, 'draw' = o, 1, ..., Ns)
+da = (post.to_xarray()
+          .rename({'index': 'draw'})
+          .expand_dims(dim='chain')
+          .assign_coords(chain=('chain', [0]))
+        )
+tr = az.data.inference_data.InferenceData(posterior=da)
+with the_model:
+    pm.set_data({'ind': x})
+    y_samp = pm.sample_posterior_predictive(tr)
+    y_mean = y_samp.posterior_predictive['h'].mean(('chain', 'draw'))
+
+# (R code 4.56)
 # Plot the credible interval for the mean of the height (not including sigma)
 # NOTE hdi takes 1st dimension, so transpose to get correct output
 mu_mean = mu_samp.mean(axis=0)    # (Nd,) average values for each data point
 mu_hpdi = sts.hpdi(mu_samp, q=q)  # (Nd, 2)
 
-# Figure 4.10
+# Figure 4.10 (R code 4.55, 4.57)
 fig = plt.figure(5, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
@@ -224,15 +249,18 @@ ax.set(xlabel='weight [kg]',
        ylabel='height [cm]')
 ax.legend()
 
-# Calculate the prediction interval, including sigma
+# Calculate the prediction interval, including sigma (R code 4.59, 4.60, 4.62)
 # Manually write code for:
 #   h_samp = sts.sim(define_linear_model, Ns)
 h_samp = stats.norm(mu_samp, post['sigma'].values[:, np.newaxis]).rvs()  # (Nd, Ns)
-h_hpdi = sts.hpdi(h_samp, q=q)  # (Nd, 2)
+# h_hpdi = sts.hpdi(h_samp, q=q)  # (Nd, 2)
+h_pi = sts.percentiles(h_samp, q=q, axis=0)  # (2, Nd)
 
-ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
+# (R code 4.61)
+ax.fill_between(x, h_pi[0], h_pi[1],
                 facecolor='k', alpha=0.2, interpolate=True,
                 label=f"{100*q:g}% Credible Interval of Height")
+ax.set(xlim=(28, 64), ylim=(128, 182))
 
 ax.legend()
 

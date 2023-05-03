@@ -22,7 +22,7 @@ from scipy.interpolate import BSpline
 from sklearn.utils.extmath import cartesian
 
 
-def quantile(data, q=0.89, width=10, precision=8,
+def quantile(data, q=0.89, width=6, precision=4,
              q_func=np.quantile, verbose=False, **kwargs):
     """Pretty-print the desired quantile values from the data.
 
@@ -222,7 +222,7 @@ def expand_grid(**kwargs):
 #       R version uses a LOT of "setMethod" calls to allow function to work
 #       with many different datatypes.
 #       See: <https://github.com/rmcelreath/rethinking/blob/master/R/precis.r>
-#   * built-in verbose flag to print output with desired precision
+#
 def precis(obj, p=0.89, digits=4, verbose=True):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
