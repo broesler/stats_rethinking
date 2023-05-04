@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
+import seaborn as sns
 
 from pathlib import Path
 from scipy import stats
@@ -90,17 +91,20 @@ ax.plot(np.tile(A, (N_lines, 1)).T, prior.prior['mu'].mean('chain').T,
         'k', alpha=0.4)
 
 # Compute percentile interval of mean (R code 5.5)
-A_seq = np.linspace(-3, 3.2, 30)
+A_seq_s = np.linspace(-3, 3.2, 30)
+
+print('D ~ A:')
+sts.precis(quapA)
 
 postA = quapA.sample()
-mu_samp = postA['alpha'].values + postA['beta'].values * A_seq[:, np.newaxis]
-mu_mean = mu_samp.mean(axis=1)
+mu_samp_s = postA['alpha'].values + postA['beta'].values * A_seq_s[:, np.newaxis]
+mu_mean_s = mu_samp_s.mean(axis=1)
 q = 0.89
-mu_pi = sts.percentiles(mu_samp, q=q, axis=1)  # 0.89 default
+mu_pi_s = sts.percentiles(mu_samp_s, q=q, axis=1)  # 0.89 default
 
-A_seq = sts.unstandardize(A_seq, df['MedianAgeMarriage'])
-mu_mean = sts.unstandardize(mu_mean, df['Divorce'])
-mu_pi = sts.unstandardize(mu_pi, df['Divorce'])
+A_seq = sts.unstandardize(A_seq_s, df['MedianAgeMarriage'])
+mu_mean = sts.unstandardize(mu_mean_s, df['Divorce'])
+mu_pi = sts.unstandardize(mu_pi_s, df['Divorce'])
 
 # Make the RHS plot (R code 5.5)
 fig = plt.figure(2, clear=True, constrained_layout=True)
@@ -117,20 +121,22 @@ ax.tick_params(axis='y', labelleft=None)
 # Repeat the model for marriage rate (m5.2, R code 5.6)
 df['M'] = sts.standardize(df['Marriage'])
 
+# Set the predictor data to marriage rate and recompute the MAP
 with the_model:
     pm.set_data({'ind': df['M']})
     quapM = sts.quap()
 
-A_seq = np.linspace(-3, 3.2, 30)
+print('D ~ M:')
+sts.precis(quapM)
 
 postM = quapM.sample()
-mu_samp = postM['alpha'].values + postM['beta'].values * A_seq[:, np.newaxis]
-mu_mean = mu_samp.mean(axis=1)
-mu_pi = sts.percentiles(mu_samp, q=q, axis=1)  # 0.89 default
+mu_samp_s = postM['alpha'].values + postM['beta'].values * A_seq_s[:, np.newaxis]
+mu_mean_s = mu_samp_s.mean(axis=1)
+mu_pi_s = sts.percentiles(mu_samp_s, q=q, axis=1)  # 0.89 default
 
-A_seq = sts.unstandardize(A_seq, df['Marriage'])
-mu_mean = sts.unstandardize(mu_mean, df['Divorce'])
-mu_pi = sts.unstandardize(mu_pi, df['Divorce'])
+A_seq = sts.unstandardize(A_seq_s, df['Marriage'])
+mu_mean = sts.unstandardize(mu_mean_s, df['Divorce'])
+mu_pi = sts.unstandardize(mu_pi_s, df['Divorce'])
 
 ax = fig.add_subplot(gs[0], sharey=ax)
 ax.scatter('Marriage', 'Divorce', data=df, alpha=0.4)
@@ -140,6 +146,30 @@ ax.fill_between(A_seq, mu_pi[0], mu_pi[1],
                 label=rf"{100*q:g}% Percentile Interval of $\mu$")
 ax.set(xlabel='Marriage Rate [per 1000]',
        ylabel='Divorce Rate [per 1000]')
+
+# Create the multiple regression model (m5.3, R code 5.8)
+with pm.Model() as multi_model:
+    M = pm.MutableData('M', df['M'])
+    A = pm.MutableData('A', df['A'])
+    obs = pm.MutableData('obs', df['D'])
+    alpha = pm.Normal('alpha', 0, 0.2)
+    beta_M = pm.Normal('beta_M', 0, 0.5)
+    beta_A = pm.Normal('beta_A', 0, 0.5)
+    sigma = pm.Exponential('sigma', 1)
+    mu = pm.Deterministic('mu', alpha + beta_M * M + beta_A * A)
+    D = pm.Normal('D', mu, sigma, observed=obs, shape=M.shape)
+    quap = sts.quap()
+
+sts.precis(quap)
+
+# Make the coeftab plot (R code 5.9)
+quapA.rename({'beta': 'beta_A'})
+quapM.rename({'beta': 'beta_M'})
+coeftab = pd.concat([quapA.coef, quapM.coef, quap.coef], axis=1)
+coeftab.columns = ['m5.1', 'm5.2', 'm5.3']
+
+# ax = sns.pointplot(x=
+
 
 # =============================================================================
 # =============================================================================

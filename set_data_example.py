@@ -22,7 +22,8 @@ with pm.Model() as model:
     beta = pm.Normal('beta', 0, 1)
     mu = pm.Deterministic('mu', x * beta)
     obs = pm.Normal('obs', mu, 1, observed=y, shape=x.shape)
-    idata = pm.sample(chains=1)
+    map_esta = pm.find_MAP()
+    idata = pm.sample()
     ya_samp = pm.sample_posterior_predictive(idata)
     ya = ya_samp.posterior_predictive['obs'].mean(('chain', 'draw'))
 
@@ -32,6 +33,7 @@ az.plot_trace(idata)
 # Predict at a new set of inputs
 with model:
     pm.set_data({'x': [1.5, 5., 6., 9., 12., 15.]})
+    # map_estb = pm.find_MAP()  # fails because y not updated
     yb_samp = pm.sample_posterior_predictive(idata)
     yb = yb_samp.posterior_predictive['obs'].mean(('chain', 'draw'))
 

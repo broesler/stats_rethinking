@@ -342,6 +342,14 @@ Posterior Means:
         posterior = stats.multivariate_normal(mean=self.coef, cov=self.cov)
         return pd.DataFrame(posterior.rvs(N), columns=self.coef.index)
 
+    def rename(self, mapper):
+        """Rename a parameter.
+
+        .. note:: Does NOT work on vector parameters, e.g., 'b__0'.
+        """
+        self.coef = self.coef.rename(mapper)
+        self.cov = self.cov.rename(index=mapper, columns=mapper)
+        self.std = self.std.rename(mapper)
 
 def quap(vars=None, var_names=None, model=None, data=None, start=None):
     """Compute the quadratic approximation for the MAP estimate.
