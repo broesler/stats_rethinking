@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-  Description: Build non-linear models of the Howell data
+  Description: Build non-linear models of the Howell data.
 """
 # =============================================================================
 
