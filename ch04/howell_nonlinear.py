@@ -30,8 +30,6 @@ data_path = '../data/'
 # df: height [cm], weight [kg], age [int], male [0,1]
 df = pd.read_csv(data_path + 'Howell1.csv')
 
-Ns = 10_000  # general number of samples to use
-
 # Plot the raw data, separate adults and children
 is_adult = df['age'] >= 18
 adults = df[is_adult]
@@ -83,7 +81,7 @@ for poly_order in range(1, Np+1):
 
         # Get the posterior approximation
         quap = sts.quap()
-        post = quap.sample(Ns)
+        post = quap.sample()
 
     print(f"---------- poly order: {poly_order} ----------")
     sts.precis(post)
