@@ -222,7 +222,6 @@ def expand_grid(**kwargs):
 
 # TODO
 #   * expand documentation with examples
-#   * ignore unsupported columns like 'datetime' types
 #   * remove dependence on input type. pd.DataFrame.from_dict? or kwarg?
 #       R version uses a LOT of "setMethod" calls to allow function to work
 #       with many different datatypes.
@@ -265,6 +264,7 @@ def precis(obj, p=0.89, digits=4, verbose=True):
 
     # DataFrame of data points
     if isinstance(obj, pd.DataFrame):
+        obj = obj.select_dtypes(include=np.number)
         df = pd.DataFrame()
         df['mean'] = obj.mean()
         df['std'] = obj.std()
@@ -474,6 +474,13 @@ def standardize(x, data=None, axis=0):
     if data is None:
         data = x
     return (x - data.mean(axis=axis)) / data.std(axis=axis)
+
+
+def unstandardize(x, data=None, axis=0):
+    """Return the data to the original scale."""
+    if data is None:
+        data = x
+    return data.mean(axis=axis) + x * data.std(axis=axis)
 
 
 def design_matrix(x, poly_order=0, include_const=True):
