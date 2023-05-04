@@ -9,7 +9,6 @@
 """
 # =============================================================================
 
-import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -21,7 +20,7 @@ import stats_rethinking as sts
 
 plt.ion()
 plt.style.use('seaborn-v0_8-darkgrid')
-np.random.seed(56)  # initialize random number generator
+np.random.seed(5656)  # initialize random number generator
 
 # -----------------------------------------------------------------------------
 #        Load Dataset
@@ -93,12 +92,13 @@ def define_linear_model(ind, obs):
     """Define a linear model with the given data."""
     with pm.Model() as model:
         ind = pm.MutableData('ind', ind)
-        obs = pm.ConstantData('obs', obs)
+        obs = pm.MutableData('obs', obs)
         alpha = pm.Normal('alpha', mu=178, sigma=20)  # parameter priors
         beta = pm.Lognormal('beta', mu=0, sigma=1)    # new prior!
         sigma = pm.Uniform('sigma', 0, 50)            # std prior
         mu = pm.Deterministic('mu', alpha + beta*(ind - ind.mean()))
-        h = pm.Normal('h', mu=mu, sigma=sigma, observed=obs)  # likelihood
+        # likelihood -- same shape as the independent variable!
+        h = pm.Normal('h', mu=mu, sigma=sigma, observed=obs, shape=ind.shape)
     return model
 
 
@@ -154,7 +154,7 @@ gs = fig.add_gridspec(nrows=2, ncols=2)
 
 for i, N in enumerate(N_test):
     df_n = adults[:N]
-    w = df_n['weight'].values
+    w = df_n['weight']
     wbar_n = w.mean()
 
     # MAP estimate of the parameters
@@ -208,40 +208,51 @@ sts.hpdi(mu_at_50, q=q, verbose=True)
 # Manually write code for: (R code 4.53 - 4.54)
 #   mu = sts.link(quap, Ns)
 # Generate samples, compute model output for even-interval input
-x = np.arange(25, 71)
+x = np.arange(25., 71.)
 mu_samp = post_mu(x, post['alpha'], post['beta'])
 
-# NOTE Possibility: Use pm.set_data({'ind': np.arange(25, 71)}) to update the
+# (R code 4.56)
+# Plot the credible interval for the mean of the height (not including sigma)
+mu_mean = mu_samp.mean(axis=0)    # (Nd,) average values for each data point
+mu_hpdi = sts.hpdi(mu_samp, q=q)  # (Nd, 2)
+
+# NOTE Use pm.set_data({'ind': np.arange(25, 71)}) to update the
 # model's independent variable values. Then,
 #   h_samp = pm.sample_posterior_predictive(trace)
 #   h_mean = h_samp.posterior_predictive['h'].mean(('chain', 'draw'))
 # The catch: we need a posterior sample `trace`. Since we want the quap, not
-# the actual MCMC samples, can we fake the
+# the actual MCMC samples, we can fake the
 # arviz.data.inference_data.InferenceData structure using the normal
-# approximation samples we already have in the post df?
-# Needs coordinates: ('chain' = 0, 'draw' = o, 1, ..., Ns)
-da = (post.to_xarray()
-          .rename({'index': 'draw'})
-          .expand_dims(dim='chain')
-          .assign_coords(chain=('chain', [0]))
-        )
-tr = az.data.inference_data.InferenceData(posterior=da)
-with the_model:
-    pm.set_data({'ind': x})
-    y_samp = pm.sample_posterior_predictive(tr)
-    y_mean = y_samp.posterior_predictive['h'].mean(('chain', 'draw'))
-
-# (R code 4.56)
-# Plot the credible interval for the mean of the height (not including sigma)
-# NOTE hdi takes 1st dimension, so transpose to get correct output
-mu_mean = mu_samp.mean(axis=0)    # (Nd,) average values for each data point
-mu_hpdi = sts.hpdi(mu_samp, q=q)  # (Nd, 2)
+# approximation samples we already have in the post df.
+# Needs coordinates: ('chain' = [0], 'draw' = [0, 1, ..., Ns])
+#
+# import arviz as az
+# da = (post.to_xarray()
+#           .rename({'index': 'draw'})
+#           .expand_dims(dim='chain')
+#           .assign_coords(chain=('chain', [0]))
+#         )
+# tr = az.data.inference_data.InferenceData(posterior=da)
+#
+# with the_model:
+#     # tr = pm.sample(chains=1)  # actual MCMC sampling of posterior
+#     pm.set_data({'ind': x})
+#     # pm.set_data({'ind': adults['weight']})
+#     y_samp = pm.sample_posterior_predictive(tr)
+#     y_mean = y_samp.posterior_predictive['h'].mean(('chain', 'draw'))
+#
+# # Compute rms error
+# err_mu = np.sqrt(np.sum((quap.map_est['mu'] - adults['height'])**2) / N)
+# err_y = np.sqrt(np.sum((y_mean - adults['height'])**2) / N)
+# # err_mu ~ 5.071880331827743 [cm]
+# # err_y ~ 5.075352921506911 [cm]
 
 # Figure 4.10 (R code 4.55, 4.57)
 fig = plt.figure(5, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
 ax.plot(x, mu_mean, 'C3', label='MAP Estimate')
+# ax.plot(x, y_mean, 'C2', label='MCMC Estimate')
 ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
                 facecolor='k', alpha=0.3, interpolate=True,
                 label=rf"{100*q:g}% Credible Interval of $\mu$")
