@@ -21,6 +21,11 @@ from scipy import stats, linalg
 from scipy.interpolate import BSpline
 from sklearn.utils.extmath import cartesian
 
+# TODO
+# * quantile and HPDI (via az.hdi) return transposes of each other for
+#   multi-dimensional inputs. Pick one or the other.
+# * HPDI does not currently accept multiple q values, but only because the
+#   printing function is broken.
 
 def quantile(data, q=0.89, width=6, precision=4,
              q_func=np.quantile, verbose=False, **kwargs):
@@ -394,36 +399,43 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
 
     # Filter variables for output
     basic_vars = set(model.basic_RVs) - set(model.observed_RVs)
-    basics = {x.name: x for x in basic_vars}
     deter_vars = set(model.unobserved_RVs) - set(model.basic_RVs)
     dnames = [x.name for x in deter_vars]
 
     # If requested variables are not basic, just return all of them
-    if not set(mvars).intersection(set(basic_vars)):
-        var_names = basics.keys()
+    out_vars = set(mvars).intersection(set(basic_vars))
+    if not out_vars:
+        out_vars = basic_vars
 
     cnames = []
     hnames = []
     cvals = []
-    for v in basics:
-        if v in var_names:
-            x = map_est[v]
-            if x.size == 1:
-                cnames.append(v)
-                cvals.append(float(x))
-                hnames.append(v)
-            elif x.size > 1:
-                fmt = '02d' if x.size > 10 else 'd'
-                cnames.extend([f"{v}__{k:{fmt}}" for k in range(len(x))])
-                cvals.extend(x)
-                hnames.append(v)
+    for ov in out_vars:
+        v = ov.name
+        x = map_est[v]
+        if x.size == 1:
+            cnames.append(v)
+            cvals.append(float(x))
+            hnames.append(v)
+        elif x.size > 1:
+            # Flatten vectors into singletons 'b__0', 'b__1', ..., 'b__n'
+            fmt = '02d' if x.size > 10 else 'd'
+            cnames.extend([f"{v}__{k:{fmt}}" for k in range(len(x))])
+            cvals.extend(x)
+            hnames.append(v)  # need the root name for Hessian
+
+    # TODO store coefficients as an xarray Dataset to accomodate
+    # multi-dimensional parameters? Having flat Series/DataFrame for means and
+    # covariance matrix makes using stats.multivariate_normal simple, but then
+    # user-code needs to do the "unflattening" to combine [alpha, b0, b1, ...]
+    # for mathematical computations.
 
     # Coefficients are just the basic RVs, without the observed RVs
     quap.coef = pd.Series({x: v for x, v in zip(cnames, cvals)}).sort_index()
     # The Hessian of a Gaussian == "precision" == 1 / sigma**2
     H = pm.find_hessian(map_est, vars=[model[x] for x in hnames], model=model)
     quap.cov = (pd.DataFrame(linalg.inv(H), index=cnames, columns=cnames)
-                  .sort_index(axis=0) .sort_index(axis=1))
+                  .sort_index(axis=0).sort_index(axis=1))
     quap.std = pd.Series(np.sqrt(np.diag(quap.cov)), index=cnames).sort_index()
     quap.map_est = {k: map_est[k] for k in dnames}
     quap.model = model
