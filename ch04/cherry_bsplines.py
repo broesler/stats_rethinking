@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 
-# from scipy import stats
+from scipy import stats
 from datetime import datetime
 
 import stats_rethinking as sts
@@ -85,7 +85,7 @@ ax.set(xlabel=None,
        ylabel='Basis Value')
 ax.tick_params(axis='x', labelbottom=False)
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Build a model to calculate the weights of the basis functions
 # -----------------------------------------------------------------------------
 with pm.Model() as bspline_model:
@@ -95,18 +95,20 @@ with pm.Model() as bspline_model:
     mu = pm.Deterministic('mu', alpha + pm.math.dot(B, w))
     T = pm.Normal('T', mu, sigma, observed=y)
 
-    quap = sts.quap()
+    # Compute the MAP estimate (R code 4.76)
+    quap = sts.quap(start={'w': np.zeros(B.shape[1])})
     post = quap.sample(Ns)
 
-# Extract the weights from the sample
-w = post.filter(regex='w+').mean(axis=0)
-mu_samp = post['alpha'].values[:, np.newaxis] + B @ w
+# Extract the weights from the sample (R code 4.77 - 4.78)
+# w = post.filter(regex='w+').mean(axis=0)
+w_samp = post.filter(regex='w+')
+w_mean = w_samp.mean(axis=0)
 
 # Plot basis * weights
 ax = fig.add_subplot(gs[1], sharex=ax)
 
 for i in range(B.shape[1]):
-    ax.plot(x, w[i]*B[:, i], 'k-', alpha=0.5)
+    ax.plot(x, w_mean[i]*B[:, i], 'k-', alpha=0.5)
 
 ax.plot(knots, 1.05*np.ones_like(knots), 'k+', markersize=10, alpha=0.5)
 
@@ -116,15 +118,22 @@ ax.tick_params(axis='x', labelbottom=False)
 
 # Plot the fit over the data
 q = 0.89  # CI interval probability
+mu_samp = post['alpha'].values[:, np.newaxis] + w_samp @ B.T
 mu_mean = mu_samp.mean(axis=0)
 mu_hpdi = sts.hpdi(mu_samp, q=q)
 
+T_samp = stats.norm(mu_samp, post['sigma'].values[:, np.newaxis]).rvs()
+T_hpdi = sts.hpdi(T_samp, q=q)
+
 ax = fig.add_subplot(gs[2], sharex=ax)
 ax.scatter(x, y, alpha=0.5, label='Data')
-ax.plot(x, mu_mean, 'k', label='Model')
+ax.plot(x, mu_mean, 'k', lw=1, label='Model')
 ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
                 facecolor='k', alpha=0.3, interpolate=True,
                 label=rf"{100*q:g}% CI of $\mu$")
+ax.fill_between(x, T_hpdi[:, 0], T_hpdi[:, 1],
+                facecolor='k', alpha=0.2, interpolate=True,
+                label=f"{100*q:g}% CI")
 ax.set(xlabel='year',
        ylabel='Temperature [°C]')
 ax.legend()
