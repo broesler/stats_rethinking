@@ -39,8 +39,8 @@ children = df[~is_adult]
 
 fig = plt.figure(1, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
-ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Adults')
-ax.scatter(children['weight'], children['height'], c='C2', alpha=0.5,
+ax.scatter(adults['weight'], adults['height'], alpha=0.4, label='Adults')
+ax.scatter(children['weight'], children['height'], c='C2', alpha=0.2,
            label='Children')
 
 # plot min/max new weights to determine model to use
@@ -58,7 +58,7 @@ height = adults['height']
 w_bar = weight.mean()
 
 with pm.Model() as the_model:
-    alpha = pm.Normal('alpha', height.mean(), height.std())
+    alpha = pm.Normal('alpha', height.mean(), 3*height.std())
     beta = pm.Lognormal('beta', 0, 1)
     sigma = pm.Uniform('sigma', 0, 50)
     mu = alpha + beta * (weight - w_bar)
@@ -87,7 +87,7 @@ with pd.option_context('display.float_format', '{:.2f}'.format):
 # Plot predictions with original data
 ax.errorbar(UNK_W, h_mean, yerr=np.abs(h_hpdi.T - h_mean),
             ls='-', lw=1, marker='.', markersize=10, c='C3',
-            capsize=4, ecolor='k', elinewidth=1, alpha=0.5,
+            capsize=4, ecolor='k', elinewidth=1, alpha=0.8,
             label='Predicted Data')
 ax.legend()
 
