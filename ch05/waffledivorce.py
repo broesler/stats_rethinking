@@ -202,37 +202,49 @@ fig = plt.figure(3, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 sts.plot_coef_table(ct, ax=ax)
 
-plt.ion()
-plt.show()
-
 # -----------------------------------------------------------------------------
 #         Make Posterior Plots (Section 5.1.4)
 # -----------------------------------------------------------------------------
-postAM = quapAM.sample()
-mu_samp = (postAM['alpha'].values 
-           + postAM['beta'].values * df['A'].values[:, np.newaxis])
-mu_mean = mu_samp.mean(axis=1)
-mu_resid = df['M'] - mu_mean
+def residual_plot(quap, data, x, y, label_top=True, K=5, ax=None):
+    """Plot the residuals of the data."""
+    post = quap.sample()
+    mu_samp = (post['alpha'].values 
+            + post['beta'].values * data[x].values[:, np.newaxis])
+    mu_mean = mu_samp.mean(axis=1)
+    mu_resid = data[y] - mu_mean
 
-x_resid = np.tile(df['A'].values, (2, 1))
-y_resid = np.c_[df['M'], mu_mean].T
+    x_resid = np.tile(data[x].values, (2, 1))
+    y_resid = np.c_[data[y], mu_mean].T
 
-K = 5
-top_idx = mu_resid.abs().sort_values()[-K:].index
-top_states = df.loc[top_idx]
+    ax.scatter(x, y, data=data, alpha=0.4)
+    ax.plot(data[x], mu_mean, 'C0', label='MAP Prediction')
+    ax.plot(x_resid, y_resid, 'k', lw=1)
+
+    # Label top K states
+    if label_top:
+        top_idx = mu_resid.abs().sort_values()[-K:].index
+        top_data = data.loc[top_idx]
+        for x, y, label in zip(top_data[x], top_data[y], top_data['Loc']):
+            ax.text(x+0.075, y, label)
+
+    return ax
 
 # Figure 5.4 -- Predictor Residual Plot
 fig = plt.figure(4, clear=True, constrained_layout=True)
 gs = fig.add_gridspec(nrows=2, ncols=2)
+
 ax = fig.add_subplot(gs[0, 0])
-ax.scatter('A', 'M', data=df, alpha=0.4)
-ax.plot(df['A'], mu_mean, 'C0', label='MAP Prediction')
-ax.plot(x_resid, y_resid, 'k', lw=1)
-# Label top K states
-for x, y, label in zip(top_states['A'], top_states['M'], top_states['Loc']):
-    ax.text(x+0.075, y, label)
+residual_plot(quapAM, data=df, x='A', y='M', ax=ax)
 ax.set(xlabel='Age at Marriage [std]',
        ylabel='Marriage Rate [std]')
+
+ax = fig.add_subplot(gs[0, 1])
+residual_plot(quapAM, data=df, x='M', y='A', ax=ax)
+ax.set(xlabel='Marriage Rate [std]', 
+       ylabel='Age at Marriage [std]')
+
+plt.ion()
+plt.show()
 
 
 # =============================================================================
