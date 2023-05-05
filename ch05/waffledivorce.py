@@ -234,6 +234,7 @@ fig = plt.figure(4, clear=True, constrained_layout=True)
 gs = fig.add_gridspec(nrows=2, ncols=2)
 
 ax = fig.add_subplot(gs[0, 0])
+# TODO new function or just return residuals from the plot function??
 residual_plot(quapAM, data=df, x='A', y='M', ax=ax)
 ax.set(xlabel='Age at Marriage [std]',
        ylabel='Marriage Rate [std]')
@@ -243,9 +244,29 @@ residual_plot(quapAM, data=df, x='M', y='A', ax=ax)
 ax.set(xlabel='Marriage Rate [std]', 
        ylabel='Age at Marriage [std]')
 
+# Regress the divorce rate onto the residuals and plot on bottom row
+with the_model:
+    pm.set_data({'ind': df['AM_resid'],
+                 'obs': df['D']})
+    quapMrD = sts.quap()
+
+with the_model:
+    pm.set_data({'ind': df['MA_resid'],
+                 'obs': df['D']})
+    quapArD = sts.quap()
+
+ax = fig.add_subplot(gs[1, 0])
+residual_plot(quapMrD, data=df, x='AM_resid', y='D', ax=ax)
+ax.set(xlabel='Age at Marriage [std]',
+       ylabel='Marriage Rate [std]')
+
+ax = fig.add_subplot(gs[1, 1])
+residual_plot(quapArD, data=df, x='MA_resid', y='D', ax=ax)
+ax.set(xlabel='Marriage Rate [std]', 
+       ylabel='Age at Marriage [std]')
+
+
 plt.ion()
 plt.show()
-
-
 # =============================================================================
 # =============================================================================
