@@ -13,10 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import seaborn as sns
 
 from pathlib import Path
-from scipy import stats
 
 import stats_rethinking as sts
 
@@ -30,6 +28,7 @@ data_path = Path('../data/')
 data_file = Path('WaffleDivorce.csv')
 
 df = pd.read_csv(data_path / data_file)
+N = len(df)
 
 # >>> df.info()
 # <class 'pandas.core.frame.DataFrame'>
@@ -63,11 +62,6 @@ df['M'] = sts.standardize(df['Marriage'])
 print(f"{df['MedianAgeMarriage'].std() = :.2f}")
 
 
-def mu_func(a, b, x):
-    """The linear relationship."""
-    return a + b*x
-
-
 # Define the model (m5.1, R code 5.3)
 with pm.Model() as the_model:
     ind = pm.MutableData('ind', df['A'])
@@ -75,7 +69,7 @@ with pm.Model() as the_model:
     alpha = pm.Normal('alpha', 0, 0.2)
     beta = pm.Normal('beta', 0, 0.5)
     sigma = pm.Exponential('sigma', 1)
-    mu = pm.Deterministic('mu', mu_func(alpha, beta, ind))
+    mu = pm.Deterministic('mu', alpha + beta*ind)
     D = pm.Normal('D', mu, sigma, observed=obs, shape=ind.shape)
     # Compute the MAP estimate quadratic approximation
     quapA = sts.quap()
@@ -97,11 +91,12 @@ ax.set(xlabel='Median Age Marriage [std]',
 ax.plot(np.tile(A, (N_lines, 1)).T, prior.prior['mu'].mean('chain').T,
         'k', alpha=0.4)
 
+
 # -----------------------------------------------------------------------------
 #         Model the relationships between the variables
 # -----------------------------------------------------------------------------
-
-def lmplot(quap, data, x, y, eval_at=None, unstd=False, q=0.89, ax=None):
+def lmplot(quap, data, x, y, eval_at=None, unstd=False,
+           q=0.89, ax=None):
     """Plot the linear model defined by `quap`."""
     if eval_at is None:
         eval_at = data[x].values
@@ -109,9 +104,8 @@ def lmplot(quap, data, x, y, eval_at=None, unstd=False, q=0.89, ax=None):
         ax = plt.gca()
 
     post = quap.sample()
-    mu_samp = mu_func(post['alpha'].values,
-                      post['beta'].values,
-                      eval_at[:, np.newaxis])
+    mu_samp = (post['alpha'].values
+               + post['beta'].values * eval_at[:, np.newaxis])
     mu_mean = mu_samp.mean(axis=1)
     mu_pi = sts.percentiles(mu_samp, q=q, axis=1)  # 0.89 default
 
@@ -162,6 +156,7 @@ ax.set(xlabel='Marriage Rate [per 1000]',
 
 # Set the predictor data to age of marriage and observed to marriage rate
 # (see p 132, "leave it to the reader to investigate")
+# (Also, m5.4, R code 5.11)
 with the_model:
     pm.set_data({'ind': df['A'],
                  'obs': df['M']})
@@ -209,6 +204,36 @@ sts.plot_coef_table(ct, ax=ax)
 
 plt.ion()
 plt.show()
+
+# -----------------------------------------------------------------------------
+#         Make Posterior Plots (Section 5.1.4)
+# -----------------------------------------------------------------------------
+postAM = quapAM.sample()
+mu_samp = (postAM['alpha'].values 
+           + postAM['beta'].values * df['A'].values[:, np.newaxis])
+mu_mean = mu_samp.mean(axis=1)
+mu_resid = df['M'] - mu_mean
+
+x_resid = np.tile(df['A'].values, (2, 1))
+y_resid = np.c_[df['M'], mu_mean].T
+
+K = 5
+top_idx = mu_resid.abs().sort_values()[-K:].index
+top_states = df.loc[top_idx]
+
+# Figure 5.4 -- Predictor Residual Plot
+fig = plt.figure(4, clear=True, constrained_layout=True)
+gs = fig.add_gridspec(nrows=2, ncols=2)
+ax = fig.add_subplot(gs[0, 0])
+ax.scatter('A', 'M', data=df, alpha=0.4)
+ax.plot(df['A'], mu_mean, 'C0', label='MAP Prediction')
+ax.plot(x_resid, y_resid, 'k', lw=1)
+# Label top K states
+for x, y, label in zip(top_states['A'], top_states['M'], top_states['Loc']):
+    ax.text(x+0.075, y, label)
+ax.set(xlabel='Age at Marriage [std]',
+       ylabel='Marriage Rate [std]')
+
 
 # =============================================================================
 # =============================================================================
