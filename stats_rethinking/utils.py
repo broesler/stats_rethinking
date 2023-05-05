@@ -389,7 +389,10 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=UserWarning)
-        map_est = pm.find_MAP(start=start, vars=mvars, model=model)
+        map_est = pm.find_MAP(start=start,
+                              vars=mvars,
+                              progressbar=False,
+                              model=model)
 
     # Need to compute *untransformed* Hessian! See ch02/quad_approx.py
     # See: <https://github.com/pymc-devs/pymc/issues/5443>

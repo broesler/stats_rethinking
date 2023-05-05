@@ -20,7 +20,6 @@ from scipy import stats
 
 import stats_rethinking as sts
 
-plt.ion()
 plt.style.use('seaborn-v0_8-darkgrid')
 np.random.seed(5656)  # initialize random number generator
 
@@ -59,6 +58,7 @@ df = pd.read_csv(data_path / data_file)
 # Standardize the data
 df['A'] = sts.standardize(df['MedianAgeMarriage'])
 df['D'] = sts.standardize(df['Divorce'])
+df['M'] = sts.standardize(df['Marriage'])
 
 print(f"{df['MedianAgeMarriage'].std() = :.2f}")
 
@@ -77,6 +77,7 @@ with pm.Model() as the_model:
     sigma = pm.Exponential('sigma', 1)
     mu = pm.Deterministic('mu', mu_func(alpha, beta, ind))
     D = pm.Normal('D', mu, sigma, observed=obs, shape=ind.shape)
+    # Compute the MAP estimate quadratic approximation
     quapA = sts.quap()
 
 # Sample the prior predictive lines over 2 standard deviations (R code 5.4)
@@ -96,40 +97,55 @@ ax.set(xlabel='Median Age Marriage [std]',
 ax.plot(np.tile(A, (N_lines, 1)).T, prior.prior['mu'].mean('chain').T,
         'k', alpha=0.4)
 
+# -----------------------------------------------------------------------------
+#         Model the relationships between the variables
+# -----------------------------------------------------------------------------
+
+def lmplot(quap, data, x, y, eval_at=None, unstd=False, q=0.89, ax=None):
+    """Plot the linear model defined by `quap`."""
+    if eval_at is None:
+        eval_at = data[x].values
+    if ax is None:
+        ax = plt.gca()
+
+    post = quap.sample()
+    mu_samp = mu_func(post['alpha'].values,
+                      post['beta'].values,
+                      eval_at[:, np.newaxis])
+    mu_mean = mu_samp.mean(axis=1)
+    mu_pi = sts.percentiles(mu_samp, q=q, axis=1)  # 0.89 default
+
+    if unstd:
+        eval_at = sts.unstandardize(eval_at, data[x])
+        mu_mean = sts.unstandardize(mu_mean, data[y])
+        mu_pi = sts.unstandardize(mu_pi, data[y])
+
+    ax.scatter(x, y, data=data, alpha=0.4)
+    ax.plot(eval_at, mu_mean, 'C0', label='MAP Prediction')
+    ax.fill_between(eval_at, mu_pi[0], mu_pi[1],
+                    facecolor='C0', alpha=0.3, interpolate=True,
+                    label=rf"{100*q:g}% Percentile Interval of $\mu$")
+    ax.set(xlabel=x, ylabel=y)
+    return ax
+
+
 # Compute percentile interval of mean (R code 5.5)
 A_seq_s = np.linspace(-3, 3.2, 30)
+
+# Make the RHS plot (R code 5.5)
+fig = plt.figure(2, clear=True, constrained_layout=True)
+gs = fig.add_gridspec(nrows=1, ncols=3)
 
 print('D ~ A:')
 sts.precis(quapA)
 
-postA = quapA.sample()
-# mu_samp_s = postA['alpha'].values + postA['beta'].values * A_seq_s[:, np.newaxis]
-mu_samp_s = mu_func(postA['alpha'].values,
-                    postA['beta'].values,
-                    A_seq_s[:, np.newaxis])
-mu_mean_s = mu_samp_s.mean(axis=1)
-q = 0.89
-mu_pi_s = sts.percentiles(mu_samp_s, q=q, axis=1)  # 0.89 default
-
-A_seq = sts.unstandardize(A_seq_s, df['MedianAgeMarriage'])
-mu_mean = sts.unstandardize(mu_mean_s, df['Divorce'])
-mu_pi = sts.unstandardize(mu_pi_s, df['Divorce'])
-
-# Make the RHS plot (R code 5.5)
-fig = plt.figure(2, clear=True, constrained_layout=True)
-gs = fig.add_gridspec(nrows=1, ncols=2)
 ax = fig.add_subplot(gs[1])  # right-hand plot
-ax.scatter('MedianAgeMarriage', 'Divorce', data=df, alpha=0.4)
-ax.plot(A_seq, mu_mean, 'C0', label='MAP Prediction')
-ax.fill_between(A_seq, mu_pi[0], mu_pi[1],
-                facecolor='k', alpha=0.3, interpolate=True,
-                label=rf"{100*q:g}% Percentile Interval of $\mu$")
+lmplot(quapA, data=df, x='MedianAgeMarriage', y='Divorce',
+       unstd=True, eval_at=A_seq_s, ax=ax)
 ax.set(xlabel='Median Age Marriage [yr]')
 ax.tick_params(axis='y', labelleft=None)
 
 # Repeat the model for marriage rate (m5.2, R code 5.6)
-df['M'] = sts.standardize(df['Marriage'])
-
 # Set the predictor data to marriage rate and recompute the MAP
 with the_model:
     pm.set_data({'ind': df['M']})
@@ -138,27 +154,29 @@ with the_model:
 print('D ~ M:')
 sts.precis(quapM)
 
-postM = quapM.sample()
-mu_samp_s = mu_func(postM['alpha'].values,
-                    postM['beta'].values,
-                    A_seq_s[:, np.newaxis])
-mu_mean_s = mu_samp_s.mean(axis=1)
-mu_pi_s = sts.percentiles(mu_samp_s, q=q, axis=1)  # 0.89 default
-
-A_seq = sts.unstandardize(A_seq_s, df['Marriage'])
-mu_mean = sts.unstandardize(mu_mean_s, df['Divorce'])
-mu_pi = sts.unstandardize(mu_pi_s, df['Divorce'])
-
 ax = fig.add_subplot(gs[0], sharey=ax)
-ax.scatter('Marriage', 'Divorce', data=df, alpha=0.4)
-ax.plot(A_seq, mu_mean, 'C0', label='MAP Prediction')
-ax.fill_between(A_seq, mu_pi[0], mu_pi[1],
-                facecolor='k', alpha=0.3, interpolate=True,
-                label=rf"{100*q:g}% Percentile Interval of $\mu$")
+lmplot(quapM, data=df, x='Marriage', y='Divorce',
+       unstd=True, eval_at=A_seq_s, ax=ax)
 ax.set(xlabel='Marriage Rate [per 1000]',
        ylabel='Divorce Rate [per 1000]')
 
-# ----------------------------------------------------------------------------- 
+# Set the predictor data to age of marriage and observed to marriage rate
+# (see p 132, "leave it to the reader to investigate")
+with the_model:
+    pm.set_data({'ind': df['A'],
+                 'obs': df['M']})
+    quapAM = sts.quap()
+
+print('M ~ A:')
+sts.precis(quapAM)
+
+ax = fig.add_subplot(gs[2])
+lmplot(quapAM, data=df, x='MedianAgeMarriage', y='Marriage',
+       unstd=True, eval_at=A_seq_s, ax=ax)
+ax.set(xlabel='Median Age Marriage [yr]',
+       ylabel='Marriage Rate [per 1000]')
+
+# -----------------------------------------------------------------------------
 #         Create the multiple regression model (m5.3, R code 5.8)
 # -----------------------------------------------------------------------------
 with pm.Model() as multi_model:
@@ -189,6 +207,7 @@ fig = plt.figure(3, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 sts.plot_coef_table(ct, ax=ax)
 
+plt.ion()
 plt.show()
 
 # =============================================================================
