@@ -21,6 +21,7 @@ from scipy import stats, linalg
 from scipy.interpolate import BSpline
 from sklearn.utils.extmath import cartesian
 
+
 # TODO
 # * quantile and HPDI (via az.hdi) return transposes of each other for
 #   multi-dimensional inputs. Pick one or the other.
@@ -124,7 +125,7 @@ def hpdi(data, q=0.89, verbose=False, width=6, precision=4, **kwargs):
         warnings.simplefilter('ignore', category=FutureWarning)
         quantiles = np.array([az.hdi(np.asarray(data), hdi_prob=x, **kwargs)
                                 .squeeze()
-                            for x in q]).squeeze()
+                              for x in q]).squeeze()
     # need at least 2 dimensions for printing
     # if quantiles.ndim >= 3:
     #     quantiles = quantiles.squeeze()
@@ -351,6 +352,7 @@ Posterior Means:
         self.cov = self.cov.rename(index=mapper, columns=mapper)
         self.std = self.std.rename(mapper)
 
+
 def quap(vars=None, var_names=None, model=None, data=None, start=None):
     """Compute the quadratic approximation for the MAP estimate.
 
@@ -563,6 +565,95 @@ def bspline_basis(t, x=None, k=3, padded_knots=False):
         B = b(x)
         B[np.isnan(B)] = 0.0
         return B
+
+
+# TODO make own class?
+def coef_table(models, mnames=None, params=None, std=True):
+    """Create a summary table of coefficients in each model.
+
+    Parameters
+    ----------
+    models : list of `Quap`
+        The models over which to summarize.
+    mnames : list of str, optional
+        Names of the models.
+    params : list of str, optional
+        Names of specific parameters to return.
+    std : bool, optional
+        If True, also return a table of standard deviations.
+
+    Returns
+    -------
+    ct, cs : pd.DataFrame
+        DataFrames of the coefficients and their standard deviations.
+    """
+    coefs = [m.coef for m in models]
+    stds = [m.std for m in models]
+
+    def transform_ct(ct, mnames, params=None, value_name='coef'):
+        """Make coefficient table tidy for plotting"""
+        ct.columns = mnames
+        ct.index.name = 'param'
+        ct.columns.name = 'model'
+        if params is not None:
+            ct = ct.loc[params]
+        ct = (ct.T  # organize by parameter, then model
+                .melt(ignore_index=False, value_name=value_name)
+                .set_index('param', append=True)
+                .sort_index()
+              )
+        return ct
+
+    ct = transform_ct(pd.concat(coefs, axis=1), mnames, params)
+    if not std:
+        return ct
+
+    cs = transform_ct(pd.concat(stds, axis=1), mnames, params,
+                      value_name='std')
+    return pd.concat([ct, cs], axis=1)
+
+
+def plot_coef_table(ct, q=0.89, ax=None):
+    """Plot the table of coefficients from `sts.coef_table`.
+
+    Parameters
+    ----------
+    ct : :obj:`CoefTable`
+        Coefficient table output from `coef_table`.
+    q : float in [0, 1], optional
+        The probability interval to plot. 
+    ax : Axes, optional
+        The Axes on which to plot. 
+
+    Returns
+    -------
+    ax : Axes
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    # Leverage Seaborn for basic setup
+    sns.pointplot(data=ct.reset_index(), x='coef', y='param', hue='model',
+                  join=False, dodge=0.2)
+
+    # Find the x,y coordinates for each point
+    x_coords = []
+    y_coords = []
+    colors = []
+    for point_pair in ax.collections:
+        for x, y in point_pair.get_offsets():
+            if not np.ma.is_masked(x) and not np.ma.is_masked(y):
+                x_coords.append(x)
+                y_coords.append(y)
+                colors.append(point_pair.get_facecolor())
+
+    # Manually add the errorbars since we have std values already
+    z = stats.norm.ppf(1 - (1 - q)/2)
+    errs = 2 * ct['std'] * z
+    errs = errs.dropna()
+    ax.errorbar(x_coords, y_coords, fmt=' ', xerr=errs, ecolor=colors)
+    ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
+    return ax
 
 # =============================================================================
 # =============================================================================

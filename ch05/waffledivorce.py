@@ -22,7 +22,7 @@ import stats_rethinking as sts
 
 plt.ion()
 plt.style.use('seaborn-v0_8-darkgrid')
-np.random.seed(56)  # initialize random number generator
+np.random.seed(5656)  # initialize random number generator
 
 # -----------------------------------------------------------------------------
 #        Load Dataset (R code 5.1)
@@ -60,7 +60,13 @@ df = pd.read_csv(data_path / data_file)
 df['A'] = sts.standardize(df['MedianAgeMarriage'])
 df['D'] = sts.standardize(df['Divorce'])
 
-print(f"{df['MedianAgeMarriage'].std() = }")
+print(f"{df['MedianAgeMarriage'].std() = :.2f}")
+
+
+def mu_func(a, b, x):
+    """The linear relationship."""
+    return a + b*x
+
 
 # Define the model (m5.1, R code 5.3)
 with pm.Model() as the_model:
@@ -69,7 +75,7 @@ with pm.Model() as the_model:
     alpha = pm.Normal('alpha', 0, 0.2)
     beta = pm.Normal('beta', 0, 0.5)
     sigma = pm.Exponential('sigma', 1)
-    mu = pm.Deterministic('mu', alpha + beta * ind)
+    mu = pm.Deterministic('mu', mu_func(alpha, beta, ind))
     D = pm.Normal('D', mu, sigma, observed=obs, shape=ind.shape)
     quapA = sts.quap()
 
@@ -97,7 +103,10 @@ print('D ~ A:')
 sts.precis(quapA)
 
 postA = quapA.sample()
-mu_samp_s = postA['alpha'].values + postA['beta'].values * A_seq_s[:, np.newaxis]
+# mu_samp_s = postA['alpha'].values + postA['beta'].values * A_seq_s[:, np.newaxis]
+mu_samp_s = mu_func(postA['alpha'].values,
+                    postA['beta'].values,
+                    A_seq_s[:, np.newaxis])
 mu_mean_s = mu_samp_s.mean(axis=1)
 q = 0.89
 mu_pi_s = sts.percentiles(mu_samp_s, q=q, axis=1)  # 0.89 default
@@ -130,7 +139,9 @@ print('D ~ M:')
 sts.precis(quapM)
 
 postM = quapM.sample()
-mu_samp_s = postM['alpha'].values + postM['beta'].values * A_seq_s[:, np.newaxis]
+mu_samp_s = mu_func(postM['alpha'].values,
+                    postM['beta'].values,
+                    A_seq_s[:, np.newaxis])
 mu_mean_s = mu_samp_s.mean(axis=1)
 mu_pi_s = sts.percentiles(mu_samp_s, q=q, axis=1)  # 0.89 default
 
@@ -147,7 +158,9 @@ ax.fill_between(A_seq, mu_pi[0], mu_pi[1],
 ax.set(xlabel='Marriage Rate [per 1000]',
        ylabel='Divorce Rate [per 1000]')
 
-# Create the multiple regression model (m5.3, R code 5.8)
+# ----------------------------------------------------------------------------- 
+#         Create the multiple regression model (m5.3, R code 5.8)
+# -----------------------------------------------------------------------------
 with pm.Model() as multi_model:
     M = pm.MutableData('M', df['M'])
     A = pm.MutableData('A', df['A'])
@@ -163,13 +176,20 @@ with pm.Model() as multi_model:
 sts.precis(quap)
 
 # Make the coeftab plot (R code 5.9)
-quapA.rename({'beta': 'beta_A'})
+quapA.rename({'beta': 'beta_A'})  # renate for consistency with multi_model
 quapM.rename({'beta': 'beta_M'})
-coeftab = pd.concat([quapA.coef, quapM.coef, quap.coef], axis=1)
-coeftab.columns = ['m5.1', 'm5.2', 'm5.3']
 
-# ax = sns.pointplot(x=
+params = ['beta_A', 'beta_M']
+models = [quapA, quapM, quap]
+mnames = ['m5.1', 'm5.2', 'm5.3']
 
+ct = sts.coef_table(models, mnames, params)
+
+fig = plt.figure(3, clear=True, constrained_layout=True)
+ax = fig.add_subplot()
+sts.plot_coef_table(ct, ax=ax)
+
+plt.show()
 
 # =============================================================================
 # =============================================================================

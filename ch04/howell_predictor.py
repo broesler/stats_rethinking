@@ -226,6 +226,9 @@ mu_hpdi = sts.hpdi(mu_samp, q=q)  # (Nd, 2)
 # approximation samples we already have in the post df.
 # Needs coordinates: ('chain' = [0], 'draw' = [0, 1, ..., Ns])
 #
+# See: <https://github.com/rasmusbergpalm/pymc3-quap/blob/main/quap/quap.py>
+# for using `arviz.convert_to_inference_data'
+#
 # import arviz as az
 # da = (post.to_xarray()
 #           .rename({'index': 'draw'})
