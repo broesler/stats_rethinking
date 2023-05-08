@@ -88,20 +88,51 @@ da = (post.to_xarray()
         )
 tr = az.data.inference_data.InferenceData(posterior=da)
 
+
+# TODO in an ideal world, we could write the function:
+def link(fit, out='mu', params=None, eval_at=None):
+    """Sample the indermediate linear models from `the_model`."""
+    # Could use this to determine the Deterministic RVs if none specified,
+    # and loop over each output variable. 
+    # The issue with this method is that the *inputs* to each would need to
+    # be determined by traversing the pytensor graph?
+    # out_vars = set(model.deterministics)
+    out_vars = [x for x in fit.model.unobserved_RVs if x.name == out]
+    if out_vars:
+        out_var = out_vars[0]
+
+    # TODO (un)flatten list of vector or matrix parameters
+    # See: the_model.eval_rv_shapes()
+    param_vars = [x for x in fit.model.unobserved_RVs if x.name in params]
+
+    # Manual loop since params are 0-D variables in the model.
+    out_s = np.zeros((len(eval_at), len(post)))
+    for i in range(len(post)):
+        param_vals = {v: post.loc[i, v.name] for v in param_vars}
+        out_s[:, i] = out_var.eval(param_vals)
+    return out_s
+
+
 # Compute the posterior sample of mu using quap values of alpha and beta.
 with the_model:
+    # tr = pm.sample()  # actual MCMC sampling of posterior with fit data
+
+    # Choose the data on which to evaluate the model
     x_s = x
     # x_s = adults['weight'].sort_values()
-    # tr = pm.sample()  # actual MCMC sampling of posterior with fit data
     pm.set_data({'ind': x_s})
+
+    # Actual MCMC sampling
     y_samp = pm.sample_posterior_predictive(tr)
     y_mean = y_samp.posterior_predictive['h'].mean(('chain', 'draw'))
 
+    # Use quap samples directly
     # Manual loop since alpha and beta are 0-D variables in the model.
-    mu_s = np.zeros((len(x_s), len(post)))
-    for i in range(len(post)):
-        mu_s[:, i] = the_model.mu.eval({the_model.alpha: post.loc[i, 'alpha'],
-                                        the_model.beta: post.loc[i, 'beta']})
+    mu_s = link(quap, eval_at=x_s, out='mu', params=['alpha', 'beta'])
+    # mu_s = np.zeros((len(x_s), len(post)))
+    # for i in range(len(post)):
+    #     mu_s[:, i] = the_model.mu.eval({the_model.alpha: post.loc[i, 'alpha'],
+    #                                     the_model.beta: post.loc[i, 'beta']})
 
 mu_s_mean = mu_s.mean(axis=1)
 mu_s_hpdi = sts.hpdi(mu_s.T, q=q).T
