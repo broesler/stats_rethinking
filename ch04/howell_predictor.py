@@ -18,7 +18,6 @@ from scipy import stats
 
 import stats_rethinking as sts
 
-plt.ion()
 plt.style.use('seaborn-v0_8-darkgrid')
 np.random.seed(5656)  # initialize random number generator
 
@@ -88,11 +87,11 @@ $\beta \sim \mathcal{N}(0, 10)$""",
 
 
 # Restrict beta to positive values in the new model (R code 4.41 - 4.42)
-def define_linear_model(ind, obs):
+def define_linear_model(x, y):
     """Define a linear model with the given data."""
     with pm.Model() as model:
-        ind = pm.MutableData('ind', ind)
-        obs = pm.MutableData('obs', obs)
+        ind = pm.MutableData('ind', x)
+        obs = pm.MutableData('obs', y)
         alpha = pm.Normal('alpha', mu=178, sigma=20)  # parameter priors
         beta = pm.Lognormal('beta', mu=0, sigma=1)    # new prior!
         sigma = pm.Uniform('sigma', 0, 50)            # std prior
@@ -103,7 +102,7 @@ def define_linear_model(ind, obs):
 
 
 # Create the linear model ("m4.3" in R code 4.42)
-the_model = define_linear_model(ind=weight, obs=adults['height'])
+the_model = define_linear_model(x=weight, y=adults['height'])
 
 # Sample the prior and plot (like R Code 4.38 - 4.39, but with new model)
 with the_model:
@@ -158,7 +157,7 @@ for i, N in enumerate(N_test):
     wbar_n = w.mean()
 
     # MAP estimate of the parameters
-    the_model = define_linear_model(w, obs=df_n['height'])
+    the_model = define_linear_model(x=w, y=df_n['height'])
     quap = sts.quap(model=the_model)
 
     # Sample the posterior distributions of parameters
@@ -237,13 +236,50 @@ mu_hpdi = sts.hpdi(mu_samp, q=q)  # (Nd, 2)
 #         )
 # tr = az.data.inference_data.InferenceData(posterior=da)
 #
-# with the_model:
-#     # tr = pm.sample(chains=1)  # actual MCMC sampling of posterior
-#     pm.set_data({'ind': x})
-#     # pm.set_data({'ind': adults['weight']})
-#     y_samp = pm.sample_posterior_predictive(tr)
-#     y_mean = y_samp.posterior_predictive['h'].mean(('chain', 'draw'))
+# Compute the posterior sample of mu using quap values of alpha and beta.
+# NOTE The hope of this computation is to use the formula for mu already
+# present in the model to compute samples of the posterior, so that we
+# don't have to manually re-code the formula (especially in more
+# complicated cases). `mu_s` should be exactly equal to `mu_samp`. In fact,
+# if you "dummy out" the variables to return `x - x.mean()`, it works:
 #
+#   >>> np.allclose(the_model.mu.eval({the_model.alpha: 0.,
+#                                      the_model.beta: 1.}),
+#                   x - x.mean())
+#   === True
+#
+# When using the `post` values, however, we get a different answer. The offset
+# is exactly 2.267 for every value of mu. We also get nearly the same offset
+# if we sample from the posterior predictive using MCMC, so it is not an MCMC
+# sampling issue.
+# 
+# If we use `x_s = adults['weight']` (i.e. the actual data, then the
+# `mu_s_mean` line and HPDI fit the quap values exactly.
+
+# with the_model:
+#     # x_s = x
+#     x_s = adults['weight'].sort_values()
+#     # tr = pm.sample(chains=1)  # actual MCMC sampling of posterior
+#     pm.set_data({'ind': x_s})
+#     # y_samp = pm.sample_posterior_predictive(tr)
+#     # y_mean = y_samp.posterior_predictive['h'].mean(('chain', 'draw'))
+#     mu_s = np.zeros((len(post), len(x_s)))
+#     for i in range(len(post)):
+#         mu_s[i] = the_model.mu.eval({the_model.alpha: post.loc[i, 'alpha'],
+#                                      the_model.beta: post.loc[i, 'beta']})
+
+# mu_s_mean = mu_s.mean(axis=0)
+# mu_s_hpdi = sts.hpdi(mu_s, q=q)
+
+# With x_s = x:
+# [48]>>> mu_mean - mu_s_mean
+# [48]===
+# array([2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
+#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
+#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
+#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
+#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267])
+
 # # Compute rms error
 # err_mu = np.sqrt(np.sum((quap.map_est['mu'] - adults['height'])**2) / N)
 # err_y = np.sqrt(np.sum((y_mean - adults['height'])**2) / N)
@@ -255,17 +291,20 @@ fig = plt.figure(5, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
 ax.plot(x, mu_mean, 'C3', label='MAP Estimate')
-# ax.plot(x, y_mean, 'C2', label='MCMC Estimate')
+# ax.plot(x_s, mu_s_mean, 'C2', label='MCMC Estimate')
 ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
                 facecolor='k', alpha=0.3, interpolate=True,
                 label=rf"{100*q:g}% Credible Interval of $\mu$")
+# ax.fill_between(x_s, mu_s_hpdi[:, 0], mu_s_hpdi[:, 1],
+#                 facecolor='C2', alpha=0.3, interpolate=True,
+#                 label=rf"{100*q:g}% Credible Interval of $\mu$")
 ax.set(xlabel='weight [kg]',
        ylabel='height [cm]')
 ax.legend()
 
 # Calculate the prediction interval, including sigma (R code 4.59, 4.60, 4.62)
 # Manually write code for:
-#   h_samp = sts.sim(define_linear_model, Ns)
+#   h_samp = sts.sim(the_model, Ns)
 h_samp = stats.norm(mu_samp, post['sigma'].values[:, np.newaxis]).rvs()  # (Nd, Ns)
 # h_hpdi = sts.hpdi(h_samp, q=q)  # (Nd, 2)
 h_pi = sts.percentiles(h_samp, q=q, axis=0)  # (2, Nd)
@@ -277,6 +316,9 @@ ax.fill_between(x, h_pi[0], h_pi[1],
 ax.set(xlim=(28, 64), ylim=(128, 182))
 
 ax.legend()
+
+plt.ion()
+plt.show()
 
 # =============================================================================
 # =============================================================================
