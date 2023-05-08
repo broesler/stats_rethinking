@@ -215,88 +215,13 @@ mu_samp = post_mu(x, post['alpha'], post['beta'])
 mu_mean = mu_samp.mean(axis=0)    # (Nd,) average values for each data point
 mu_hpdi = sts.hpdi(mu_samp, q=q)  # (Nd, 2)
 
-# NOTE Use pm.set_data({'ind': np.arange(25, 71)}) to update the
-# model's independent variable values. Then,
-#   h_samp = pm.sample_posterior_predictive(trace)
-#   h_mean = h_samp.posterior_predictive['h'].mean(('chain', 'draw'))
-# The catch: we need a posterior sample `trace`. Since we want the quap, not
-# the actual MCMC samples, we can fake the
-# arviz.data.inference_data.InferenceData structure using the normal
-# approximation samples we already have in the post df.
-# Needs coordinates: ('chain' = [0], 'draw' = [0, 1, ..., Ns])
-#
-# See: <https://github.com/rasmusbergpalm/pymc3-quap/blob/main/quap/quap.py>
-# for using `arviz.convert_to_inference_data'
-#
-# import arviz as az
-# da = (post.to_xarray()
-#           .rename({'index': 'draw'})
-#           .expand_dims(dim='chain')
-#           .assign_coords(chain=('chain', [0]))
-#         )
-# tr = az.data.inference_data.InferenceData(posterior=da)
-#
-# Compute the posterior sample of mu using quap values of alpha and beta.
-# NOTE The hope of this computation is to use the formula for mu already
-# present in the model to compute samples of the posterior, so that we
-# don't have to manually re-code the formula (especially in more
-# complicated cases). `mu_s` should be exactly equal to `mu_samp`. In fact,
-# if you "dummy out" the variables to return `x - x.mean()`, it works:
-#
-#   >>> np.allclose(the_model.mu.eval({the_model.alpha: 0.,
-#                                      the_model.beta: 1.}),
-#                   x - x.mean())
-#   === True
-#
-# When using the `post` values, however, we get a different answer. The offset
-# is exactly 2.267 for every value of mu. We also get nearly the same offset
-# if we sample from the posterior predictive using MCMC, so it is not an MCMC
-# sampling issue.
-# 
-# If we use `x_s = adults['weight']` (i.e. the actual data, then the
-# `mu_s_mean` line and HPDI fit the quap values exactly.
-
-with the_model:
-    # x_s = x
-    x_s = adults['weight'].sort_values()
-    # tr = pm.sample(chains=1)  # actual MCMC sampling of posterior
-    pm.set_data({'ind': x_s})
-    # y_samp = pm.sample_posterior_predictive(tr)
-    # y_mean = y_samp.posterior_predictive['h'].mean(('chain', 'draw'))
-    mu_s = np.zeros((len(post), len(x_s)))
-    for i in range(len(post)):
-        mu_s[i] = the_model.mu.eval({the_model.alpha: post.loc[i, 'alpha'],
-                                     the_model.beta: post.loc[i, 'beta']})
-
-mu_s_mean = mu_s.mean(axis=0)
-mu_s_hpdi = sts.hpdi(mu_s, q=q)
-
-# With x_s = x:
-# [48]>>> mu_mean - mu_s_mean
-# [48]===
-# array([2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
-#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
-#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
-#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
-#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267])
-
-# # Compute rms error
-# err_mu = np.sqrt(np.sum((quap.map_est['mu'] - adults['height'])**2) / N)
-# err_y = np.sqrt(np.sum((y_mean - adults['height'])**2) / N)
-# # err_mu ~ 5.071880331827743 [cm]
-# # err_y ~ 5.075352921506911 [cm]
-
 # Figure 4.10 (R code 4.55, 4.57)
 fig = plt.figure(5, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
 ax.plot(x, mu_mean, 'C3', label='MAP Estimate')
-ax.plot(x_s, mu_s_mean, 'C2', label='MCMC Estimate')
 ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
                 facecolor='k', alpha=0.3, interpolate=True,
-                label=rf"{100*q:g}% Credible Interval of $\mu$")
-ax.fill_between(x_s, mu_s_hpdi[:, 0], mu_s_hpdi[:, 1],
-                facecolor='C2', alpha=0.3, interpolate=True,
                 label=rf"{100*q:g}% Credible Interval of $\mu$")
 ax.set(xlabel='weight [kg]',
        ylabel='height [cm]')

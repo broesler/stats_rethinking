@@ -88,25 +88,6 @@ da = (post.to_xarray()
         )
 tr = az.data.inference_data.InferenceData(posterior=da)
 
-# NOTE The hope of this computation is to use the formula for mu already
-# present in the model to compute samples of the posterior, so that we
-# don't have to manually re-code the formula (especially in more
-# complicated cases). `mu_s` should be exactly equal to `mu_samp`. In fact,
-# if you "dummy out" the variables to return `x - x.mean()`, it works:
-#
-#   >>> np.allclose(the_model.mu.eval({the_model.alpha: 0.,
-#                                      the_model.beta: 1.}),
-#                   x - x.mean())
-#   === True
-#
-# When using the `post` values, however, we get a different answer. The offset
-# is exactly 2.267 for every value of mu. We also get nearly the same offset
-# if we sample from the posterior predictive using MCMC, so it is not an MCMC
-# sampling issue.
-#
-# If we use `x_s = adults['weight']` (i.e. the actual data, then the
-# `mu_s_mean` line and HPDI fit the quap values exactly.
-
 # Compute the posterior sample of mu using quap values of alpha and beta.
 with the_model:
     x_s = x
@@ -117,28 +98,15 @@ with the_model:
     y_mean = y_samp.posterior_predictive['h'].mean(('chain', 'draw'))
 
     # Manual loop since alpha and beta are 0-D variables in the model.
-    mu_s = np.zeros((len(post), len(x_s)))
+    mu_s = np.zeros((len(x_s), len(post)))
     for i in range(len(post)):
-        mu_s[i] = the_model.mu.eval({the_model.alpha: post.loc[i, 'alpha'],
-                                     the_model.beta: post.loc[i, 'beta']})
+        mu_s[:, i] = the_model.mu.eval({the_model.alpha: post.loc[i, 'alpha'],
+                                        the_model.beta: post.loc[i, 'beta']})
 
-mu_s_mean = mu_s.mean(axis=0)
-mu_s_hpdi = sts.hpdi(mu_s, q=q).T
+mu_s_mean = mu_s.mean(axis=1)
+mu_s_hpdi = sts.hpdi(mu_s.T, q=q).T
 
-# With x_s = x:
-# [48]>>> mu_mean - mu_s_mean
-# [48]===
-# array([2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
-#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
-#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
-#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267, 2.267,
-#     2.267, 2.267, 2.267, 2.267, 2.267, 2.267])
-
-# # Compute rms error
-# err_mu = np.sqrt(np.sum((quap.map_est['mu'] - adults['height'])**2) / N)
-# err_y = np.sqrt(np.sum((y_mean - adults['height'])**2) / N)
-# # err_mu ~ 5.071880331827743 [cm]
-# # err_y ~ 5.075352921506911 [cm]
+assert np.allclose(mu_samp, mu_s)
 
 # Figure 4.10 (R code 4.55, 4.57)
 fig = plt.figure(1, clear=True, constrained_layout=True)
