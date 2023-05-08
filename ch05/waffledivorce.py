@@ -19,7 +19,6 @@ from pathlib import Path
 import stats_rethinking as sts
 
 plt.style.use('seaborn-v0_8-darkgrid')
-np.random.seed(5656)  # initialize random number generator
 
 # -----------------------------------------------------------------------------
 #        Load Dataset (R code 5.1)
@@ -99,7 +98,7 @@ def lmplot(quap, data, x, y, eval_at=None, unstd=False,
            q=0.89, ax=None):
     """Plot the linear model defined by `quap`."""
     if eval_at is None:
-        eval_at = data[x].values
+        eval_at = data[x].sort_values().values
     if ax is None:
         ax = plt.gca()
 
@@ -136,7 +135,7 @@ sts.precis(quapA)
 ax = fig.add_subplot(gs[1])  # right-hand plot
 lmplot(quapA, data=df, x='MedianAgeMarriage', y='Divorce',
        unstd=True, eval_at=A_seq_s, ax=ax)
-ax.set(xlabel='Median Age Marriage [yr]')
+ax.set(xlabel='Median Age Marriage [yr]', ylabel=None)
 ax.tick_params(axis='y', labelleft=None)
 
 # Repeat the model for marriage rate (m5.2, R code 5.6)
@@ -186,6 +185,7 @@ with pm.Model() as multi_model:
     D = pm.Normal('D', mu, sigma, observed=obs, shape=M.shape)
     quap = sts.quap()
 
+print('D ~ A, M')
 sts.precis(quap)
 
 # Make the coeftab plot (R code 5.9)
@@ -199,71 +199,83 @@ mnames = ['m5.1', 'm5.2', 'm5.3']
 ct = sts.coef_table(models, mnames, params)
 
 fig = plt.figure(3, clear=True, constrained_layout=True)
+fig.set_size_inches((5, 3), forward=True)
 ax = fig.add_subplot()
 sts.plot_coef_table(ct, ax=ax)
+
 
 # -----------------------------------------------------------------------------
 #         Make Posterior Plots (Section 5.1.4)
 # -----------------------------------------------------------------------------
-def residual_plot(quap, data, x, y, label_top=True, K=5, ax=None):
-    """Plot the residuals of the data."""
+def residuals(quap, data, x, y):
+    """Compute the residuals from the quadratic approximation."""
+    res = dict()
     post = quap.sample()
-    mu_samp = (post['alpha'].values 
-            + post['beta'].values * data[x].values[:, np.newaxis])
-    mu_mean = mu_samp.mean(axis=1)
-    mu_resid = data[y] - mu_mean
+    mu_samp = (post['alpha'].values
+               + post['beta'].values * data[x].values[:, np.newaxis])
+    res['mean'] = pd.Series(mu_samp.mean(axis=1), index=data.index)
+    res['residuals'] = data[y] - res['mean']
+    return res
 
+
+def residual_plot(resid, data, x, y, label_top=True, K=5, ax=None):
+    """Plot the residuals of the data."""
     x_resid = np.tile(data[x].values, (2, 1))
-    y_resid = np.c_[data[y], mu_mean].T
+    y_resid = np.c_[data[y], resid['mean']].T
 
     ax.scatter(x, y, data=data, alpha=0.4)
-    ax.plot(data[x], mu_mean, 'C0', label='MAP Prediction')
+    ax.plot(data[x], resid['mean'], 'C0', label='MAP Prediction')
     ax.plot(x_resid, y_resid, 'k', lw=1)
 
     # Label top K states
     if label_top:
-        top_idx = mu_resid.abs().sort_values()[-K:].index
+        top_idx = resid['residuals'].abs().sort_values()[-K:].index
         top_data = data.loc[top_idx]
         for x, y, label in zip(top_data[x], top_data[y], top_data['Loc']):
             ax.text(x+0.075, y, label)
 
     return ax
 
+
 # Figure 5.4 -- Predictor Residual Plot
+residAM = residuals(quapAM, data=df, x='A', y='M')
+residMA = residuals(quapAM, data=df, x='M', y='A')
+df['AM_resid'] = residAM['residuals']
+df['MA_resid'] = residMA['residuals']
+
 fig = plt.figure(4, clear=True, constrained_layout=True)
 gs = fig.add_gridspec(nrows=2, ncols=2)
 
 ax = fig.add_subplot(gs[0, 0])
-# TODO new function or just return residuals from the plot function??
-residual_plot(quapAM, data=df, x='A', y='M', ax=ax)
+residual_plot(residAM, data=df, x='A', y='M', ax=ax)
 ax.set(xlabel='Age at Marriage [std]',
        ylabel='Marriage Rate [std]')
 
 ax = fig.add_subplot(gs[0, 1])
-residual_plot(quapAM, data=df, x='M', y='A', ax=ax)
-ax.set(xlabel='Marriage Rate [std]', 
+residual_plot(residMA, data=df, x='M', y='A', ax=ax)
+ax.set(xlabel='Marriage Rate [std]',
        ylabel='Age at Marriage [std]')
 
 # Regress the divorce rate onto the residuals and plot on bottom row
 with the_model:
     pm.set_data({'ind': df['AM_resid'],
                  'obs': df['D']})
-    quapMrD = sts.quap()
+    quapMD = sts.quap()
+
+ax = fig.add_subplot(gs[1, 0])
+lmplot(quapMD, data=df, x='MA_resid', y='D', ax=ax)
+ax.set(xlabel='Marriage Rate Residuals [std]',
+       ylabel='Divorce Rate [std]')
 
 with the_model:
     pm.set_data({'ind': df['MA_resid'],
                  'obs': df['D']})
-    quapArD = sts.quap()
-
-ax = fig.add_subplot(gs[1, 0])
-residual_plot(quapMrD, data=df, x='AM_resid', y='D', ax=ax)
-ax.set(xlabel='Age at Marriage [std]',
-       ylabel='Marriage Rate [std]')
+    quapAD = sts.quap()
 
 ax = fig.add_subplot(gs[1, 1])
-residual_plot(quapArD, data=df, x='MA_resid', y='D', ax=ax)
-ax.set(xlabel='Marriage Rate [std]', 
-       ylabel='Age at Marriage [std]')
+lmplot(quapAD, data=df, x='MA_resid', y='D', ax=ax)
+ax.set(xlabel='Age at Marriage Residuals [std]',
+       ylabel='Divorce Rate [std]')
 
 
 plt.ion()

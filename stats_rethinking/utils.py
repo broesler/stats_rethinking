@@ -624,9 +624,9 @@ def plot_coef_table(ct, q=0.89, ax=None):
     ct : :obj:`CoefTable`
         Coefficient table output from `coef_table`.
     q : float in [0, 1], optional
-        The probability interval to plot. 
+        The probability interval to plot.
     ax : Axes, optional
-        The Axes on which to plot. 
+        The Axes on which to plot.
 
     Returns
     -------
