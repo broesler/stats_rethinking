@@ -343,7 +343,7 @@ ax.set_aspect('equal')
 mu_samp = (post['alpha'].values 
             + post['beta_A'].values * df[['A']].values
             + post['beta_M'].values * df[['M']].values
-            )
+            )  # (N, Ns)
 mu_mean = mu_samp.mean(axis=1)
 mu_pi = sts.percentiles(mu_samp, q=q, axis=1)
 mu_errs = np.abs(mu_pi - mu_mean)  # errorbars must be > 0
