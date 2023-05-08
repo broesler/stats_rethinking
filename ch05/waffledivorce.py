@@ -278,8 +278,12 @@ lmplot(quapAD, data=df, x='MA_resid', y='D', ax=ax)
 ax.set(xlabel='Age at Marriage Residuals [std]',
        ylabel='Divorce Rate [std]')
 
-# Counterfactual Plots (Section 5.1.4.2)
-# prepare counterfactual data
+# ----------------------------------------------------------------------------- 
+#         Counterfactual Plots (Section 5.1.4.2)
+# -----------------------------------------------------------------------------
+#   These are just the slice of the plane through x = 0 for each variable.
+
+# Prepare counterfactual data (R code 5.13)
 M_seq = np.linspace(-2, 3, 30)
 q = 0.89
 post = quap.sample()
@@ -332,6 +336,38 @@ ax.set(title='Marriage Rate [std] = 0',
 ax.tick_params(axis='y', labelleft=None)
 ax.set_aspect('equal')
 
+# ----------------------------------------------------------------------------- 
+#         Make posterior prediction plots (§5.1.4.3)
+# -----------------------------------------------------------------------------
+# Sample mu using the original data
+mu_samp = (post['alpha'].values 
+            + post['beta_A'].values * df[['A']].values
+            + post['beta_M'].values * df[['M']].values
+            )
+mu_mean = mu_samp.mean(axis=1)
+mu_pi = sts.percentiles(mu_samp, q=q, axis=1)
+mu_errs = np.abs(mu_pi - mu_mean)  # errorbars must be > 0
+
+# simulate observations
+D_samp = stats.norm(mu_samp, post['sigma']).rvs()
+D_pi = sts.percentiles(D_samp, q=q, axis=1)
+
+label_states = ['ID', 'UT', 'RI', 'ME']
+df['mu_mean'] = mu_mean
+tf = df.set_index('Loc').loc[label_states]
+
+# Figure 5.6
+fig = plt.figure(6, clear=True, constrained_layout=True)
+ax = fig.add_subplot()
+ax.errorbar(df['D'], mu_mean, c='C0', ls='None', #alpha=0.4,
+            marker='o', markerfacecolor='None',
+            yerr=mu_errs, elinewidth=1)
+ax.axline((0, 0), slope=1.0, color='k', lw=1, ls='--', alpha=0.5)
+for x, y, label in zip(tf['D'], tf['mu_mean'], tf.index):
+    ax.text(x+0.075, y, label)
+ax.set(xlabel='Observed Divorce Rate [std]',
+       ylabel='Predicted Divorce Rate [std]',
+       aspect='equal')
 
 plt.ion()
 plt.show()
