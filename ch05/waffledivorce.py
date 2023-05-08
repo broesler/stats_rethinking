@@ -15,6 +15,7 @@ import pandas as pd
 import pymc as pm
 
 from pathlib import Path
+from scipy import stats
 
 import stats_rethinking as sts
 
@@ -185,7 +186,7 @@ with pm.Model() as multi_model:
     D = pm.Normal('D', mu, sigma, observed=obs, shape=M.shape)
     quap = sts.quap()
 
-print('D ~ A, M')
+print('D ~ A, M:')
 sts.precis(quap)
 
 # Make the coeftab plot (R code 5.9)
@@ -276,6 +277,60 @@ ax = fig.add_subplot(gs[1, 1])
 lmplot(quapAD, data=df, x='MA_resid', y='D', ax=ax)
 ax.set(xlabel='Age at Marriage Residuals [std]',
        ylabel='Divorce Rate [std]')
+
+# Counterfactual Plots (Section 5.1.4.2)
+# prepare counterfactual data
+M_seq = np.linspace(-2, 3, 30)
+q = 0.89
+post = quap.sample()
+
+# Age of Marriage = 0
+mu_samp = post['alpha'].values + post['beta_M'].values * M_seq[:, np.newaxis]
+mu_mean = mu_samp.mean(axis=1)
+mu_pi = sts.percentiles(mu_samp, q=q, axis=1)
+
+# Calculate the prediction interval, including sigma
+h_samp = stats.norm(mu_samp, post['sigma']).rvs()  # (Nd, Ns)
+h_pi = sts.percentiles(h_samp, q=q, axis=1)  # (2, Nd)
+
+fig = plt.figure(5, clear=True, constrained_layout=True)
+gs = fig.add_gridspec(nrows=1, ncols=2)
+ax = fig.add_subplot(gs[0])
+
+ax.plot(M_seq, mu_mean, 'C0', label='MAP Prediction')
+ax.fill_between(M_seq, mu_pi[0], mu_pi[1],
+                facecolor='C0', alpha=0.3, interpolate=True,
+                label=rf"{100*q:g}% Percentile Interval of $\mu$")
+ax.fill_between(M_seq, h_pi[0], h_pi[1],
+                facecolor='C0', alpha=0.2, interpolate=True,
+                label=f"{100*q:g}% Percentile Interval of Height")
+ax.set(title='Median Age Marriage [std] = 0',
+       xlabel='Marriage Rate [std]',
+       ylabel='Divorce Rate [std]')
+ax.set_aspect('equal')
+
+# Marriage Rate = 0 (A_seq == M_seq)
+mu_samp = post['alpha'].values + post['beta_A'].values * M_seq[:, np.newaxis]
+mu_mean = mu_samp.mean(axis=1)
+mu_pi = sts.percentiles(mu_samp, q=q, axis=1)
+
+# Calculate the prediction interval, including sigma
+h_samp = stats.norm(mu_samp, post['sigma']).rvs()  # (Nd, Ns)
+h_pi = sts.percentiles(h_samp, q=q, axis=1)  # (2, Nd)
+
+ax = fig.add_subplot(gs[1], sharex=ax, sharey=ax)
+ax.plot(M_seq, mu_mean, 'C0', label='MAP Prediction')
+ax.fill_between(M_seq, mu_pi[0], mu_pi[1],
+                facecolor='C0', alpha=0.3, interpolate=True,
+                label=rf"{100*q:g}% Percentile Interval of $\mu$")
+ax.fill_between(M_seq, h_pi[0], h_pi[1],
+                facecolor='C0', alpha=0.2, interpolate=True,
+                label=f"{100*q:g}% Percentile Interval of Height")
+ax.set(title='Marriage Rate [std] = 0',
+       xlabel='Median Age Marriage [std]',
+       ylabel=None)
+ax.tick_params(axis='y', labelleft=None)
+ax.set_aspect('equal')
 
 
 plt.ion()
