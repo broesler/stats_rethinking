@@ -411,9 +411,8 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
     quap = Quap()
 
     # Filter variables for output
-    basic_vars = set(model.basic_RVs) - set(model.observed_RVs)
-    deter_vars = set(model.unobserved_RVs) - set(model.basic_RVs)
-    dnames = [x.name for x in deter_vars]
+    basic_vars = model.free_RVs
+    dnames = [x.name for x in model.deterministics]
 
     # If requested variables are not basic, just return all of them
     out_vars = set(mvars).intersection(set(basic_vars))
@@ -431,6 +430,7 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
             cvals.append(float(x))
             hnames.append(v)
         elif x.size > 1:
+            # TODO case of 2D, etc. variables
             # Flatten vectors into singletons 'b__0', 'b__1', ..., 'b__n'
             fmt = '02d' if x.size > 10 else 'd'
             cnames.extend([f"{v}__{k:{fmt}}" for k in range(len(x))])
@@ -453,6 +453,7 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
     quap.map_est = {k: map_est[k] for k in dnames}
     quap.model = model
     quap.start = model.initial_point if start is None else start
+    quap.data = data  # FIXME need to pass data for each call of quap!!
     return quap
 
 
