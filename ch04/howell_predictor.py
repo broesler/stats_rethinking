@@ -95,7 +95,7 @@ def define_linear_model(x, y):
         alpha = pm.Normal('alpha', mu=178, sigma=20)  # parameter priors
         beta = pm.Lognormal('beta', mu=0, sigma=1)    # new prior!
         sigma = pm.Uniform('sigma', 0, 50)            # std prior
-        mu = pm.Deterministic('mu', alpha + beta*(ind - ind.mean()))
+        mu = pm.Deterministic('mu', alpha + beta*(ind - np.mean(x)))
         # likelihood -- same shape as the independent variable!
         h = pm.Normal('h', mu=mu, sigma=sigma, observed=obs, shape=ind.shape)
     return model
@@ -256,20 +256,20 @@ mu_hpdi = sts.hpdi(mu_samp, q=q)  # (Nd, 2)
 # If we use `x_s = adults['weight']` (i.e. the actual data, then the
 # `mu_s_mean` line and HPDI fit the quap values exactly.
 
-# with the_model:
-#     # x_s = x
-#     x_s = adults['weight'].sort_values()
-#     # tr = pm.sample(chains=1)  # actual MCMC sampling of posterior
-#     pm.set_data({'ind': x_s})
-#     # y_samp = pm.sample_posterior_predictive(tr)
-#     # y_mean = y_samp.posterior_predictive['h'].mean(('chain', 'draw'))
-#     mu_s = np.zeros((len(post), len(x_s)))
-#     for i in range(len(post)):
-#         mu_s[i] = the_model.mu.eval({the_model.alpha: post.loc[i, 'alpha'],
-#                                      the_model.beta: post.loc[i, 'beta']})
+with the_model:
+    # x_s = x
+    x_s = adults['weight'].sort_values()
+    # tr = pm.sample(chains=1)  # actual MCMC sampling of posterior
+    pm.set_data({'ind': x_s})
+    # y_samp = pm.sample_posterior_predictive(tr)
+    # y_mean = y_samp.posterior_predictive['h'].mean(('chain', 'draw'))
+    mu_s = np.zeros((len(post), len(x_s)))
+    for i in range(len(post)):
+        mu_s[i] = the_model.mu.eval({the_model.alpha: post.loc[i, 'alpha'],
+                                     the_model.beta: post.loc[i, 'beta']})
 
-# mu_s_mean = mu_s.mean(axis=0)
-# mu_s_hpdi = sts.hpdi(mu_s, q=q)
+mu_s_mean = mu_s.mean(axis=0)
+mu_s_hpdi = sts.hpdi(mu_s, q=q)
 
 # With x_s = x:
 # [48]>>> mu_mean - mu_s_mean
@@ -291,13 +291,13 @@ fig = plt.figure(5, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
 ax.plot(x, mu_mean, 'C3', label='MAP Estimate')
-# ax.plot(x_s, mu_s_mean, 'C2', label='MCMC Estimate')
+ax.plot(x_s, mu_s_mean, 'C2', label='MCMC Estimate')
 ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
                 facecolor='k', alpha=0.3, interpolate=True,
                 label=rf"{100*q:g}% Credible Interval of $\mu$")
-# ax.fill_between(x_s, mu_s_hpdi[:, 0], mu_s_hpdi[:, 1],
-#                 facecolor='C2', alpha=0.3, interpolate=True,
-#                 label=rf"{100*q:g}% Credible Interval of $\mu$")
+ax.fill_between(x_s, mu_s_hpdi[:, 0], mu_s_hpdi[:, 1],
+                facecolor='C2', alpha=0.3, interpolate=True,
+                label=rf"{100*q:g}% Credible Interval of $\mu$")
 ax.set(xlabel='weight [kg]',
        ylabel='height [cm]')
 ax.legend()
