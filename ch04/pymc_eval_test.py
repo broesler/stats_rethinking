@@ -9,6 +9,7 @@ Description: Test computation of Deterministic variables with quap inputs.
 """
 # =============================================================================
 
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -80,29 +81,38 @@ h_pi = sts.percentiles(h_samp, q=q, axis=1)  # (2, Nd)
 # See: <https://github.com/rasmusbergpalm/pymc3-quap/blob/main/quap/quap.py>
 # for using `arviz.convert_to_inference_data'
 
-import arviz as az
 da = (post.to_xarray()
           .rename({'index': 'draw'})
           .expand_dims(dim='chain')
           .assign_coords(chain=('chain', [0]))
-        )
+      )
 tr = az.data.inference_data.InferenceData(posterior=da)
 
 
-# TODO in an ideal world, we could write the function:
-def link(fit, out='mu', params=None, eval_at=None):
+# TODO
+# * usage with "with model: pm.set_data(...)" vs passing in
+#   a DataFrame + an `eval_at` string
+# * how to use pymc on_unused_input='warn' so we can just pass all
+#   variables to the model.[var].eval() call and not have to specify which
+#   output gets which inputs.
+# * (un)flatten list of vector or matrix parameters
+#   See: the_model.eval_rv_shapes()
+# * rename 'eval_lm'?
+def lmeval(fit, out='mu', params=None, eval_at=None, model=None, ):
     """Sample the indermediate linear models from `the_model`."""
+    # possibility:
+    # pm.set_data(data, model=fit.model)
+    # eval_at = data[eval_at]
+
     # Could use this to determine the Deterministic RVs if none specified,
-    # and loop over each output variable. 
+    # and loop over each output variable.
     # The issue with this method is that the *inputs* to each would need to
     # be determined by traversing the pytensor graph?
-    # out_vars = set(model.deterministics)
+    # out_vars = model.deterministics
     out_vars = [x for x in fit.model.unobserved_RVs if x.name == out]
     if out_vars:
         out_var = out_vars[0]
 
-    # TODO (un)flatten list of vector or matrix parameters
-    # See: the_model.eval_rv_shapes()
     param_vars = [x for x in fit.model.unobserved_RVs if x.name in params]
 
     # Manual loop since params are 0-D variables in the model.
@@ -128,11 +138,7 @@ with the_model:
 
     # Use quap samples directly
     # Manual loop since alpha and beta are 0-D variables in the model.
-    mu_s = link(quap, eval_at=x_s, out='mu', params=['alpha', 'beta'])
-    # mu_s = np.zeros((len(x_s), len(post)))
-    # for i in range(len(post)):
-    #     mu_s[:, i] = the_model.mu.eval({the_model.alpha: post.loc[i, 'alpha'],
-    #                                     the_model.beta: post.loc[i, 'beta']})
+    mu_s = lmeval(quap, eval_at=x_s, out='mu', params=['alpha', 'beta'])
 
 mu_s_mean = mu_s.mean(axis=1)
 mu_s_hpdi = sts.hpdi(mu_s.T, q=q).T
