@@ -61,7 +61,6 @@ df['M'] = sts.standardize(df['Marriage'])
 
 print(f"{df['MedianAgeMarriage'].std() = :.2f}")
 
-
 # Define the model (m5.1, R code 5.3)
 with pm.Model() as the_model:
     ind = pm.MutableData('ind', df['A'])
@@ -91,38 +90,9 @@ ax.set(xlabel='Median Age Marriage [std]',
 ax.plot(np.tile(A, (N_lines, 1)).T, prior.prior['mu'].mean('chain').T,
         'k', alpha=0.4)
 
-
 # -----------------------------------------------------------------------------
 #         Model the relationships between the variables
 # -----------------------------------------------------------------------------
-def lmplot(quap, data, x, y, eval_at=None, unstd=False,
-           q=0.89, ax=None):
-    """Plot the linear model defined by `quap`."""
-    if eval_at is None:
-        eval_at = data[x].sort_values().values
-    if ax is None:
-        ax = plt.gca()
-
-    post = quap.sample()
-    mu_samp = (post['alpha'].values
-               + post['beta'].values * eval_at[:, np.newaxis])
-    mu_mean = mu_samp.mean(axis=1)
-    mu_pi = sts.percentiles(mu_samp, q=q, axis=1)  # 0.89 default
-
-    if unstd:
-        eval_at = sts.unstandardize(eval_at, data[x])
-        mu_mean = sts.unstandardize(mu_mean, data[y])
-        mu_pi = sts.unstandardize(mu_pi, data[y])
-
-    ax.scatter(x, y, data=data, alpha=0.4)
-    ax.plot(eval_at, mu_mean, 'C0', label='MAP Prediction')
-    ax.fill_between(eval_at, mu_pi[0], mu_pi[1],
-                    facecolor='C0', alpha=0.3, interpolate=True,
-                    label=rf"{100*q:g}% Percentile Interval of $\mu$")
-    ax.set(xlabel=x, ylabel=y)
-    return ax
-
-
 # Compute percentile interval of mean (R code 5.5)
 A_seq_s = np.linspace(-3, 3.2, 30)
 
@@ -134,7 +104,7 @@ print('D ~ A:')
 sts.precis(quapA)
 
 ax = fig.add_subplot(gs[1])  # right-hand plot
-lmplot(quapA, data=df, x='MedianAgeMarriage', y='Divorce',
+sts.lmplot(quapA, data=df, x='MedianAgeMarriage', y='Divorce',
        unstd=True, eval_at=A_seq_s, ax=ax)
 ax.set(xlabel='Median Age Marriage [yr]', ylabel=None)
 ax.tick_params(axis='y', labelleft=None)
@@ -149,7 +119,7 @@ print('D ~ M:')
 sts.precis(quapM)
 
 ax = fig.add_subplot(gs[0], sharey=ax)
-lmplot(quapM, data=df, x='Marriage', y='Divorce',
+sts.lmplot(quapM, data=df, x='Marriage', y='Divorce',
        unstd=True, eval_at=A_seq_s, ax=ax)
 ax.set(xlabel='Marriage Rate [per 1000]',
        ylabel='Divorce Rate [per 1000]')
@@ -166,7 +136,7 @@ print('M ~ A:')
 sts.precis(quapAM)
 
 ax = fig.add_subplot(gs[2])
-lmplot(quapAM, data=df, x='MedianAgeMarriage', y='Marriage',
+sts.lmplot(quapAM, data=df, x='MedianAgeMarriage', y='Marriage',
        unstd=True, eval_at=A_seq_s, ax=ax)
 ax.set(xlabel='Median Age Marriage [yr]',
        ylabel='Marriage Rate [per 1000]')
@@ -264,7 +234,7 @@ with the_model:
     quapMD = sts.quap()
 
 ax = fig.add_subplot(gs[1, 0])
-lmplot(quapMD, data=df, x='MA_resid', y='D', ax=ax)
+sts.lmplot(quapMD, data=df, x='MA_resid', y='D', ax=ax)
 ax.set(xlabel='Marriage Rate Residuals [std]',
        ylabel='Divorce Rate [std]')
 
@@ -274,7 +244,7 @@ with the_model:
     quapAD = sts.quap()
 
 ax = fig.add_subplot(gs[1, 1])
-lmplot(quapAD, data=df, x='MA_resid', y='D', ax=ax)
+sts.lmplot(quapAD, data=df, x='MA_resid', y='D', ax=ax)
 ax.set(xlabel='Age at Marriage Residuals [std]',
        ylabel='Divorce Rate [std]')
 

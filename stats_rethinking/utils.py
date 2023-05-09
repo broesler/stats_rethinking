@@ -457,9 +457,99 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
     return quap
 
 
-def sample_quap(quap, N=1000):
-    """Return a DataFrame with samples of the posterior in `quap`."""
-    return quap.sample(N)
+# TODO
+# * usage with "with model: pm.set_data(...)" vs passing in
+#   a DataFrame + an `eval_at` string
+# * how to use pymc on_unused_input='warn' so we can just pass all
+#   variables to the model.[var].eval() call and not have to specify which
+#   output gets which inputs.
+# * (un)flatten list of vector or matrix parameters
+#   See: the_model.eval_rv_shapes()
+# * rename 'eval_lm'?
+#
+def lmeval(fit, out='mu', params=None, eval_at=None, dist=None):
+    """Sample the indermediate linear models from `the_model`."""
+    pm.set_data(eval_at, model=fit.model)
+
+    if dist is None:
+        dist = fit.sample()  # take the posterior
+
+    # Could use this to determine the Deterministic RVs if none specified,
+    # and loop over each output variable.
+    # The issue with this method is that the *inputs* to each would need to
+    # be determined by traversing the pytensor graph?
+    # out_vars = model.deterministics
+    out_vars = [x for x in fit.model.unobserved_RVs if x.name == out]
+    if out_vars:
+        out_var = out_vars[0]
+    else:
+        raise ValueError(f"Variable '{out}' does not exist in the model!")
+
+    param_vars = [x for x in fit.model.unobserved_RVs if x.name in params]
+
+    # Manual loop since params are 0-D variables in the model.
+    Ne = np.max([x.size for x in eval_at.values()])
+    out_s = np.zeros((Ne, len(dist)))
+    for i in range(len(dist)):
+        param_vals = {v: dist.loc[i, v.name] for v in param_vars}
+        out_s[:, i] = out_var.eval(param_vals)
+
+    return out_s
+
+
+# TODO
+# * add "ci" = {'hpdi', 'pi', None} option
+# * use lmeval to compute mu_samp
+def lmplot(quap, data, x, y, eval_at=None, unstd=False,
+           q=0.89, ax=None):
+    """Plot the linear model defined by `quap`.
+
+    Parameters
+    ----------
+    quap : sts.Quap
+        The quadratic approximation model estimate.
+    data : DataFrame
+        The data used to fit the model.
+    x, y : str
+        The column names of the data points to plot.
+    eval_at : array_like
+        The values at which to evaluate the linear model.
+    unstd : bool
+        If True, the model was fit to standardized values, so un-standardize
+        them to plot in coordinates with real units.
+    q : float in [0, 1]
+        Quartile over which to shade the mean.
+    ax : plt.Axes
+        Axes object in which to draw the plot.
+
+    Returns
+    -------
+    ax : plt.Axes
+        The axes in which the plot was drawn.
+    """
+    if eval_at is None:
+        eval_at = data[x].sort_values().values
+    if ax is None:
+        ax = plt.gca()
+
+    post = quap.sample()
+    mu_samp = (post['alpha'].values
+               + post['beta'].values * eval_at[:, np.newaxis])
+    mu_mean = mu_samp.mean(axis=1)
+    mu_pi = sts.percentiles(mu_samp, q=q, axis=1)  # 0.89 default
+
+    if unstd:
+        eval_at = sts.unstandardize(eval_at, data[x])
+        mu_mean = sts.unstandardize(mu_mean, data[y])
+        mu_pi = sts.unstandardize(mu_pi, data[y])
+
+    ax.scatter(x, y, data=data, alpha=0.4)
+    ax.plot(eval_at, mu_mean, 'C0', label='MAP Prediction')
+    ax.fill_between(eval_at, mu_pi[0], mu_pi[1],
+                    facecolor='C0', alpha=0.3, interpolate=True,
+                    label=rf"{100*q:g}% Percentile Interval of $\mu$")
+    ax.set(xlabel=x, ylabel=y)
+    return ax
 
 
 def norm_fit(data, hist_kws=None, ax=None):
