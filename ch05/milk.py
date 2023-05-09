@@ -158,11 +158,7 @@ q = 0.89
 N_s = np.linspace(-2, 2, 30)
 
 # Plot counterfactual with M = 0
-mu_s = sts.lmeval(quap,
-                  eval_at={'N': N_s,
-                           'M': np.zeros_like(N_s)},
-                  out='μ',
-                  params=['α', 'β_N', 'β_M'])
+mu_s = sts.lmeval(quap, out=μ, eval_at={'N': N_s, 'M': np.zeros_like(N_s)})
 mu_mean = mu_s.mean(axis=1)
 mu_pi = sts.percentiles(mu_s, q=q, axis=1)
 
@@ -176,11 +172,7 @@ ax.set(title='Counterfactual, M = 0',
        ylabel='Mass [kCal/g] [std]')
 
 # Plot counterfactual with N = 0
-mu_s = sts.lmeval(quap,
-                  eval_at={'N': np.zeros_like(N_s),
-                           'M': N_s},
-                  out='μ',
-                  params=['α', 'β_N', 'β_M'])
+mu_s = sts.lmeval(quap, out=μ, eval_at={'N': np.zeros_like(N_s), 'M': N_s})
 mu_mean = mu_s.mean(axis=1)
 mu_pi = sts.percentiles(mu_s, q=q, axis=1)
 
@@ -189,7 +181,7 @@ ax.plot(N_s, mu_mean, 'C0')
 ax.fill_between(N_s, mu_pi[0], mu_pi[1],
                 facecolor='C0', alpha=0.3, interpolate=True,
                 label=rf"{100*q:g}% Percentile Interval of $\mu$")
-ax.set(title='Counterfactua, N = 0',
+ax.set(title='Counterfactual, N = 0',
        xlabel='Log(Body Mass) [std]',
        ylabel=None)
 ax.tick_params(axis='y', labelleft=None)
