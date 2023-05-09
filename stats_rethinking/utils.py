@@ -498,7 +498,8 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     eval_at : dict of str: array_like
         A dictionary of the independent variables over which to evaluate the
         model. Keys must be strings of variable names, and values must be
-        arrays with first dimension equal to the number of samples from `dist`.
+        array-like, with dimension equivalent to the corresponding variable
+        definition in the model.
     dist : dict or DataFrame
         A dict or DataFrame containing samples of the distribution of the
         `params` as values/columns.
@@ -525,12 +526,12 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         # Evaluate the model at the already-included data points
         data_vars = set(named_graph_inputs([out])) - set(inputvars(out))
         eval_at = {v.name: v.eval() for v in data_vars}
-
-    pm.set_data(eval_at, model=fit.model)
+    else:
+        pm.set_data(eval_at, model=fit.model)
 
     # Manual loop since params are 0-D variables in the model.
     Ne = np.max([x.size for x in eval_at.values()])
-    out_s = np.zeros((Ne, len(dist)))
+    out_s = np.zeros((Ne, N))
     for i in range(len(dist)):
         param_vals = {v: dist[v.name][i] for v in params}
         out_s[:, i] = out.eval(param_vals)
@@ -541,19 +542,25 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 # TODO
 # * add "ci" = {'hpdi', 'pi', None} option
 # * use lmeval to compute mu_samp
-def lmplot(quap, data, x, y, eval_at=None, unstd=False, q=0.89, ax=None):
+def lmplot(quap, mean_var, data, x, y,
+           eval_at=None, unstd=False, q=0.89, ax=None):
     """Plot the linear model defined by `quap`.
 
     Parameters
     ----------
     quap : stats_rethinking.Quap
         The quadratic approximation model estimate.
+    mean_var : TensorVariable
+        The variable corresponding to the linear model of the mean.
     data : DataFrame
         The data used to fit the model.
     x, y : str
         The column names of the data points to plot.
-    eval_at : array_like
-        The values at which to evaluate the linear model.
+    eval_at : dict of str: array_like
+        A dictionary of the independent variables over which to evaluate the
+        model. Keys must be strings of variable names, and values must be
+        array-like, with dimension equivalent to the corresponding variable
+        definition in the model.
     unstd : bool
         If True, the model was fit to standardized values, so un-standardize
         them to plot in coordinates with real units.
@@ -567,26 +574,38 @@ def lmplot(quap, data, x, y, eval_at=None, unstd=False, q=0.89, ax=None):
     ax : plt.Axes
         The axes in which the plot was drawn.
     """
+    # FIXME need to figure out how to handle these checks and balances
+    data_vars = set(named_graph_inputs([mean_var])) - set(inputvars(mean_var))
     if eval_at is None:
-        eval_at = data[x].sort_values().values
+        eval_at = {v.name: v.eval() for v in data_vars}
+        if len(eval_at) == 0:
+            raise ValueError("No independent variables in the model!")
+        elif len(eval_at) > 1:
+            raise ValueError(("More than 1 independent variable in the model!",
+                              "Please specify `eval_at={'var': values}`"))
+        else:  # len(eval_at) == 1:
+            # Use the given data to evaluate the model
+            eval_x = data[x].sort_values()
+            eval_at = {k: eval_x for k in eval_at}
+    else:
+        data_names = [v.name for v in data_vars]
+        eval_x = eval_at.values()
+
     if ax is None:
         ax = plt.gca()
 
-    post = quap.sample()
-    mu_samp = (post['alpha'].values
-               + post['beta'].values * eval_at[:, np.newaxis])
-    mu_samp = lmeval(quap)
+    mu_samp = lmeval(quap, out=mean_var, eval_at=eval_at)
     mu_mean = mu_samp.mean(axis=1)
     mu_pi = percentiles(mu_samp, q=q, axis=1)  # 0.89 default
 
     if unstd:
-        eval_at = unstandardize(eval_at, data[x])
+        eval_x = unstandardize(eval_x, data[x])
         mu_mean = unstandardize(mu_mean, data[y])
         mu_pi = unstandardize(mu_pi, data[y])
 
     ax.scatter(x, y, data=data, alpha=0.4)
-    ax.plot(eval_at, mu_mean, 'C0', label='MAP Prediction')
-    ax.fill_between(eval_at, mu_pi[0], mu_pi[1],
+    ax.plot(eval_x, mu_mean, 'C0', label='MAP Prediction')
+    ax.fill_between(eval_x, mu_pi[0], mu_pi[1],
                     facecolor='C0', alpha=0.3, interpolate=True,
                     label=rf"{100*q:g}% Percentile Interval of $\mu$")
     ax.set(xlabel=x, ylabel=y)

@@ -104,8 +104,8 @@ print('D ~ A:')
 sts.precis(quapA)
 
 ax = fig.add_subplot(gs[1])  # right-hand plot
-sts.lmplot(quapA, data=df, x='MedianAgeMarriage', y='Divorce',
-       unstd=True, eval_at=A_seq_s, ax=ax)
+sts.lmplot(quapA, mean_var=mu, data=df, x='MedianAgeMarriage', y='Divorce',
+           unstd=True, eval_at={'ind': A_seq_s}, ax=ax)
 ax.set(xlabel='Median Age Marriage [yr]', ylabel=None)
 ax.tick_params(axis='y', labelleft=None)
 
@@ -119,8 +119,8 @@ print('D ~ M:')
 sts.precis(quapM)
 
 ax = fig.add_subplot(gs[0], sharey=ax)
-sts.lmplot(quapM, data=df, x='Marriage', y='Divorce',
-       unstd=True, eval_at=A_seq_s, ax=ax)
+sts.lmplot(quapM, mean_var=mu, data=df, x='Marriage', y='Divorce',
+           unstd=True, eval_at={'ind': A_seq_s}, ax=ax)
 ax.set(xlabel='Marriage Rate [per 1000]',
        ylabel='Divorce Rate [per 1000]')
 
@@ -136,8 +136,8 @@ print('M ~ A:')
 sts.precis(quapAM)
 
 ax = fig.add_subplot(gs[2])
-sts.lmplot(quapAM, data=df, x='MedianAgeMarriage', y='Marriage',
-       unstd=True, eval_at=A_seq_s, ax=ax)
+sts.lmplot(quapAM, mean_var=mu, data=df, x='MedianAgeMarriage', y='Marriage',
+        unstd=True, eval_at={'ind': A_seq_s}, ax=ax)
 ax.set(xlabel='Median Age Marriage [yr]',
        ylabel='Marriage Rate [per 1000]')
 
@@ -234,7 +234,7 @@ with the_model:
     quapMD = sts.quap()
 
 ax = fig.add_subplot(gs[1, 0])
-sts.lmplot(quapMD, data=df, x='MA_resid', y='D', ax=ax)
+sts.lmplot(quapMD, mean_var=mu, data=df, x='MA_resid', y='D', ax=ax)
 ax.set(xlabel='Marriage Rate Residuals [std]',
        ylabel='Divorce Rate [std]')
 
@@ -244,7 +244,7 @@ with the_model:
     quapAD = sts.quap()
 
 ax = fig.add_subplot(gs[1, 1])
-sts.lmplot(quapAD, data=df, x='MA_resid', y='D', ax=ax)
+sts.lmplot(quapAD, mean_var=mu, data=df, x='MA_resid', y='D', ax=ax)
 ax.set(xlabel='Age at Marriage Residuals [std]',
        ylabel='Divorce Rate [std]')
 

@@ -126,13 +126,13 @@ sts.precis(quapMK)
 fig = plt.figure(2, clear=True, constrained_layout=True)
 gs = fig.add_gridspec(nrows=2, ncols=2)
 ax = fig.add_subplot(gs[0, 0])
-# sts.lmplot(quapNK, data=df, x='N', y='K', ax=ax)  # FIXME param names
+sts.lmplot(quapNK, mean_var=μ, data=df, x='N', y='K', ax=ax)
 ax.set(xlabel='Neocortex Percent [std]',
        ylabel='Mass [kCal/g] [std]',
        xlim=x_s, ylim=x_s)
 
 ax = fig.add_subplot(gs[0, 1])
-# sts.lmplot(quapMK, data=df, x='M', y='K', ax=ax)  # FIXME param names
+# sts.lmplot(quapMK, data=df, x='M', y='K', ax=ax)
 ax.set(xlabel='Log(Body Mass) [std]',
        ylabel=None)
 ax.tick_params(axis='y', labelleft=None)
