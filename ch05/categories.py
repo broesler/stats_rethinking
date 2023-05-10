@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import seaborn as sns
 
 from pathlib import Path
 from scipy import stats
@@ -46,7 +45,7 @@ df = pd.read_csv(data_path / data_file)
 
 # Actual pandas category:
 df['male'] = (df['male'].astype('category').cat
-                .rename_categories({0: 'female', 1: 'male'})
+              .rename_categories({0: 'female', 1: 'male'})
               )
 Nc = len(df['male'].cat.categories)
 assert Nc == 2
@@ -126,11 +125,28 @@ sts.precis(quap5_9)
 
 # Figure ?? [p 153]
 ct = sts.coef_table(models=[quap5_9], mnames=['m5.9'], params=['α'])
+
+labels = {
+    f"α__{i}": f"α__{i}: {x}"
+    for i, x in enumerate(df['clade'].cat.categories)
+}
+ct = ct.rename(labels, level='param')
+
 sts.plot_coef_table(ct, fignum=1)
 
 # Create an arbitrary new category of houses (R code 5.42)
 Nh = 4
 df['house_id'] = rng.choice(np.repeat(np.arange(Nh), 2*Nh), size=len(df))
+df['house'] = (df['house_id']
+               .astype('category')
+               .cat
+               .rename_categories({
+                   0: 'Gryffindor',
+                   1: 'Hufflepuff',
+                   2: 'Ravenclaw',
+                   3: 'Slytherin'
+                   })
+               )
 
 # Two categories in the model (R code 5.43)
 with pm.Model() as m5_10:
@@ -142,7 +158,15 @@ with pm.Model() as m5_10:
     quap5_10 = sts.quap(data=df)
 
 sts.precis(quap5_10)
+
 ct = sts.coef_table(models=[quap5_10], mnames=['m5.10'], params=['α', 'h'])
+# Update labels for easier reading
+labels |= {
+    f"h__{i}": f"h__{i}: {x}"
+    for i, x in enumerate(df['house'].cat.categories)
+}
+ct = ct.rename(labels, level='param')
+
 sts.plot_coef_table(ct, fignum=2)
 
 
