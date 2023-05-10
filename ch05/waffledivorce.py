@@ -67,7 +67,7 @@ with pm.Model() as the_model:
     obs = pm.MutableData('obs', df['D'])
     alpha = pm.Normal('alpha', 0, 0.2)
     beta = pm.Normal('beta', 0, 0.5)
-    sigma = pm.Exponential('sigma', 1)
+    sigma = pm.Exponential('sigma', 1.)
     mu = pm.Deterministic('mu', alpha + beta*ind)
     D = pm.Normal('D', mu, sigma, observed=obs, shape=ind.shape)
     # Compute the MAP estimate quadratic approximation
@@ -98,6 +98,7 @@ A_seq_s = np.linspace(-3, 3.2, 30)
 
 # Make the RHS plot (R code 5.5)
 fig = plt.figure(2, clear=True, constrained_layout=True)
+fig.set_size_inches((10, 4), forward=True)
 gs = fig.add_gridspec(nrows=1, ncols=3)
 
 print('D ~ A:')
@@ -234,7 +235,7 @@ with the_model:
     quapMD = sts.quap()
 
 ax = fig.add_subplot(gs[1, 0])
-sts.lmplot(quapMD, mean_var=mu, data=df, x='MA_resid', y='D', ax=ax)
+sts.lmplot(quapMD, mean_var=the_model.mu, data=df, x='MA_resid', y='D', ax=ax)
 ax.set(xlabel='Marriage Rate Residuals [std]',
        ylabel='Divorce Rate [std]')
 
@@ -244,7 +245,7 @@ with the_model:
     quapAD = sts.quap()
 
 ax = fig.add_subplot(gs[1, 1])
-sts.lmplot(quapAD, mean_var=mu, data=df, x='MA_resid', y='D', ax=ax)
+sts.lmplot(quapAD, mean_var=the_model.mu, data=df, x='MA_resid', y='D', ax=ax)
 ax.set(xlabel='Age at Marriage Residuals [std]',
        ylabel='Divorce Rate [std]')
 
