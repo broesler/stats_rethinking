@@ -317,7 +317,7 @@ class Quap():
     map_est : dict
         Maximum *a posteriori* estimates of any Deterministic or Potential
         variables.
-    model : :obj:`pymc.Model`
+    model : :class:`pymc.Model`
         The pymc model object used to define the posterior.
     start : dict
         Initial parameter values for the MAP optimization. Defaults to
@@ -481,7 +481,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 
     Parameters
     ----------
-    fit : stats_rethinking.Quap or similar
+    fit : :class:`stats_rethinking.Quap` or similar
         An object containing a pymc model and a posterior distribution.
     out : TensorVariable
         The output variable corresponding to the linear model.
