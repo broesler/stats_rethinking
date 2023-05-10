@@ -67,6 +67,7 @@ df1 = pd.DataFrame({'M': M, 'N': N, 'K': K})
 m5_5 = build_linear_model(df1, x='N', y='K')
 m5_6 = build_linear_model(df1, x='M', y='K')
 m5_7 = build_linear_model(df1, x='M', x1='N', y='K')
+print()
 print('N -> M:')
 print(sts.coef_table(
     models=[m5_5, m5_6, m5_7],
@@ -84,6 +85,7 @@ df2 = pd.DataFrame({'M': M, 'N': N, 'K': K})
 m5_5 = build_linear_model(df2, x='N', y='K')
 m5_6 = build_linear_model(df2, x='M', y='K')
 m5_7 = build_linear_model(df2, x='M', x1='N', y='K')
+print()
 print('M <- U -> N:')
 print(sts.coef_table(
     models=[m5_5, m5_6, m5_7],
@@ -91,6 +93,49 @@ print(sts.coef_table(
     params=['β', 'β_1']
 ))
 
+
+# ----------------------------------------------------------------------------- 
+#         Plot the data in 3D space to see the fitted plane
+# -----------------------------------------------------------------------------
+Mg, Ng = np.ogrid[-4.5:4.5, -4.5:4.5]
+# TODO lmeval for multi-dimensional inputs
+Kg = m5_7.coef['α'] + m5_7.coef['β'] * Mg + m5_7.coef['β_1'] * Ng
+
+# Plot bi-linear model slices
+M_s = N_s = np.arange(-4, 5)
+K_N0 = m5_7.coef['α'] + m5_7.coef['β'] * M_s
+K_M0 = m5_7.coef['α'] + m5_7.coef['β_1'] * N_s
+
+# Plot univariate model projections
+K_N = m5_5.coef['α'] + m5_5.coef['β'] * N_s
+K_M = m5_6.coef['α'] + m5_6.coef['β'] * M_s
+
+fig = plt.figure(1, clear=True, constrained_layout=True)
+ax = fig.add_subplot(projection='3d')
+
+# Plot 3D data and fitted surface
+ax.scatter(M, N, K, c='k', alpha=0.4)
+ax.plot_surface(Mg, Ng, Kg, edgecolor='k', lw=0.5, alpha=0.2)
+ax.plot(M_s, K_N0, zdir='y', color='k')
+ax.plot(N_s, K_M0, zdir='x', color='k')
+
+# Plot the projections onto the "walls" of the graph
+ax.scatter(M, K, zdir='y', zs=max(N_s), color='C0', alpha=0.4)
+ax.plot(M_s, K_M, zdir='y', zs=max(N_s), color='C0')
+
+ax.scatter(N, K, zdir='x', zs=min(M_s), color='C3', alpha=0.4)
+ax.plot(N_s, K_N, zdir='x', zs=min(M_s), color='C3')
+
+ax.set(xlabel='M', xlim=(min(M_s), max(M_s)),
+       ylabel='N', ylim=(min(N_s), max(N_s)),
+       zlabel='K',
+       proj_type='ortho')
+
+# ax.view_init(0, 0, 0)  # projection onto M-K plane
+# ax.view_init(0, -90, 0)  # projection onto M-K plane
+
+plt.ion()
+plt.show()
 
 # =============================================================================
 # =============================================================================
