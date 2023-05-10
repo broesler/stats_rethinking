@@ -531,7 +531,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 
     # Manual loop since params are 0-D variables in the model.
     Ne = np.max([x.size for x in eval_at.values()])
-    out_s = np.zeros((Ne, N))
+    out_s = np.zeros((Ne, len(dist)))
     for i in range(len(dist)):
         param_vals = {v: dist[v.name][i] for v in params}
         out_s[:, i] = out.eval(param_vals)
@@ -541,7 +541,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 
 # TODO
 # * add "ci" = {'hpdi', 'pi', None} option
-def lmplot(quap, mean_var, data, x, y,
+def lmplot(quap, mean_var, x, y, data=None,
            eval_at=None, unstd=False, q=0.89, ax=None):
     """Plot the linear model defined by `quap`.
 
@@ -573,16 +573,6 @@ def lmplot(quap, mean_var, data, x, y,
     ax : plt.Axes
         The axes in which the plot was drawn.
     """
-    # FIXME need to figure out how to handle these checks and balances
-    # Cases:
-    # * eval_at given, name(s) match data vars -> if len(eval_at) ≠ 1, error
-    # * eval_at given, but name(s) don't match data vars -> error
-    # * eval_at not given, x doesn't match data vars ->
-    #       if len(data_vars) ≠ 1, error
-    #       else 
-    # * eval_at not given, x matches data vars -> eval_at = {x: data[x]}
-    # * data not given -> do not plot scatter, x must be given
-
     # TODO? remove ALL of this nonsense and just require mu_samp as an input.
     # User code then calls:
     #   mu_s = lmeval()
@@ -622,7 +612,8 @@ def lmplot(quap, mean_var, data, x, y,
         mu_mean = unstandardize(mu_mean, data[y])
         mu_pi = unstandardize(mu_pi, data[y])
 
-    ax.scatter(x, y, data=data, alpha=0.4)
+    if data is not None:
+        ax.scatter(x, y, data=data, alpha=0.4)
     ax.plot(xe, mu_mean, 'C0', label='MAP Prediction')
     ax.fill_between(xe, mu_pi[0], mu_pi[1],
                     facecolor='C0', alpha=0.3, interpolate=True,

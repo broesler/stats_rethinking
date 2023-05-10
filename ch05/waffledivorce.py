@@ -252,7 +252,9 @@ ax.set(xlabel='Age at Marriage Residuals [std]',
 # ----------------------------------------------------------------------------- 
 #         Counterfactual Plots (Section 5.1.4.2)
 # -----------------------------------------------------------------------------
-#   These are just the slice of the plane through x = 0 for each variable.
+#  These are just the slice of the plane through x = 0 for each variable, as
+#  opposed to the D ~ A or D ~ M models, which are the *projection* of the data
+#  onto the plane M = 0 or A = 0, respectively.
 
 # Prepare counterfactual data (R code 5.13)
 M_seq = np.linspace(-2, 3, 30)
@@ -260,7 +262,8 @@ q = 0.89
 post = quap.sample()
 
 # Age of Marriage = 0
-mu_samp = post['alpha'].values + post['beta_M'].values * M_seq[:, np.newaxis]
+mu_samp = sts.lmeval(quap, out=quap.model.mu, dist=post,
+                     eval_at={'M': M_seq, 'A': np.zeros_like(M_seq)})
 mu_mean = mu_samp.mean(axis=1)
 mu_pi = sts.percentiles(mu_samp, q=q, axis=1)
 
@@ -285,7 +288,8 @@ ax.set(title='Median Age Marriage [std] = 0',
 ax.set_aspect('equal')
 
 # Marriage Rate = 0 (A_seq == M_seq)
-mu_samp = post['alpha'].values + post['beta_A'].values * M_seq[:, np.newaxis]
+mu_samp = sts.lmeval(quap, out=quap.model.mu, dist=post,
+                     eval_at={'M': np.zeros_like(M_seq), 'A': M_seq})
 mu_mean = mu_samp.mean(axis=1)
 mu_pi = sts.percentiles(mu_samp, q=q, axis=1)
 

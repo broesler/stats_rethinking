@@ -161,31 +161,17 @@ q = 0.89
 N_s = np.linspace(-2, 2, 30)
 
 # Plot counterfactual with M = 0
-mu_s = sts.lmeval(quap, out=μ, eval_at={'N': N_s, 'M': np.zeros_like(N_s)})
-mu_mean = mu_s.mean(axis=1)
-mu_pi = sts.percentiles(mu_s, q=q, axis=1)
-
 ax = fig.add_subplot(gs[1, 0], sharex=fig.axes[0], sharey=ax)
-# TODO implement data=None option to just plot mean
-# sts.lmplot(quap, mean_var=μ, eval_at={'N': N_s, 'M': np.zeros_like(N_s)})
-ax.plot(N_s, mu_mean, 'C0')
-ax.fill_between(N_s, mu_pi[0], mu_pi[1],
-                facecolor='C0', alpha=0.3, interpolate=True,
-                label=rf"{100*q:g}% Percentile Interval of $\mu$")
+sts.lmplot(quap, mean_var=μ, x='N', y='K',
+           eval_at={'N': N_s, 'M': np.zeros_like(N_s)}, ax=ax)
 ax.set(title='Counterfactual, M = 0',
        xlabel='Neocortex Percent [std]',
        ylabel='Mass [kCal/g] [std]')
 
 # Plot counterfactual with N = 0
-mu_s = sts.lmeval(quap, out=μ, eval_at={'N': np.zeros_like(N_s), 'M': N_s})
-mu_mean = mu_s.mean(axis=1)
-mu_pi = sts.percentiles(mu_s, q=q, axis=1)
-
 ax = fig.add_subplot(gs[1, 1], sharex=fig.axes[1], sharey=ax)
-ax.plot(N_s, mu_mean, 'C0')
-ax.fill_between(N_s, mu_pi[0], mu_pi[1],
-                facecolor='C0', alpha=0.3, interpolate=True,
-                label=rf"{100*q:g}% Percentile Interval of $\mu$")
+sts.lmplot(quap, mean_var=μ, x='M', y='K', 
+           eval_at={'N': np.zeros_like(N_s), 'M': N_s}, ax=ax)
 ax.set(title='Counterfactual, N = 0',
        xlabel='Log(Body Mass) [std]',
        ylabel=None)
