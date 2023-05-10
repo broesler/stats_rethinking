@@ -43,12 +43,14 @@ with model:
 # az.plot_lm(idata=idata, y='obs', x=xv)
 
 fig, ax = plt.subplots(1, clear=True, constrained_layout=True)
+ax.axline((0, 0), slope=1., ls='--', lw=1, c='k')
 ax.scatter(idata.constant_data['x'], idata.constant_data['y'], 
            c='k', marker='x', label='Observed')
 ax.scatter(ya_samp.constant_data['x'], ya, label='Posterior Predictive (a)')
 ax.scatter(yb_samp.constant_data['x'], yb, c='C1', label='Posterior Predictive (b)')
 ax.plot(yb_samp.constant_data['x'], yb, 'C1')
 ax.set(aspect='equal', xlabel='x', ylabel='y')
+ax.grid(True)
 ax.legend()
 
 # az.plot_ppc(ya_samp, kind='scatter')
