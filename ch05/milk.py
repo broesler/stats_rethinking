@@ -127,6 +127,7 @@ sts.precis(quapMK)
 
 # Plot the regressions
 fig = plt.figure(2, clear=True, tight_layout=True)
+fig.set_size_inches((6, 6), forward=True)
 gs = fig.add_gridspec(nrows=2, ncols=2)
 ax = fig.add_subplot(gs[0, 0])
 sts.lmplot(quapNK, mean_var=quapNK.model.μ, data=df, x='N', y='K', ax=ax)
@@ -134,13 +135,13 @@ ax.set(xlabel='Neocortex Percent [std]',
        ylabel='Mass [kCal/g] [std]',
        xlim=x_s, ylim=x_s)
 
-ax = fig.add_subplot(gs[0, 1])
+ax = fig.add_subplot(gs[0, 1], sharey=ax)
 sts.lmplot(quapMK, mean_var=quapMK.model.μ, data=df, x='M', y='K', ax=ax)
 ax.set(xlabel='Log(Body Mass) [std]',
        ylabel=None)
 ax.tick_params(axis='y', labelleft=None)
 
-# Compute the full model
+# Compute the full model (R code 5.29)
 with pm.Model() as m5_7:
     N = pm.MutableData('N', df['N'])
     M = pm.MutableData('M', df['M'])
@@ -160,7 +161,7 @@ sts.precis(quap)
 q = 0.89
 N_s = np.linspace(-2, 2, 30)
 
-# Plot counterfactual with M = 0
+# Plot counterfactual with M = 0 (R code 5.31)
 ax = fig.add_subplot(gs[1, 0], sharex=fig.axes[0], sharey=ax)
 sts.lmplot(quap, mean_var=μ, x='N', y='K',
            eval_at={'N': N_s, 'M': np.zeros_like(N_s)}, ax=ax)
@@ -170,7 +171,7 @@ ax.set(title='Counterfactual, M = 0',
 
 # Plot counterfactual with N = 0
 ax = fig.add_subplot(gs[1, 1], sharex=fig.axes[1], sharey=ax)
-sts.lmplot(quap, mean_var=μ, x='M', y='K', 
+sts.lmplot(quap, mean_var=μ, x='M', y='K',
            eval_at={'N': np.zeros_like(N_s), 'M': N_s}, ax=ax)
 ax.set(title='Counterfactual, N = 0',
        xlabel='Log(Body Mass) [std]',
@@ -179,6 +180,17 @@ ax.tick_params(axis='y', labelleft=None)
 
 for ax in fig.axes:
     ax.set_aspect('equal')
+
+# (R code 5.30)
+ct = sts.coef_table(models=[quapMK, quapNK, quap],
+                    mnames=['m5.5', 'm5.6', 'm5.7'],
+                    params=['β_M', 'β_N']
+                    )
+
+fig = plt.figure(3, clear=True, constrained_layout=True)
+fig.set_size_inches((5, 3), forward=True)
+ax = fig.add_subplot()
+sts.plot_coef_table(ct, ax=ax)
 
 plt.ion()
 plt.show()

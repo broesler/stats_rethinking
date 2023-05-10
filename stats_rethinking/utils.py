@@ -472,12 +472,6 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
 
 
 # TODO
-# * usage with "with model: pm.set_data(...)" vs passing in
-#   a DataFrame + an `eval_at` string
-# * how to use pymc on_unused_input='warn' so we can just pass all
-#   variables to the model.[var].eval() call and not have to specify which
-#   output gets which inputs.
-#   --> better way: get the input variables!
 # * (un)flatten list of vector or matrix parameters
 #   See: the_model.eval_rv_shapes()
 # * keep_data=True? Need to get model data for each `eval_at.keys()`
