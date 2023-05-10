@@ -541,7 +541,6 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 
 # TODO
 # * add "ci" = {'hpdi', 'pi', None} option
-# * use lmeval to compute mu_samp
 def lmplot(quap, mean_var, data, x, y,
            eval_at=None, unstd=False, q=0.89, ax=None):
     """Plot the linear model defined by `quap`.
@@ -575,21 +574,41 @@ def lmplot(quap, mean_var, data, x, y,
         The axes in which the plot was drawn.
     """
     # FIXME need to figure out how to handle these checks and balances
+    # Cases:
+    # * eval_at given, name(s) match data vars -> if len(eval_at) ≠ 1, error
+    # * eval_at given, but name(s) don't match data vars -> error
+    # * eval_at not given, x doesn't match data vars ->
+    #       if len(data_vars) ≠ 1, error
+    #       else 
+    # * eval_at not given, x matches data vars -> eval_at = {x: data[x]}
+    # * data not given -> do not plot scatter, x must be given
+
+    # TODO? remove ALL of this nonsense and just require mu_samp as an input.
+    # User code then calls:
+    #   mu_s = lmeval()
+    #   lmplot(mu_s, ...)
     data_vars = set(named_graph_inputs([mean_var])) - set(inputvars(mean_var))
+    data_names = [v.name for v in data_vars]
+
     if eval_at is None:
-        eval_at = {v.name: v.eval() for v in data_vars}
-        if len(eval_at) == 0:
-            raise ValueError("No independent variables in the model!")
-        elif len(eval_at) > 1:
-            raise ValueError(("More than 1 independent variable in the model!",
-                              "Please specify `eval_at={'var': values}`"))
-        else:  # len(eval_at) == 1:
-            # Use the given data to evaluate the model
-            eval_x = data[x].sort_values()
-            eval_at = {k: eval_x for k in eval_at}
+        # Use the given data to evaluate the model
+        if len(data_vars) == 1:
+            xe = data[x].sort_values()
+            eval_at = {data_names[0]: xe}
+        else:
+            if x in data_names:
+                xe = data[x].sort_values()
+                eval_at = {x: xe}
+            else:
+                raise ValueError(("More than 1 independent variable in the model!",
+                                  "Please specify `eval_at`"))
     else:
-        data_names = [v.name for v in data_vars]
-        eval_x = eval_at.values()
+        if len(eval_at) == 1:
+            xe = list(eval_at.values())[0]
+        elif x in eval_at:
+            xe = eval_at[x]
+        else:
+            raise ValueError(f"Variable '{x}' not found in model.")
 
     if ax is None:
         ax = plt.gca()
@@ -599,13 +618,13 @@ def lmplot(quap, mean_var, data, x, y,
     mu_pi = percentiles(mu_samp, q=q, axis=1)  # 0.89 default
 
     if unstd:
-        eval_x = unstandardize(eval_x, data[x])
+        xe = unstandardize(xe, data[x])
         mu_mean = unstandardize(mu_mean, data[y])
         mu_pi = unstandardize(mu_pi, data[y])
 
     ax.scatter(x, y, data=data, alpha=0.4)
-    ax.plot(eval_x, mu_mean, 'C0', label='MAP Prediction')
-    ax.fill_between(eval_x, mu_pi[0], mu_pi[1],
+    ax.plot(xe, mu_mean, 'C0', label='MAP Prediction')
+    ax.fill_between(xe, mu_pi[0], mu_pi[1],
                     facecolor='C0', alpha=0.3, interpolate=True,
                     label=rf"{100*q:g}% Percentile Interval of $\mu$")
     ax.set(xlabel=x, ylabel=y)

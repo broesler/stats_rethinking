@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 
+from copy import deepcopy
 from pathlib import Path
 from scipy import stats
 
@@ -111,11 +112,13 @@ ax.tick_params(axis='y', labelleft=None)
 #         Figure 5.8
 # -----------------------------------------------------------------------------
 # (R code 5.28, model m5.6)
-with m5_5:
+m5_6 = deepcopy(m5_5)
+with m5_6:
     pm.set_data({'ind': df['M'],
                  'obs': df['K']})
     quapMK = sts.quap()
     quapMK.rename({'β_N': 'β_M'})
+    m5_6.β_N.name = 'β_M'
 
 print('K ~ N:')
 sts.precis(quapNK)
@@ -123,16 +126,16 @@ print('K ~ M:')
 sts.precis(quapMK)
 
 # Plot the regressions
-fig = plt.figure(2, clear=True, constrained_layout=True)
+fig = plt.figure(2, clear=True, tight_layout=True)
 gs = fig.add_gridspec(nrows=2, ncols=2)
 ax = fig.add_subplot(gs[0, 0])
-sts.lmplot(quapNK, mean_var=μ, data=df, x='N', y='K', ax=ax)
+sts.lmplot(quapNK, mean_var=quapNK.model.μ, data=df, x='N', y='K', ax=ax)
 ax.set(xlabel='Neocortex Percent [std]',
        ylabel='Mass [kCal/g] [std]',
        xlim=x_s, ylim=x_s)
 
 ax = fig.add_subplot(gs[0, 1])
-# sts.lmplot(quapMK, data=df, x='M', y='K', ax=ax)
+sts.lmplot(quapMK, mean_var=quapMK.model.μ, data=df, x='M', y='K', ax=ax)
 ax.set(xlabel='Log(Body Mass) [std]',
        ylabel=None)
 ax.tick_params(axis='y', labelleft=None)
@@ -163,6 +166,8 @@ mu_mean = mu_s.mean(axis=1)
 mu_pi = sts.percentiles(mu_s, q=q, axis=1)
 
 ax = fig.add_subplot(gs[1, 0], sharex=fig.axes[0], sharey=ax)
+# TODO implement data=None option to just plot mean
+# sts.lmplot(quap, mean_var=μ, eval_at={'N': N_s, 'M': np.zeros_like(N_s)})
 ax.plot(N_s, mu_mean, 'C0')
 ax.fill_between(N_s, mu_pi[0], mu_pi[1],
                 facecolor='C0', alpha=0.3, interpolate=True,
