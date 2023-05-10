@@ -28,6 +28,7 @@ from pytensor.tensor.var import TensorConstant, TensorVariable
 from scipy import stats, linalg
 from scipy.interpolate import BSpline
 from sklearn.utils.extmath import cartesian
+from sparkline import sparkify
 
 # TODO
 # * define __all__ for the package to declutter internal variables
@@ -240,7 +241,7 @@ def expand_grid(**kwargs):
 #       See: <https://github.com/rmcelreath/rethinking/blob/master/R/precis.r>
 #       pythonic way would be to make objects that contain a precis method.
 #
-def precis(obj, p=0.89, digits=4, verbose=True):
+def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
 
@@ -274,6 +275,8 @@ def precis(obj, p=0.89, digits=4, verbose=True):
         hi = obj.coef + z * obj.std
         df = pd.concat([obj.coef, obj.std, lo, hi], axis=1)
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
+        # if hist:
+        #     df['histogram'] = sparklines_from_norm(df['mean'], df['std'])
 
     # DataFrame of data points
     if isinstance(obj, pd.DataFrame):
@@ -283,6 +286,8 @@ def precis(obj, p=0.89, digits=4, verbose=True):
         df['std'] = obj.std()
         for i in range(2):
             df[f"{pp[i]:g}%"] = obj.apply(lambda x: np.nanpercentile(x, pp[i]))
+        if hist:
+            df['histogram'] = sparklines_from_dataframe(obj)
 
     # Numpy array of data points
     if isinstance(obj, np.ndarray):
@@ -294,6 +299,8 @@ def precis(obj, p=0.89, digits=4, verbose=True):
         df = pd.DataFrame(vals,
                           columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
                           )
+        if hist:
+            df['histogram'] = sparklines_from_array(obj)
 
     if verbose:
         with pd.option_context('display.float_format',
@@ -301,6 +308,35 @@ def precis(obj, p=0.89, digits=4, verbose=True):
             print(df)
 
     return df
+
+
+def sparklines_from_norm(means, stds, width=12):
+    """Generate list of sparklines from means and stds."""
+    # Create matrix of samples
+    assert len(means) == len(stds)
+    Nm = len(means)
+    Ns = 1000
+    samp = stats.norm(np.c_[means], np.c_[stds]).rvs(size=(Nm, Ns))
+    sparklines = []
+    for s in samp:
+        sparklines.append(sparkify(np.histogram(s, bins=width)[0]))
+    return sparklines
+
+
+def sparklines_from_dataframe(df, width=12):
+    """Generate list of sparklines from a DataFrame."""
+    sparklines = []
+    for col in df:
+        sparklines.append(sparkify(np.histogram(df[col], bins=width)[0]))
+    return sparklines
+
+
+def sparklines_from_array(arr, width=12):
+    """Generate list of sparklines from an array of data."""
+    sparklines = []
+    for col in arr.T:
+        sparklines.append(sparkify(np.histogram(col, bins=width)[0]))
+    return sparklines
 
 
 class Quap():
