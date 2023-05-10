@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
+import seaborn as sns
 
 from copy import deepcopy
 from pathlib import Path
@@ -191,6 +192,8 @@ fig = plt.figure(3, clear=True, constrained_layout=True)
 fig.set_size_inches((5, 3), forward=True)
 ax = fig.add_subplot()
 sts.plot_coef_table(ct, ax=ax)
+
+sns.pairplot(data=df, vars=['M', 'N', 'K'])
 
 plt.ion()
 plt.show()
