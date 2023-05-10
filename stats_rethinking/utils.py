@@ -327,7 +327,8 @@ def sparklines_from_dataframe(df, width=12):
     """Generate list of sparklines from a DataFrame."""
     sparklines = []
     for col in df:
-        sparklines.append(sparkify(np.histogram(df[col], bins=width)[0]))
+        data = df[col].dropna()
+        sparklines.append(sparkify(np.histogram(data, bins=width)[0]))
     return sparklines
 
 
@@ -335,7 +336,8 @@ def sparklines_from_array(arr, width=12):
     """Generate list of sparklines from an array of data."""
     sparklines = []
     for col in arr.T:
-        sparklines.append(sparkify(np.histogram(col, bins=width)[0]))
+        data = col[np.isfinite(col)]
+        sparklines.append(sparkify(np.histogram(data, bins=width)[0]))
     return sparklines
 
 
@@ -844,9 +846,10 @@ def coef_table(models, mnames=None, params=None, std=True):
     coefs = [m.coef for m in models]
     stds = [m.std for m in models]
 
-    def transform_ct(ct, mnames, params=None, value_name='coef'):
+    def transform_ct(ct, mnames=None, params=None, value_name='coef'):
         """Make coefficient table tidy for plotting"""
-        ct.columns = mnames
+        if mnames is not None:
+            ct.columns = mnames
         ct.index.name = 'param'
         ct.columns.name = 'model'
         if params is not None:
