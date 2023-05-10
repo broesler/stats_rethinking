@@ -612,6 +612,7 @@ def lmplot(quap, mean_var, x, y, data=None,
     data_vars = set(named_graph_inputs([mean_var])) - set(inputvars(mean_var))
     data_names = [v.name for v in data_vars]
 
+    # TODO len(data_vars) == 0 error!!
     if eval_at is None:
         # Use the given data to evaluate the model
         if len(data_vars) == 1:
