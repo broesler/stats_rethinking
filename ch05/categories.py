@@ -125,7 +125,8 @@ with pm.Model() as m5_9:
 sts.precis(quap5_9)
 
 # Figure ?? [p 153]
-sts.plot_coef_table(sts.coef_table(models=[quap5_9], mnames=['m5.9']))
+ct = sts.coef_table(models=[quap5_9], mnames=['m5.9'], params=['α'])
+sts.plot_coef_table(ct, fignum=1)
 
 # Create an arbitrary new category of houses (R code 5.42)
 Nh = 4
@@ -141,6 +142,8 @@ with pm.Model() as m5_10:
     quap5_10 = sts.quap(data=df)
 
 sts.precis(quap5_10)
+ct = sts.coef_table(models=[quap5_10], mnames=['m5.10'], params=['α', 'h'])
+sts.plot_coef_table(ct, fignum=2)
 
 
 plt.ion()

@@ -852,8 +852,16 @@ def coef_table(models, mnames=None, params=None, std=True):
             ct.columns = mnames
         ct.index.name = 'param'
         ct.columns.name = 'model'
+        # Use params to filter by indexed variables 'a__0', 'a__1', etc.
+        # should result from passing params=['a']
         if params is not None:
-            ct = ct.loc[params]
+            try:
+                subtables = [ct.loc[params]]  # track each filtered table
+            except KeyError:
+                subtables = []
+            for p in params:
+                subtables.append(ct.filter(regex=f"^{p}__[0-9]+", axis=0))
+            ct = pd.concat(subtables).drop_duplicates()
         ct = (ct.T  # organize by parameter, then model
                 .melt(ignore_index=False, value_name=value_name)
                 .set_index('param', append=True)
@@ -870,7 +878,7 @@ def coef_table(models, mnames=None, params=None, std=True):
     return pd.concat([ct, cs], axis=1)
 
 
-def plot_coef_table(ct, q=0.89, ax=None):
+def plot_coef_table(ct, q=0.89, fignum=None):
     """Plot the table of coefficients from `sts.coef_table`.
 
     Parameters
@@ -884,14 +892,17 @@ def plot_coef_table(ct, q=0.89, ax=None):
 
     Returns
     -------
-    ax : Axes
+    fig, ax : Figure and Axes where the plot was made.
     """
-    if ax is None:
-        ax = plt.gca()
+    fig = plt.figure(fignum, clear=True, constrained_layout=True)
+    if not fig.axes:
+        ax = fig.add_subplot()
+    else:
+        ax = fig.axes[-1]  # take most recent
 
     # Leverage Seaborn for basic setup
     sns.pointplot(data=ct.reset_index(), x='coef', y='param', hue='model',
-                  join=False, dodge=0.2)
+                  join=False, dodge=0.2, ax=ax)
 
     # Find the x,y coordinates for each point
     x_coords = []
@@ -910,7 +921,7 @@ def plot_coef_table(ct, q=0.89, ax=None):
     errs = errs.dropna()
     ax.errorbar(x_coords, y_coords, fmt=' ', xerr=errs, ecolor=colors)
     ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
-    return ax
+    return fig, ax
 
 # =============================================================================
 # =============================================================================
