@@ -54,9 +54,10 @@ df['G'] = sts.standardize(df['groupsize'])  # assume groupsize is continuous?
 
 # (1) body weight ~ territory size (area)
 with pm.Model() as mWA:
+    ind = pm.MutableData('ind', df['A'])
     α = pm.Normal('α', 0, 0.2)
     β = pm.Normal('β', 0, 0.5)
-    μ = pm.Deterministic('μ', α + β * df['A'])
+    μ = pm.Deterministic('μ', α + β * ind)
     σ = pm.Exponential('σ', 1)
     W = pm.Normal('W', μ, σ, observed=df['W'])
     quapWA = sts.quap(data=df)
@@ -67,10 +68,25 @@ sts.precis(quapWA)
 # Plot the regressions
 fig = plt.figure(1, clear=True, tight_layout=True)
 ax = fig.add_subplot()
-sts.lmplot(quapWA, mean_var=quapWA.model.μ, data=df, x='A', y='W', ax=ax)
+sts.lmplot(quapWA, mean_var=quapWA.model.μ, 
+           data=df, x='area', y='weight', unstd=True, ax=ax)
 ax.set(xlabel='Territory Area [std]',
        ylabel='Body Weight [std]')
 
+with mWA:
+    pm.set_data({'ind': df['G']})
+    quapWG = sts.quap(data=df)
+
+print('W ~ G:')
+sts.precis(quapWG)
+
+# Plot the regressions
+fig = plt.figure(2, clear=True, tight_layout=True)
+ax = fig.add_subplot()
+sts.lmplot(quapWG, mean_var=quapWG.model.μ, 
+           data=df, x='groupsize', y='weight', unstd=True, ax=ax)
+ax.set(xlabel='Group Size [std]',
+       ylabel='Body Weight [std]')
 
 plt.ion()
 plt.show()
