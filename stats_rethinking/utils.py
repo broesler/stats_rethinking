@@ -860,7 +860,6 @@ def bspline_basis(t, x=None, k=3, padded_knots=False):
         return B
 
 
-# TODO make own class?
 def coef_table(models, mnames=None, params=None, std=True):
     """Create a summary table of coefficients in each model.
 
@@ -902,7 +901,7 @@ def coef_table(models, mnames=None, params=None, std=True):
         ct = (ct.T  # organize by parameter, then model
                 .melt(ignore_index=False, value_name=value_name)
                 .set_index('param', append=True)
-                .sort_index()
+                # .sort_index()
               )
         return ct
 
@@ -915,6 +914,7 @@ def coef_table(models, mnames=None, params=None, std=True):
     return pd.concat([ct, cs], axis=1)
 
 
+# TODO by_model=True param? Swap index levels.
 def plot_coef_table(ct, q=0.89, fignum=None):
     """Plot the table of coefficients from `sts.coef_table`.
 
