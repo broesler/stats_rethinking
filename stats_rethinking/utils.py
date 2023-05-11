@@ -729,7 +729,7 @@ def norm_fit(data, hist_kws=None, ax=None):
     return ax
 
 
-def standardize(x, data=None, axis=0):
+def standardize(x):
     """Standardize the input vector `x` by the mean and std of `data`.
 
     .. note::
@@ -738,16 +738,39 @@ def standardize(x, data=None, axis=0):
         (N / (N-1))**0.5 * (x - x.mean()) / x.std() == stats.zscore(x, ddof=0)
         where N = x.size
     """
-    if data is None:
-        data = x
-    return (x - data.mean(axis=axis)) / data.std(axis=axis)
+    center = x.mean()
+    scale = x.std()
+    z = (x - center) / scale
+    if hasattr(z, 'attrs'):
+        z.attrs = {'center': center, 'scale': scale}
+    return z
 
 
-def unstandardize(x, data=None, axis=0):
-    """Return the data to the original scale."""
+def unstandardize(x, data=None):
+    """Return the data to the original scale.
+
+    Parameters
+    ----------
+    x : array_like
+        The scaled data.
+    data : array_like
+        The un-scaled data with which to compute the center and scale.
+
+    Returns
+    -------
+    result : un-scaled array of the same size as `x`.
+    """
     if data is None:
-        data = x
-    return data.mean(axis=axis) + x * data.std(axis=axis)
+        try:
+            center = x.attrs['center']
+            scale = x.attrs['scale']
+        except KeyError:
+            raise ValueError(("Must provide `data` or ",
+                              "`x.attrs = {'center': float, 'scale': float}"))
+    else:
+        center = data.mean()
+        scale = data.std()
+    return center + scale * x
 
 
 def design_matrix(x, poly_order=0, include_const=True):
