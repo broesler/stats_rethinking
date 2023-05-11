@@ -13,11 +13,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import seaborn as sns
+# import seaborn as sns
 
 from copy import deepcopy
 from pathlib import Path
-from scipy import stats
 
 import stats_rethinking as sts
 
@@ -74,7 +73,7 @@ with m5_5_draft:
     pm.set_data({'ind': x_s})
     prior5_5_draft = pm.sample_prior_predictive(Nl).prior.mean('chain')
 
-# A better prior
+# A better prior (R code 5.25)
 with pm.Model() as m5_5:
     ind = pm.MutableData('ind', df['N'])
     obs = pm.MutableData('obs', df['K'])
@@ -126,15 +125,14 @@ sts.precis(quapNK)
 print('K ~ M:')
 sts.precis(quapMK)
 
-# Plot the regressions
+# Plot the regressions (R code 5.27)
 fig = plt.figure(2, clear=True, tight_layout=True)
 fig.set_size_inches((6, 6), forward=True)
 gs = fig.add_gridspec(nrows=2, ncols=2)
 ax = fig.add_subplot(gs[0, 0])
 sts.lmplot(quapNK, mean_var=quapNK.model.μ, data=df, x='N', y='K', ax=ax)
 ax.set(xlabel='Neocortex Percent [std]',
-       ylabel='Mass [kCal/g] [std]',
-       xlim=x_s, ylim=x_s)
+       ylabel='Mass [kCal/g] [std]')
 
 ax = fig.add_subplot(gs[0, 1], sharey=ax)
 sts.lmplot(quapMK, mean_var=quapMK.model.μ, data=df, x='M', y='K', ax=ax)
@@ -188,12 +186,10 @@ ct = sts.coef_table(models=[quapMK, quapNK, quap],
                     params=['β_M', 'β_N']
                     )
 
-fig = plt.figure(3, clear=True, constrained_layout=True)
-fig.set_size_inches((5, 3), forward=True)
-ax = fig.add_subplot()
-sts.plot_coef_table(ct, ax=ax)
+sts.plot_coef_table(ct, fignum=3)
 
-sns.pairplot(data=df, vars=['M', 'N', 'K'])
+# "pairs( ~K + M + N , dcc )" [p 146]
+# sns.pairplot(data=df, vars=['M', 'N', 'K'])
 
 plt.ion()
 plt.show()

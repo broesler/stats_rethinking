@@ -138,7 +138,7 @@ sts.precis(quapAM)
 
 ax = fig.add_subplot(gs[2])
 sts.lmplot(quapAM, mean_var=mu, data=df, x='MedianAgeMarriage', y='Marriage',
-        unstd=True, eval_at={'ind': A_seq_s}, ax=ax)
+           unstd=True, eval_at={'ind': A_seq_s}, ax=ax)
 ax.set(xlabel='Median Age Marriage [yr]',
        ylabel='Marriage Rate [per 1000]')
 
@@ -169,11 +169,7 @@ models = [quapA, quapM, quap]
 mnames = ['m5.1', 'm5.2', 'm5.3']
 
 ct = sts.coef_table(models, mnames, params)
-
-fig = plt.figure(3, clear=True, constrained_layout=True)
-fig.set_size_inches((5, 3), forward=True)
-ax = fig.add_subplot()
-sts.plot_coef_table(ct, ax=ax)
+sts.plot_coef_table(ct, fignum=3)
 
 
 # -----------------------------------------------------------------------------
@@ -249,7 +245,7 @@ sts.lmplot(quapAD, mean_var=the_model.mu, data=df, x='MA_resid', y='D', ax=ax)
 ax.set(xlabel='Age at Marriage Residuals [std]',
        ylabel='Divorce Rate [std]')
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Counterfactual Plots (Section 5.1.4.2)
 # -----------------------------------------------------------------------------
 #  These are just the slice of the plane through x = 0 for each variable, as
@@ -311,14 +307,14 @@ ax.set(title='Marriage Rate [std] = 0',
 ax.tick_params(axis='y', labelleft=None)
 ax.set_aspect('equal')
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Make posterior prediction plots (§5.1.4.3)
 # -----------------------------------------------------------------------------
 # Sample mu using the original data
-mu_samp = (post['alpha'].values 
-            + post['beta_A'].values * df[['A']].values
-            + post['beta_M'].values * df[['M']].values
-            )  # (N, Ns)
+mu_samp = (post['alpha'].values
+           + post['beta_A'].values * df[['A']].values
+           + post['beta_M'].values * df[['M']].values
+           )  # (N, Ns)
 mu_mean = mu_samp.mean(axis=1)
 mu_pi = sts.percentiles(mu_samp, q=q, axis=1)
 mu_errs = np.abs(mu_pi - mu_mean)  # errorbars must be > 0
@@ -334,7 +330,7 @@ tf = df.set_index('Loc').loc[label_states]
 # Figure 5.6
 fig = plt.figure(6, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
-ax.errorbar(df['D'], mu_mean, c='C0', ls='None', #alpha=0.4,
+ax.errorbar(df['D'], mu_mean, c='C0', ls='None',
             marker='o', markerfacecolor='None',
             yerr=mu_errs, elinewidth=1)
 ax.axline((0, 0), slope=1.0, color='k', lw=1, ls='--', alpha=0.5)
