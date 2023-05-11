@@ -106,9 +106,9 @@ ax.plot(A_s, D_A, zdir='y', zs=max(M_s), color='C0')
 ax.scatter(M, D, zdir='x', zs=min(A_s), color='C3', alpha=0.4)
 ax.plot(M_s, D_M, zdir='x', zs=min(A_s), color='C3')
 
-ax.set(xlabel='A', xlim=(min(A_s), max(A_s)),
-       ylabel='M', ylim=(min(M_s), max(M_s)),
-       zlabel='D',
+ax.set(xlabel=r'$x_{\mathrm{real}}$', xlim=(min(A_s), max(A_s)),
+       ylabel=r'$x_{\mathrm{spur}}$', ylim=(min(M_s), max(M_s)),
+       zlabel=r'$y$',
        proj_type='ortho')
 
 # ax.view_init(0, 0, 0)  # projection onto M-D plane
