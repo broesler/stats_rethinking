@@ -61,6 +61,7 @@ assert Nc == 2
 N = 10_000
 mu_female = stats.norm(178, 20).rvs(N)
 mu_male = stats.norm(178, 20).rvs(N) + stats.norm(0, 10).rvs(N)
+print('Male vs Female Mean Height:')
 sts.precis(pd.DataFrame({'mu_f': mu_female, 'mu_m': mu_male}))
 
 # Re-cast sex as an "index" variable (indices are 0-index, so no change!)
@@ -74,11 +75,15 @@ with pm.Model() as m5_8:
     h = pm.Normal('h', μ, σ, observed=df['height'])
     quap5_8 = sts.quap(data=df)
 
+print()
+print('Index Variable model 5.8:')
 sts.precis(quap5_8)
 
 # Compute a contrast between female and male heights (R code 5.38)
 post = quap5_8.sample()
 post['diff_fm'] = post['α__0'] - post['α__1']
+print()
+print('Posterior with Contrast:')
 sts.precis(post)
 
 # -----------------------------------------------------------------------------
@@ -121,13 +126,15 @@ with pm.Model() as m5_9:
     K = pm.Normal('K', μ, σ, observed=df['K'])
     quap5_9 = sts.quap(data=df)
 
+print()
+print('Multi-category model 5.9:')
 sts.precis(quap5_9)
 
 # Figure ?? [p 153]
 ct = sts.coef_table(models=[quap5_9], mnames=['m5.9'], params=['α'])
 
 labels = {
-    f"α__{i}": f"α__{i}: {x}"
+    f"α__{i}": rf"$\alpha_{i}$: {x}"
     for i, x in enumerate(df['clade'].cat.categories)
 }
 ct = ct.rename(labels, level='param')
@@ -157,12 +164,14 @@ with pm.Model() as m5_10:
     K = pm.Normal('K', μ, σ, observed=df['K'])
     quap5_10 = sts.quap(data=df)
 
+print()
+print('Multi-category model 5.10:')
 sts.precis(quap5_10)
 
 ct = sts.coef_table(models=[quap5_10], mnames=['m5.10'], params=['α', 'h'])
 # Update labels for easier reading
 labels |= {
-    f"h__{i}": f"h__{i}: {x}"
+    f"h__{i}": rf"$h_{i}$: {x}"
     for i, x in enumerate(df['house'].cat.categories)
 }
 ct = ct.rename(labels, level='param')
