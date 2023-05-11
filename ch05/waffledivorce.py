@@ -105,7 +105,8 @@ print('D ~ A:')
 sts.precis(quapA)
 
 ax = fig.add_subplot(gs[1])  # right-hand plot
-sts.lmplot(quapA, mean_var=mu, data=df, x='MedianAgeMarriage', y='Divorce',
+sts.lmplot(quapA, mean_var=quapA.model.mu, 
+           data=df, x='MedianAgeMarriage', y='Divorce',
            unstd=True, eval_at={'ind': A_seq_s}, ax=ax)
 ax.set(xlabel='Median Age Marriage [yr]', ylabel=None)
 ax.tick_params(axis='y', labelleft=None)
@@ -120,7 +121,8 @@ print('D ~ M:')
 sts.precis(quapM)
 
 ax = fig.add_subplot(gs[0], sharey=ax)
-sts.lmplot(quapM, mean_var=mu, data=df, x='Marriage', y='Divorce',
+sts.lmplot(quapM, mean_var=quapM.model.mu, 
+           data=df, x='Marriage', y='Divorce',
            unstd=True, eval_at={'ind': A_seq_s}, ax=ax)
 ax.set(xlabel='Marriage Rate [per 1000]',
        ylabel='Divorce Rate [per 1000]')
@@ -137,7 +139,8 @@ print('M ~ A:')
 sts.precis(quapAM)
 
 ax = fig.add_subplot(gs[2])
-sts.lmplot(quapAM, mean_var=mu, data=df, x='MedianAgeMarriage', y='Marriage',
+sts.lmplot(quapAM, mean_var=quapAM.model.mu, 
+           data=df, x='MedianAgeMarriage', y='Marriage',
            unstd=True, eval_at={'ind': A_seq_s}, ax=ax)
 ax.set(xlabel='Median Age Marriage [yr]',
        ylabel='Marriage Rate [per 1000]')
@@ -157,7 +160,7 @@ with pm.Model() as multi_model:
     D = pm.Normal('D', mu, sigma, observed=obs, shape=M.shape)
     quap = sts.quap()
 
-print('D ~ A, M:')
+print('D ~ A + M:')
 sts.precis(quap)
 
 # Make the coeftab plot (R code 5.9)
@@ -231,7 +234,8 @@ with the_model:
     quapMD = sts.quap()
 
 ax = fig.add_subplot(gs[1, 0])
-sts.lmplot(quapMD, mean_var=the_model.mu, data=df, x='MA_resid', y='D', ax=ax)
+sts.lmplot(quapMD, mean_var=quapMD.model.mu, 
+           data=df, x='MA_resid', y='D', ax=ax)
 ax.set(xlabel='Marriage Rate Residuals [std]',
        ylabel='Divorce Rate [std]')
 
@@ -241,7 +245,8 @@ with the_model:
     quapAD = sts.quap()
 
 ax = fig.add_subplot(gs[1, 1])
-sts.lmplot(quapAD, mean_var=the_model.mu, data=df, x='MA_resid', y='D', ax=ax)
+sts.lmplot(quapAD, mean_var=quapAD.model.mu, 
+           data=df, x='MA_resid', y='D', ax=ax)
 ax.set(xlabel='Age at Marriage Residuals [std]',
        ylabel='Divorce Rate [std]')
 

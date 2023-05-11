@@ -162,7 +162,7 @@ N_s = np.linspace(-2, 2, 30)
 
 # Plot counterfactual with M = 0 (R code 5.31)
 ax = fig.add_subplot(gs[1, 0], sharex=fig.axes[0], sharey=ax)
-sts.lmplot(quap, mean_var=μ, x='N', y='K',
+sts.lmplot(quap, mean_var=quap.model.μ, x='N', y='K',
            eval_at={'N': N_s, 'M': np.zeros_like(N_s)}, ax=ax)
 ax.set(title='Counterfactual, M = 0',
        xlabel='Neocortex Percent [std]',
@@ -170,7 +170,7 @@ ax.set(title='Counterfactual, M = 0',
 
 # Plot counterfactual with N = 0
 ax = fig.add_subplot(gs[1, 1], sharex=fig.axes[1], sharey=ax)
-sts.lmplot(quap, mean_var=μ, x='M', y='K',
+sts.lmplot(quap, mean_var=quap.model.μ, x='M', y='K',
            eval_at={'N': np.zeros_like(N_s), 'M': N_s}, ax=ax)
 ax.set(title='Counterfactual, N = 0',
        xlabel='Log(Body Mass) [std]',

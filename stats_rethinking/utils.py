@@ -17,6 +17,7 @@ import pymc as pm
 import seaborn as sns
 import warnings
 
+from copy import deepcopy
 from pytensor.graph.basic import ancestors
 # from pytensor.tensor.random.var import (
 #     RandomGeneratorSharedVariable,
@@ -395,6 +396,9 @@ Posterior Means:
         posterior = stats.multivariate_normal(mean=self.coef, cov=self.cov)
         return pd.DataFrame(posterior.rvs(N), columns=self.coef.index)
 
+    # TODO 
+    # * rename the model variable 
+    # * rename any vector parameters 'b__0', 'b__1', etc.
     def rename(self, mapper):
         """Rename a parameter.
 
@@ -403,6 +407,10 @@ Posterior Means:
         self.coef = self.coef.rename(mapper)
         self.cov = self.cov.rename(index=mapper, columns=mapper)
         self.std = self.std.rename(mapper)
+        for k, v in mapper.items():
+            self.model.named_vars[k].name = v
+        return self
+
 
 
 def quap(vars=None, var_names=None, model=None, data=None, start=None):
@@ -503,9 +511,9 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
                   .sort_index(axis=0).sort_index(axis=1))
     quap.std = pd.Series(np.sqrt(np.diag(quap.cov)), index=cnames).sort_index()
     quap.map_est = {k: map_est[k] for k in dnames}
-    quap.model = model
+    quap.model = deepcopy(model)
     quap.start = model.initial_point if start is None else start
-    quap.data = data  # FIXME need to pass data for each call of quap!!
+    quap.data = deepcopy(data)  # TODO pass data for each call of quap!!
     return quap
 
 
@@ -513,6 +521,7 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
 # * (un)flatten list of vector or matrix parameters
 #   See: the_model.eval_rv_shapes()
 # * keep_data=True? Need to get model data for each `eval_at.keys()`
+# * refactor `out` to `mean_var` or `lm_var`?
 #
 def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     """Sample the indermediate linear models from the given parameter fit.
@@ -631,6 +640,14 @@ def lmplot(quap, mean_var, x, y, data=None,
 
     if ax is None:
         ax = plt.gca()
+
+    # Ensure the passed-in variable names match those in the model.
+    # If the user has not done a quap.rename(), this step should be a no-op.
+    name_map = {v.name: k for k, v in quap.model.named_vars.items()}
+    eval_rename = dict()
+    for k, v in eval_at.items():
+        eval_rename[name_map[k]] = v
+    eval_at = eval_rename
 
     mu_samp = lmeval(quap, out=mean_var, eval_at=eval_at)
     mu_mean = mu_samp.mean(axis=1)
