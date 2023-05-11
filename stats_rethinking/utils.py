@@ -607,19 +607,20 @@ def lmplot(quap, mean_var, x, y, data=None,
     data_vars = set(named_graph_inputs([mean_var])) - set(inputvars(mean_var))
     data_names = [v.name for v in data_vars]
 
-    # TODO len(data_vars) == 0 error!!
     if eval_at is None:
         # Use the given data to evaluate the model
+        xe = data[x].sort_values()
+        if unstd:
+            xe = standardize(xe)
+
+        # Determine which name to use
         if len(data_vars) == 1:
-            xe = data[x].sort_values()
             eval_at = {data_names[0]: xe}
-        else:
-            if x in data_names:
-                xe = data[x].sort_values()
-                eval_at = {x: xe}
-            else:
-                raise ValueError(("More than 1 independent variable in the model!",
-                                  "Please specify `eval_at`"))
+        elif x in data_names:
+            eval_at = {x: xe}
+        elif len(data_vars) > 1:
+            raise ValueError("More than 1 data variable in the model!"\
+                             + " Please specify `eval_at`")
     else:
         if len(eval_at) == 1:
             xe = list(eval_at.values())[0]
