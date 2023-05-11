@@ -554,21 +554,16 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     if dist is None:
         dist = fit.sample(N)  # take the posterior
 
-    if eval_at is None:
-        # Evaluate the model at the already-included data points
-        data_vars = set(named_graph_inputs([out])) - set(inputvars(out))
-        eval_at = {v.name: v.eval() for v in data_vars}
-    else:
+    if eval_at is not None:
         pm.set_data(eval_at, model=fit.model)
 
     # Manual loop since params are 0-D variables in the model.
-    Ne = np.max([x.size for x in eval_at.values()])
-    out_s = np.zeros((Ne, len(dist)))
+    cols = []
     for i in range(len(dist)):
         param_vals = {v: dist[v.name][i] for v in params}
-        out_s[:, i] = out.eval(param_vals)
+        cols.append(out.eval(param_vals))
 
-    return out_s
+    return np.array(cols).T  # params as columns
 
 
 # TODO
