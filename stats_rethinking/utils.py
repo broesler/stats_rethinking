@@ -41,7 +41,7 @@ from sparkline import sparkify
 #   seaborn.pairplot())
 
 
-def quantile(data, q=0.89, width=6, precision=4,
+def quantile(data, qs=0.89, width=6, precision=4,
              q_func=np.quantile, verbose=False, **kwargs):
     """Pretty-print the desired quantile values from the data.
 
@@ -83,12 +83,12 @@ def quantile(data, q=0.89, width=6, precision=4,
     --------
     `numpy.quantile`
     """
-    q = np.atleast_1d(q)
-    quantiles = q_func(data, q, **kwargs)
+    qs = np.asarray(qs)
+    quantiles = q_func(data, qs, **kwargs)
     if verbose:
         fstr = f"{width}.{precision}f"
-        name_str = ' '.join([f"{100*p:{width-1}g}%" for p in q])
-        value_str = ' '.join([f"{q:{fstr}}" for q in quantiles])
+        name_str = ' '.join([f"{100*p:{width-1}g}%" for p in np.atleast_1d(qs)])
+        value_str = ' '.join([f"{q:{fstr}}" for q in np.atleast_1d(quantiles)])
         print(f"{name_str}\n{value_str}")
     return quantiles
 
@@ -174,11 +174,15 @@ def hpdi(data, q=0.89, verbose=False, width=6, precision=4,
 
 
     """
-    qs = np.atleast_1d(q)
+    qs = np.asarray(q)
     data = np.asarray(data)
 
+    if verbose and qs.size > 1:
+        verbose = False
+        warnings.warn("verbose flag only valid for singleton q.")
+
     if axis is None:
-        A = data.reshape(-1)  # (M, N) -> (M * N,)
+        A = data.reshape(-1).squeeze()  # (M, N) -> (M * N,)
     else:
         # az.hdi "ravels" the array along the first 2 dimensions, because it
         # assumes that the data is from az.convert_to_data() which returns an
@@ -188,14 +192,17 @@ def hpdi(data, q=0.89, verbose=False, width=6, precision=4,
         A = np.moveaxis(data, axis, 0)[np.newaxis, :]
 
     # (1, N, M, P) -> (M, P, 2) -> (Q, M, P, 2)
-    Q = np.stack([az.hdi(A, hdi_prob=q, **kwargs) for q in qs])
-    Q = np.moveaxis(Q, -1, 0)  # (Q, M, P, 2) -> (2, Q, M, P)
+    if qs.ndim == 0:
+        Q = az.hdi(A, hdi_prob=qs, **kwargs)
+    else:
+        Q = np.stack([az.hdi(A, hdi_prob=q, **kwargs) for q in qs])
+        Q = np.moveaxis(Q, -1, 0)  # (Q, M, P, 2) -> (2, Q, M, P)
 
-    # if verbose:
-    #     fstr = f"{width}.{precision}f"
-    #     name_str = ' '.join([f"{100*p:{width-2}g}%" for p in qs])
-    #     value_str = ' '.join([f"{q:{fstr}}" for q in Q])
-    #     print(f"|{name_str}|\n{value_str}")
+    if verbose:
+        fstr = f"{width}.{precision}f"
+        name_str = ' '.join([f"{100*p:{width-2}g}%" for p in np.r_[qs, qs]])
+        value_str = ' '.join([f"{q:{fstr}}" for q in np.atleast_1d(Q)])
+        print(f"|{name_str}|\n{value_str}")
 
     return Q
 
