@@ -939,7 +939,7 @@ def plot_coef_table(ct, q=0.89, fignum=None):
 
     # Leverage Seaborn for basic setup
     sns.pointplot(data=ct.reset_index(), x='coef', y='param', hue='model',
-                  join=False, dodge=0.2, ax=ax)
+                  join=False, dodge=0.3, ax=ax)
 
     # Find the x,y coordinates for each point
     x_coords = []

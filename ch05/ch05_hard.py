@@ -51,9 +51,12 @@ df['F'] = sts.standardize(df['avgfood'])
 
 
 # # Exploratory plot
-# g = sns.pairplot(df, vars=['A', 'G', 'W', 'F'],  corner=True)
+# g = sns.pairplot(df, vars=['A', 'G', 'W', 'F'])
 # g.map_lower(sns.regplot)
+# g.map_upper(sns.regplot)
 # # A ~ G strongly correlated
+# # A ~ F strongly correlated
+# # G ~ F strongly correlated
 
 # -----------------------------------------------------------------------------
 #         5H1. Two bivariate regressions
@@ -215,6 +218,27 @@ ct = sts.coef_table(models=[quapWA, quapWG, quapWAG, quapWFG, quapWFGA],
                     params=['β_A', 'β_G', 'β_F']
                     )
 sts.plot_coef_table(ct, fignum=5)
+
+# (a) avgfood and area are strongly correlated, which is not surprising given
+#     that a greater area should provide more food. avgfood is likely a better
+#     predictor, since foxes need to eat to gain weight. The correlation
+#     between weight and area is likely through the pathway A -> F -> W. 
+# (b) When both avgfood or area are in the same model, their effects are
+#     reduced and their standard errors are larger than when they are included
+#     in separate models. The explanation is that groupsize is the strongest
+#     predictor of body weight, so knowing it diminishes the effects of the
+#     other two variables. Larger group size leads to more competition for
+#     food, so it is negatively correlated with body weight of an individual:
+#     G -> W. The presence of more food also would attract more foxes, so 
+#     F -> G.
+#     
+# Known:
+# * A, F, and G strongly correlated with each other
+# * A and G mask each other => 3 graphs
+# * F and G mask each other => 3 graphs
+# * G certain when A or F included => G --> W
+# * A diminishes greatly when F is added => A -x-> W and A --> F
+# * F diminishes a bit, but not completely, when A is added => F ~~> W
 
 plt.ion()
 plt.show()
