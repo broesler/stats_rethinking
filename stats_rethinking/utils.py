@@ -1011,7 +1011,7 @@ def plot_coef_table(ct, q=0.89, fignum=None):
 
     # Manually add the errorbars since we have std values already
     z = stats.norm.ppf(1 - (1 - q)/2)
-    errs = 2 * ct['std'] * z
+    errs = 2 * ct['std'] * z  # ± err -> 2 * ...
     errs = errs.dropna()
     ax.errorbar(x_coords, y_coords, fmt=' ', xerr=errs, ecolor=colors)
     ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
