@@ -327,6 +327,7 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     pp = 100*np.array([a, 1-a])  # percentages for printing
 
     if isinstance(obj, Quap):
+        title = None
         # Compute density intervals
         z = stats.norm.ppf(1 - a)
         lo = obj.coef - z * obj.std
@@ -339,6 +340,7 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     # DataFrame of data points
     if isinstance(obj, pd.DataFrame):
         obj = obj.select_dtypes(include=np.number)
+        title = f"'DataFrame': {obj.shape[0]:d} obs. of {obj.shape[1]} variables:"
         df = pd.DataFrame()
         df['mean'] = obj.mean()
         df['std'] = obj.std()
@@ -349,6 +351,7 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
 
     # Numpy array of data points
     if isinstance(obj, np.ndarray):
+        title = f"'ndarray': {obj.shape[0]:d} obs. of {obj.shape[1]} variables:"
         # Columns are data, ignore index
         vals = np.vstack([np.nanmean(obj, axis=0),
                           np.nanstd(obj, axis=0),
@@ -361,6 +364,9 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
             df['histogram'] = sparklines_from_array(obj)
 
     if verbose:
+        if title is not None:
+            print(title)
+        # Print the dataframe with requested precision
         with pd.option_context('display.float_format',
                                f"{{:.{digits}f}}".format):
             print(df)
