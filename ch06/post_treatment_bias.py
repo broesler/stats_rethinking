@@ -13,18 +13,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import seaborn as sns
-from tqdm import tqdm
 
-from pathlib import Path
 from scipy import stats
-import statsmodels.api as sm
 
 import stats_rethinking as sts
 
 plt.style.use('seaborn-v0_8-darkgrid')
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Simulate plant growth treatment (R code 6.14)
 # -----------------------------------------------------------------------------
 N = 100  # number of plants
@@ -40,7 +36,7 @@ df = pd.DataFrame(np.c_[h0, h1, treatment, fungus],
 
 sts.precis(df)
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Create a Model
 # -----------------------------------------------------------------------------
 # The prior (R code 6.15)
@@ -95,7 +91,7 @@ sts.precis(m6_8)
 #   \           ↓
 #    \          F
 #     \        /
-#      -> H1 <- 
+#      -> H1 <-
 #
 # use algs.graph API?
 #
