@@ -64,22 +64,22 @@ with pm.Model() as the_model:
 sts.precis(quap)
 
 q = 0.97
-w = np.c_[np.logspace(0, np.log10(1.05*weight.max()), 20)]
+w = np.logspace(0, np.log10(1.05*weight.max()), 20)
 
-mu_samp = post['alpha'].values + post['beta'].values * np.log(w)
+mu_samp = post['alpha'].values + post['beta'].values * np.log(np.c_[w])
 mu_mean = mu_samp.mean(axis=1)
-mu_hpdi = sts.hpdi(mu_samp.T, q=q)
+mu_hpdi = sts.hpdi(mu_samp, q=q, axis=1)
 
 h_samp = stats.norm(mu_samp, post['sigma']).rvs()
 h_mean = h_samp.mean(axis=1)
-h_hpdi = sts.hpdi(h_samp.T, q=q)
+h_hpdi = sts.hpdi(h_samp, q=q, axis=1)
 
 # Plot predictions with original data
 ax.plot(w, mu_mean, 'k', label='MAP Estimate')
-ax.fill_between(w[:, 0], mu_hpdi[:, 0], mu_hpdi[:, 1],
+ax.fill_between(w, mu_hpdi[0], mu_hpdi[1],
                 facecolor='k', alpha=0.3, interpolate=True,
                 label=f"{100*q:g}% CI")
-ax.fill_between(w[:, 0], h_hpdi[:, 0], h_hpdi[:, 1],
+ax.fill_between(w, h_hpdi[0], h_hpdi[1],
                 facecolor='k', alpha=0.2, interpolate=True,
                 label=f"{100*q:g}% CI")
 ax.legend()

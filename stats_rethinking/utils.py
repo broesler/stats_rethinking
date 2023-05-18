@@ -196,7 +196,8 @@ def hpdi(data, q=0.89, verbose=False, width=6, precision=4,
         Q = az.hdi(A, hdi_prob=qs, **kwargs)
     else:
         Q = np.stack([az.hdi(A, hdi_prob=q, **kwargs) for q in qs])
-        Q = np.moveaxis(Q, -1, 0)  # (Q, M, P, 2) -> (2, Q, M, P)
+
+    Q = np.moveaxis(Q, -1, 0)  # (Q, M, P, 2) -> (2, Q, M, P)
 
     if verbose:
         fstr = f"{width}.{precision}f"

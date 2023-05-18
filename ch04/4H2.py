@@ -66,16 +66,16 @@ sts.precis(quap)
 # there is an 27.2 cm increase in height.
 
 q = 0.89
-w = np.c_[np.linspace(0, 1.05*weight.max(), 20)]
-mu_samp = post['alpha'].values + post['beta'].values * (w - w_bar)
+w = np.linspace(0, 1.05*weight.max(), 20)
+mu_samp = post['alpha'].values + post['beta'].values * (np.c_[w] - w_bar)
 mu_mean = mu_samp.mean(axis=1)
 h_samp = stats.norm(mu_samp, post['sigma']).rvs()
 h_mean = h_samp.mean(axis=1)
-h_hpdi = sts.hpdi(h_samp.T, q=q)
+h_hpdi = sts.hpdi(h_samp, q=q, axis=1)
 
 # Plot predictions with original data
 ax.plot(w, mu_mean, 'k', label='MAP Estimate')
-ax.fill_between(w[:, 0], h_hpdi[:, 0], h_hpdi[:, 1],
+ax.fill_between(w, h_hpdi[0], h_hpdi[1],
                 facecolor='k', alpha=0.2, interpolate=True,
                 label=f"{100*q:g}% CI")
 ax.legend()
