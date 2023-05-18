@@ -115,8 +115,7 @@ Ns = 1000  # number of samples
 #     p_trace[i] = p_new if t < q1/q0 else p_trace[i-1]
 
 with normal_approx:
-    p_samp = pm.sample(Ns, cores=1)
-    p_trace = p_samp.posterior['p']  # extract relevant values
+    p_trace = pm.sample(Ns).posterior['p']  # extract relevant values
 
 # Analytical Posterior
 Beta = stats.beta(k+1, n-k+1)  # Beta(\alpha = 1, \beta = 1) == U(0, 1)
@@ -167,8 +166,7 @@ ax.axvline(p_max, c='k', ls='--', lw=1)
 # az.plot_trace(p_trace)
 
 # Manually
-# kde = sts.density(np.ravel(p_trace), adjust=0.5)
-kde = sts.density(p_trace.sel(chain=0), adjust=0.5)
+kde = sts.density(p_trace.mean('chain'), adjust=0.5)
 kde_p = kde.pdf(p_fine)
 p_max = p_fine[kde_p.argmax()]
 ax.plot(p_fine, kde_p / kde_p.max(),
