@@ -581,6 +581,9 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
 
 
 # TODO
+# * Loop over each Deterministic and Observed variables if none specified,
+#   return a dict. Then, lmplot can plot both the mean and the observed
+#   confidence intervals in one shot.
 # * (un)flatten list of vector or matrix parameters
 #   See: the_model.eval_rv_shapes()
 # * keep_data=True? Need to get model data for each `eval_at.keys()`
@@ -616,8 +619,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         An array of values of the linear model evaluated at each of M `eval_at`
         points and `N` parameter samples.
     """
-    # Could loop over each Deterministic variable if none specified.
-    if out not in fit.model.deterministics:
+    if out not in (fit.model.deterministics + fit.model.observed_RVs):
         raise ValueError(f"Variable '{out}' does not exist in the model!")
 
     if params is None:
