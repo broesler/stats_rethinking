@@ -118,8 +118,8 @@ for poly_order in range(1, Np+1):
         models[k] = quap
         print(k)
         sts.precis(quap)
-        # Rsqs[k] = brain_Rsq(quap)
-        # print(f"R² = {Rsqs[k]:.4f}")
+        Rsqs[k] = brain_Rsq(quap)
+        print(f"R² = {Rsqs[k]:.4f}")
 
 
 plt.ion()

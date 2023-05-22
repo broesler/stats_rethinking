@@ -632,27 +632,24 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     if eval_at is not None:
         pm.set_data(eval_at, model=fit.model)
 
-    # Manual loop since params are 0-D variables in the model.
-    # TODO re-concatenate dist columns for multidimensional tensors in lmeval
-    # use fit.model.eval_rv_shapes()? or dist.filter(regex='{param.name}__\d+')
     if isinstance(dist, pd.DataFrame):
-        pass
-        # dist_t = dict()
-        # shapes = fit.model.eval_rv_shapes()
-        # for name, s in shapes.items():
-        #   if s[0] > 1:
-        #       dist_t[name] = dist.filter(regex=f"{name}__[0-9]+")
-        #   else:
-        #       dist_t[name] = dist[name]
-        # param_vals = {v: np.reshape(dist_t[v.name][i], shapes[v.name])
-        #               for v in params}
+        # Concatenate vector parameters
+        dist_t = dict()
+        shapes = fit.model.eval_rv_shapes()
+        for name, s in shapes.items():
+          if len(s) > 0 and s[0] > 1:
+              dist_t[name] = dist.filter(regex=f"{name}__[0-9]+")
+          else:
+              dist_t[name] = dist[name]
     else:
         raise TypeError("dist must be a DataFrame!")
 
+    # Manual loop since params are 0-D variables in the model.
     cols = []
     for i in range(len(dist)):
-        # NOTE this line only works if all params have ndim == 0, shape == ().
-        param_vals = {v: dist[v.name][i] for v in params}
+        # Ensure shape of given values matches that of the model variable
+        param_vals = {v: np.reshape(dist_t[v.name].iloc[i], shapes[v.name])
+                      for v in params}
         cols.append(out.eval(param_vals))
 
     return np.array(cols).T  # params as columns
