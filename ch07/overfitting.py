@@ -142,24 +142,38 @@ for poly_order in range(1, Np+1):
     #  => create unstd_[xy]={'shift': 0, 'scale': 1} params?
     #     Or just change the lmplot API and pass fit_x=xe, fit_y=mu_samp that
     #     the user computes?
+    # New API:
+    #
+    # # Sample the posterior manually and explicitly
+    # mu_samp = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
+    #                      params=[quap.model.α, quap.model.βn])
+    # # Re-scale the variables
+    # mu_samp *= df['brain'].max()
+    # xe = sts.unstandardize(xe_s, df['mass'])
+    # # Plot
+    # sts.lmplot(fit_x=xe, fit_y=mu_samp,
+    #            x='mass_std', y='brain_std', data=df,
+    #            ax=ax)
+    #
+    # Could have std=True to standardize the plot? Or user just does it.
+
+    # PLot standardized results since lmplot can't yet handle arbitrary scaling
     sts.lmplot(quap, mean_var=quap.model.μ, 
                x='mass_std', y='brain_std', data=df,
                eval_at={'ind': xe_s},
                ax=ax)
 
-    ax.set_title(rf"$R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left')
+    ax.set_title(rf"$R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left', pad=-14)
     ax.set(xlabel='body mass [kg]',
            ylabel='brain volume [cc]')
     if i < 4:  # all except last row
         ax.set_xlabel('')
         ax.tick_params(axis='x', labelbottom=None)
-
-    # if i < 4:
-    #     ax.set_ylim((300, 1500))
+        # ax.set_ylim((300, 1500))
     # elif i == 4:
-    #     ax.set_ylim((0, 2100))
+        # ax.set_ylim((0, 2100))
     # elif i == 5:
-    #     ax.set_ylim((-500, 2100))
+        # ax.set_ylim((-500, 2100))
 
 plt.ion()
 plt.show()
