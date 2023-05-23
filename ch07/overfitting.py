@@ -94,7 +94,6 @@ Np = 3  # max polynomial terms
 def brain_Rsq(quap):
     """Compute the :math:`R^2` value of the model."""
     post = quap.sample()
-    # TODO re-concatenate post columns for multidimensional tensors in lmeval
     mu_samp = sts.lmeval(quap, out=quap.model.μ, dist=post,
                          params=[quap.model.α, quap.model.βn])
     h_samp = stats.norm(mu_samp, np.exp(post['log_σ'])).rvs()
@@ -103,24 +102,58 @@ def brain_Rsq(quap):
     return 1 - r.var(ddof=0) / df['brain_std'].var(ddof=0)
 
 
+# Plot each polynomial fit (Figure 7.3, see plotting_support.R -> brain_plot)
+fig = plt.figure(2, clear=True, constrained_layout=True)
+gs = fig.add_gridspec(nrows=3, ncols=2)
+xe_s = np.linspace(df['mass_std'].min() - 0.2, df['mass_std'].max() + 0.2, 900)
+
 for poly_order in range(1, Np+1):
     with pm.Model():
+        ind = pm.MutableData('ind', df['mass_std'])
         α = pm.Normal('α', 0.5, 1, shape=(1,))
         βn = pm.Normal('βn', 0, 10, shape=(poly_order,))
-        X = sts.design_matrix(df['brain_std'], poly_order)  # [1, x, x², ...]
+        X = sts.design_matrix(ind.get_value(), poly_order)  # [1, x, x², ...]
         β = pm.math.concatenate([α, βn])
         μ = pm.Deterministic('μ', pm.math.dot(X, β))
         log_σ = pm.Normal('log_σ', 0, 1)
         sigma = pm.math.exp(log_σ) if poly_order < 6 else 0.001
-        brain_std = pm.Normal('brain_std', μ, sigma, observed=df['brain_std'])
+        brain_std = pm.Normal('brain_std', μ, sigma, 
+                              observed=df['brain_std'], shape=ind.shape)
+        # Compute the posterior
         quap = sts.quap(data=df)
+        # Store and print the models and R² values
         k = f"m7.{poly_order}"
         models[k] = quap
+        Rsqs[k] = brain_Rsq(quap)
         print(k)
         sts.precis(quap)
-        Rsqs[k] = brain_Rsq(quap)
         print(f"R² = {Rsqs[k]:.4f}")
 
+    # Define the mean
+    X = sts.design_matrix(xe_s, poly_order)
+    post = quap.sample()
+    β = post.drop('log_σ', axis='columns').T
+    mu_samp = X @ β
+    mu_mean = mu_samp.mean(axis=1)
+    mu_pi = sts.percentiles(mu_samp, axis=1)
+
+    xe = sts.unstandardize(xe_s, df['mass'])
+    mu_mean = mu_mean * df['brain'].max()
+    mu_pi = mu_pi * df['brain'].max()
+
+    # Plot the fit
+    ax = fig.add_subplot(gs[poly_order-1])
+    ax.scatter('mass', 'brain', data=df)
+    ax.plot(xe, mu_mean, 'k')
+    ax.fill_between(xe, mu_pi[0], mu_pi[1],
+                    facecolor='k', alpha=0.3, interpolate=True)
+    ax.set_title(rf"$R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left', pad=-14)
+    ax.set(xlabel='body mass [kg]',
+           ylabel='brain volume [cc]')
+
+    # TODO fails on creation of design matrix within model.
+    # sts.lmplot(quap, mean_var=quap.model.μ, x='mass', y='brain', data=df,
+    #            eval_at={'ind': xe}, unstd=True, ax=ax)
 
 plt.ion()
 plt.show()
