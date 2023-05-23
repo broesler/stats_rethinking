@@ -110,9 +110,11 @@ xe_s = np.linspace(df['mass_std'].min() - 0.2, df['mass_std'].max() + 0.2, 900)
 for poly_order in range(1, Np+1):
     with pm.Model():
         ind = pm.MutableData('ind', df['mass_std'])
+        # Define the design matrix [1 x x² x³ ...]
+        X = pm.math.stack([ind**i for i in range(poly_order+1)], axis=1)
+        # X = sts.design_matrix(ind, poly_order)??
         α = pm.Normal('α', 0.5, 1, shape=(1,))
         βn = pm.Normal('βn', 0, 10, shape=(poly_order,))
-        X = sts.design_matrix(ind.get_value(), poly_order)  # [1, x, x², ...]
         β = pm.math.concatenate([α, βn])
         μ = pm.Deterministic('μ', pm.math.dot(X, β))
         log_σ = pm.Normal('log_σ', 0, 1)
@@ -124,36 +126,26 @@ for poly_order in range(1, Np+1):
         # Store and print the models and R² values
         k = f"m7.{poly_order}"
         models[k] = quap
+        # FIXME Rsq != 1 for poly_order == 6?
         Rsqs[k] = brain_Rsq(quap)
         print(k)
         sts.precis(quap)
         print(f"R² = {Rsqs[k]:.4f}")
-
-    # Define the mean
-    # TODO fails on creation of design matrix within model.
-    # sts.lmplot(quap, mean_var=quap.model.μ, x='mass', y='brain', data=df,
-    #            eval_at={'ind': xe}, unstd=True, ax=ax)
-
-    X = sts.design_matrix(xe_s, poly_order)  # (Ne, Np)
-    post = quap.sample()
-    β = post.drop('log_σ', axis='columns').T  # [α, βn] => (Np, Ns)
-    mu_samp = X @ β  # (Ne, Ns)
-    mu_mean = mu_samp.mean(axis=1)  # (Ne,)
-    mu_pi = sts.percentiles(mu_samp, axis=1)
-
-    xe = sts.unstandardize(xe_s, df['mass'])
-    mu_mean = mu_mean * df['brain'].max()
-    mu_pi = mu_pi * df['brain'].max()
 
     # Plot the fit
     i = poly_order - 1
     sharex = ax if i > 0 else None
     ax = fig.add_subplot(gs[i], sharex=sharex)
 
-    ax.scatter('mass', 'brain', data=df)
-    ax.plot(xe, mu_mean, 'k')
-    ax.fill_between(xe, mu_pi[0], mu_pi[1],
-                    facecolor='k', alpha=0.3, interpolate=True)
+    # TODO unstd=True fails since brain_std is normalized by max(), not shifted
+    # and scaled to a z-score.
+    #  => create unstd_[xy]={'shift': 0, 'scale': 1} params?
+    #     Or just change the lmplot API and pass fit_x=xe, fit_y=mu_samp that
+    #     the user computes?
+    sts.lmplot(quap, mean_var=quap.model.μ, 
+               x='mass_std', y='brain_std', data=df,
+               eval_at={'ind': xe_s},
+               ax=ax)
 
     ax.set_title(rf"$R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left')
     ax.set(xlabel='body mass [kg]',
@@ -161,12 +153,13 @@ for poly_order in range(1, Np+1):
     if i < 4:  # all except last row
         ax.set_xlabel('')
         ax.tick_params(axis='x', labelbottom=None)
-    if i < 4:
-        ax.set_ylim((300, 1500))
-    elif i == 4:
-        ax.set_ylim((0, 2100))
-    elif i == 5:
-        ax.set_ylim((-500, 2100))
+
+    # if i < 4:
+    #     ax.set_ylim((300, 1500))
+    # elif i == 4:
+    #     ax.set_ylim((0, 2100))
+    # elif i == 5:
+    #     ax.set_ylim((-500, 2100))
 
 plt.ion()
 plt.show()
