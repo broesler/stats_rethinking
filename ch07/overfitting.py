@@ -77,7 +77,7 @@ ax = fig.add_subplot()
 ax.scatter('mass', 'brain', data=df)
 for label, x, y in zip(df['species'], df['mass'], df['brain']):
     ax.text(x+0.5, y+2, label)
-ax.scatter(df['mass'], h_mean * df['brain'].max(), c='k', marker='x')
+# ax.scatter(df['mass'], h_mean * df['brain'].max(), c='k', marker='x')
 ax.set(xlabel='body mass [kg]',
        ylabel='brain volume [cc]')
 
@@ -87,7 +87,7 @@ ax.set(xlabel='body mass [kg]',
 # -----------------------------------------------------------------------------
 models = dict()
 Rsqs = dict()
-Np = 3  # max polynomial terms
+Np = 6  # max polynomial terms
 
 
 # (R code 7.5)
@@ -130,11 +130,15 @@ for poly_order in range(1, Np+1):
         print(f"R² = {Rsqs[k]:.4f}")
 
     # Define the mean
-    X = sts.design_matrix(xe_s, poly_order)
+    # TODO fails on creation of design matrix within model.
+    # sts.lmplot(quap, mean_var=quap.model.μ, x='mass', y='brain', data=df,
+    #            eval_at={'ind': xe}, unstd=True, ax=ax)
+
+    X = sts.design_matrix(xe_s, poly_order)  # (Ne, Np)
     post = quap.sample()
-    β = post.drop('log_σ', axis='columns').T
-    mu_samp = X @ β
-    mu_mean = mu_samp.mean(axis=1)
+    β = post.drop('log_σ', axis='columns').T  # [α, βn] => (Np, Ns)
+    mu_samp = X @ β  # (Ne, Ns)
+    mu_mean = mu_samp.mean(axis=1)  # (Ne,)
     mu_pi = sts.percentiles(mu_samp, axis=1)
 
     xe = sts.unstandardize(xe_s, df['mass'])
@@ -142,18 +146,27 @@ for poly_order in range(1, Np+1):
     mu_pi = mu_pi * df['brain'].max()
 
     # Plot the fit
-    ax = fig.add_subplot(gs[poly_order-1])
+    i = poly_order - 1
+    sharex = ax if i > 0 else None
+    ax = fig.add_subplot(gs[i], sharex=sharex)
+
     ax.scatter('mass', 'brain', data=df)
     ax.plot(xe, mu_mean, 'k')
     ax.fill_between(xe, mu_pi[0], mu_pi[1],
                     facecolor='k', alpha=0.3, interpolate=True)
-    ax.set_title(rf"$R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left', pad=-14)
+
+    ax.set_title(rf"$R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left')
     ax.set(xlabel='body mass [kg]',
            ylabel='brain volume [cc]')
-
-    # TODO fails on creation of design matrix within model.
-    # sts.lmplot(quap, mean_var=quap.model.μ, x='mass', y='brain', data=df,
-    #            eval_at={'ind': xe}, unstd=True, ax=ax)
+    if i < 4:  # all except last row
+        ax.set_xlabel('')
+        ax.tick_params(axis='x', labelbottom=None)
+    if i < 4:
+        ax.set_ylim((300, 1500))
+    elif i == 4:
+        ax.set_ylim((0, 2100))
+    elif i == 5:
+        ax.set_ylim((-500, 2100))
 
 plt.ion()
 plt.show()
