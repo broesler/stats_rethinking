@@ -103,16 +103,11 @@ def brain_Rsq(quap):
     return 1 - r.var(ddof=0) / df['brain_std'].var(ddof=0)
 
 
-# Plot each polynomial fit (Figure 7.3, see plotting_support.R -> brain_plot)
-fig = plt.figure(2, clear=True, constrained_layout=True)
-gs = fig.add_gridspec(nrows=3, ncols=2)
-xe_s = np.linspace(df['mass_std'].min() - 0.2, df['mass_std'].max() + 0.2, 200)
-
-for poly_order in range(1, Np+1):
+def poly_model(poly_order, x='mass_std', y='brain_std', data=df):
+    """Build a polynomial model of the brain ~ mass relationship."""
     with pm.Model():
-        ind = pm.MutableData('ind', df['mass_std'])
-        # Define the design matrix [1 x x² x³ ...]
-        X = sts.design_matrix(ind, poly_order)
+        ind = pm.MutableData('ind', data[x])
+        X = sts.design_matrix(ind, poly_order)  # [1 x x² x³ ...]
         α = pm.Normal('α', 0.5, 1, shape=(1,))
         βn = pm.Normal('βn', 0, 10, shape=(poly_order,))
         β = pm.math.concatenate([α, βn])
@@ -120,16 +115,29 @@ for poly_order in range(1, Np+1):
         log_σ = pm.Normal('log_σ', 0, 1)
         sigma = pm.math.exp(log_σ) if poly_order < 6 else 0.001
         brain_std = pm.Normal('brain_std', μ, sigma, 
-                              observed=df['brain_std'], shape=ind.shape)
+                              observed=data[y], shape=ind.shape)
         # Compute the posterior
-        quap = sts.quap(data=df)
-        # Store and print the models and R² values
-        k = f"m7.{poly_order}"
-        models[k] = quap
-        Rsqs[k] = brain_Rsq(quap)
-        print(k)
-        sts.precis(quap)
-        print(f"R² = {Rsqs[k]:.4f}")
+        quap = sts.quap(data=data)
+    return quap
+
+
+# Plot each polynomial fit (Figure 7.3, see plotting_support.R -> brain_plot)
+fig = plt.figure(2, clear=True, constrained_layout=True)
+fig.set_size_inches((8, 10), forward=True)
+gs = fig.add_gridspec(nrows=3, ncols=2)
+xe_s = np.linspace(df['mass_std'].min() - 0.2, df['mass_std'].max() + 0.2, 200)
+
+for poly_order in range(1, Np+1):
+    # Build the model and fit the posterior
+    quap = poly_model(poly_order)
+
+    # Store and print the models and R² values
+    k = f"m7.{poly_order}"
+    models[k] = quap
+    Rsqs[k] = brain_Rsq(quap)
+    print(k)
+    sts.precis(quap)
+    print(f"R² = {Rsqs[k]:.4f}")
 
     # Plot the fit
     i = poly_order - 1
@@ -223,22 +231,25 @@ ax.set(xlabel='body mass [kg]',
 # Re-fit N=1 and N=4 polynomials to the data, leaving one data point out.
 
 fig = plt.figure(4, clear=True, constrained_layout=True)
+fig.set_size_inches((10, 5), forward=True)
 gs = fig.add_gridspec(nrows=1, ncols=2)
 
 for i, poly_order in enumerate([1, 4]):
     ax = fig.add_subplot(gs[i])
     # Fit to the data - 1 row at a time
-    for j in range(len(df)):
-        # Create the model
-        # TODO refactor model into function poly_model
-        model = poly_model(poly_order, x='mass_std', y='brain_std',
-                           data=df.drop(j))
-        quap = sts.quap(model=model)
-        mu_samp = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
-                             params=[quap.model.α, quap.model.βn])
-        mu_mean = mu_samp.mean(axis=1) * df['brain'].max()
-        ax.plot(xe, mu_mean, 'k', lw=1, alpha=0.4)
+    # for j in range(len(df)):
+    #     # Create the model
+    #     quap = poly_model(poly_order, x='mass_std', y='brain_std',
+    #                        data=df.drop(j))
+    #     mu_samp = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
+    #                          params=[quap.model.α, quap.model.βn])
+    #     mu_mean = mu_samp.mean(axis=1) * df['brain'].max()
+    #     ax.plot(xe, mu_mean, 'k', lw=1, alpha=0.4)
+
     # Plot the results together
+    ax.scatter('mass', 'brain', data=df)
+    if poly_order == 4:
+        ax.set_ylim((-200, 2200))
     ax.set_title(f"m7.{poly_order}", x=0.02, y=1, loc='left', pad=-14)
     ax.set(xlabel='body mass [kg]',
            ylabel='brain volume [cc]')
