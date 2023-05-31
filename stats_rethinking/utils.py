@@ -658,13 +658,20 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 # TODO
 # * add "ci" = {'hpdi', 'pi', None} option
 # * add option for observed variable and plots its PI too.
-def lmplot(quap, mean_var, x, y, data=None,
+def lmplot(fit_x=None, fit_y=None, quap=None, mean_var=None, 
+           x=None, y=None, data=None,
            eval_at=None, unstd=False, q=0.89, ax=None,
            line_kws=None, fill_kws=None):
     """Plot the linear model defined by `quap`.
 
     Parameters
     ----------
+    fit_x : (N,) array-like
+        1-D array of values over which to plot the model fit.
+    fit_y : (N, S) array-like
+        A 2-D array of `S` samples corresponding to the `N` `fit_x` points.
+        .. note:: Either `fit_x` and `fit_y`, or `quap` and `mean_var` must be
+            provided to plot the fitted model.
     quap : stats_rethinking.Quap
         The quadratic approximation model estimate.
     mean_var : TensorVariable
@@ -693,47 +700,58 @@ def lmplot(quap, mean_var, x, y, data=None,
     ax : plt.Axes
         The axes in which the plot was drawn.
     """
-    # TODO? remove ALL of this nonsense and just require mu_samp as an input.
-    # User code then calls:
-    #   mu_s = lmeval()
-    #   lmplot(mu_s, ...)
-    data_vars = set(named_graph_inputs([mean_var])) - set(inputvars(mean_var))
-    data_names = [v.name for v in data_vars]
-
-    if eval_at is None:
-        # Use the given data to evaluate the model
-        xe = data[x].sort_values()
-        if unstd:
-            xe = standardize(xe)
-
-        # Determine which name to use
-        if len(data_vars) == 1:
-            eval_at = {data_names[0]: xe}
-        elif x in data_names:
-            eval_at = {x: xe}
-        elif len(data_vars) > 1:
-            raise ValueError("More than 1 data variable in the model!"\
-                             + " Please specify `eval_at`")
-    else:
-        if len(eval_at) == 1:
-            xe = list(eval_at.values())[0]
-        elif x in eval_at:
-            xe = eval_at[x]
-        else:
-            raise ValueError(f"Variable '{x}' not found in model.")
+    if ((fit_x is None and fit_y is None) 
+        and (quap is None and mean_var is None)):
+        raise ValueError('Must provide either fit_[xy] or (quap, mean_var)!')
 
     if ax is None:
         ax = plt.gca()
 
-    # Ensure the passed-in variable names match those in the model.
-    # If the user has not done a quap.rename(), this step should be a no-op.
-    name_map = {v.name: k for k, v in quap.model.named_vars.items()}
-    eval_rename = dict()
-    for k, v in eval_at.items():
-        eval_rename[name_map[k]] = v
-    eval_at = eval_rename
+    if quap is not None and mean_var is not None:
+        # TODO? remove ALL of this nonsense and just require mu_samp as an input.
+        # User code then calls:
+        #   mu_s = lmeval()
+        #   lmplot(mu_s, ...)
+        data_vars = set(named_graph_inputs([mean_var])) - set(inputvars(mean_var))
+        data_names = [v.name for v in data_vars]
 
-    mu_samp = lmeval(quap, out=mean_var, eval_at=eval_at)
+        if eval_at is None:
+            # Use the given data to evaluate the model
+            xe = data[x].sort_values()
+            if unstd:
+                xe = standardize(xe)
+
+            # Determine which name to use
+            if len(data_vars) == 1:
+                eval_at = {data_names[0]: xe}
+            elif x in data_names:
+                eval_at = {x: xe}
+            elif len(data_vars) > 1:
+                raise ValueError("More than 1 data variable in the model!"\
+                                + " Please specify `eval_at`")
+        else:
+            if len(eval_at) == 1:
+                xe = list(eval_at.values())[0]
+            elif x in eval_at:
+                xe = eval_at[x]
+            else:
+                raise ValueError(f"Variable '{x}' not found in model.")
+
+        # Ensure the passed-in variable names match those in the model.
+        # If the user has not done a quap.rename(), this step should be a no-op.
+        name_map = {v.name: k for k, v in quap.model.named_vars.items()}
+        eval_rename = dict()
+        for k, v in eval_at.items():
+            eval_rename[name_map[k]] = v
+        eval_at = eval_rename
+
+        mu_samp = lmeval(quap, out=mean_var, eval_at=eval_at)
+
+    elif fit_x is not None and fit_y is not None:
+        xe = fit_x
+        mu_samp = fit_y
+
+    # Compute mean and error
     mu_mean = mu_samp.mean(axis=1)
     mu_pi = percentiles(mu_samp, q=q, axis=1)  # 0.89 default
 
@@ -742,6 +760,7 @@ def lmplot(quap, mean_var, x, y, data=None,
         mu_mean = unstandardize(mu_mean, data[y])
         mu_pi = unstandardize(mu_pi, data[y])
 
+    # Make the plot
     if data is not None:
         ax.scatter(x, y, data=data, alpha=0.4)
     ax.plot(xe, mu_mean, label='MAP Prediction',
