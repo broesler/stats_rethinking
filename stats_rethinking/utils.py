@@ -658,7 +658,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 # TODO
 # * add "ci" = {'hpdi', 'pi', None} option
 # * add option for observed variable and plots its PI too.
-def lmplot(fit_x=None, fit_y=None, quap=None, mean_var=None, 
+def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
            x=None, y=None, data=None,
            eval_at=None, unstd=False, q=0.89, ax=None,
            line_kws=None, fill_kws=None):
@@ -706,6 +706,11 @@ def lmplot(fit_x=None, fit_y=None, quap=None, mean_var=None,
 
     if ax is None:
         ax = plt.gca()
+
+    if line_kws is None:
+        line_kws = dict()
+    if fill_kws is None:
+        fill_kws = dict()
 
     if quap is not None and mean_var is not None:
         # TODO? remove ALL of this nonsense and just require mu_samp as an input.
