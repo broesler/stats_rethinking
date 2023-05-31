@@ -106,7 +106,7 @@ def brain_Rsq(quap):
 # Plot each polynomial fit (Figure 7.3, see plotting_support.R -> brain_plot)
 fig = plt.figure(2, clear=True, constrained_layout=True)
 gs = fig.add_gridspec(nrows=3, ncols=2)
-xe_s = np.linspace(df['mass_std'].min() - 0.2, df['mass_std'].max() + 0.2, 900)
+xe_s = np.linspace(df['mass_std'].min() - 0.2, df['mass_std'].max() + 0.2, 200)
 
 for poly_order in range(1, Np+1):
     with pm.Model():
@@ -150,7 +150,8 @@ for poly_order in range(1, Np+1):
                line_kws=dict(c='k', lw=1),
                fill_kws=dict(facecolor='k', alpha=0.2))
 
-    ax.set_title(rf"$R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left', pad=-14)
+    ax.set_title(rf"m7.{poly_order}: $R^2 = {Rsqs[k]:.2f}$", 
+                 x=0.02, y=1, loc='left', pad=-14)
     ax.set(xlabel='body mass [kg]',
            ylabel='brain volume [cc]')
 
@@ -163,6 +164,56 @@ for poly_order in range(1, Np+1):
     elif i == 5:
         ax.set_ylim((-500, 2100))
         ax.axhline(0, c='k', lw=1, ls='--')
+
+
+# ----------------------------------------------------------------------------- 
+#         Underfitting (R code 7.11)
+# -----------------------------------------------------------------------------
+with pm.Model():
+    ind = pm.MutableData('ind', df['mass_std'])
+    α = pm.Normal('α', 0.5, 1)
+    μ = pm.Deterministic('μ', α + 0 * ind)  # NOT a function of x!
+    log_σ = pm.Normal('log_σ', 0, 1)
+    brain_std = pm.Normal('brain_std', μ, pm.math.exp(log_σ),
+                          observed=df['brain_std'], shape=ind.shape)
+    # Compute the posterior
+    quap = sts.quap(data=df)
+    # Store and print the models and R² values
+    k = f"m7.7"
+    models[k] = quap
+
+    # Rsqs[k] = brain_Rsq(quap)
+    post = quap.sample()
+    mu_samp = sts.lmeval(quap, out=quap.model.μ, dist=post,
+                        params=[quap.model.α])
+    sigma = np.exp(post['log_σ'])
+    h_samp = stats.norm(mu_samp, sigma).rvs()
+    r = h_samp.mean(axis=1) - df['brain_std']  # residuals
+    Rsqs[k] = 1 - r.var(ddof=0) / df['brain_std'].var(ddof=0)
+
+    print(k)
+    sts.precis(quap)
+    print(f"R² = {Rsqs[k]:.4f}")
+
+fig = plt.figure(3, clear=True, constrained_layout=True)
+ax = fig.add_subplot()
+
+# Re-scale the variables
+mu_samp = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
+                    params=[quap.model.α])
+mu_samp *= df['brain'].max()
+xe = sts.unstandardize(xe_s, df['mass'])
+
+# PLot results
+sts.lmplot(fit_x=xe, fit_y=mu_samp, 
+           x='mass', y='brain', data=df,
+           ax=ax,
+           line_kws=dict(c='k', lw=1),
+           fill_kws=dict(facecolor='k', alpha=0.2))
+
+ax.set_title(rf"m7.7: $R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left', pad=-14)
+ax.set(xlabel='body mass [kg]',
+       ylabel='brain volume [cc]')
 
 plt.ion()
 plt.show()
