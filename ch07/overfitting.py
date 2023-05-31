@@ -137,26 +137,6 @@ for poly_order in range(1, Np+1):
     sharex = ax if i > 0 else None
     ax = fig.add_subplot(gs[i], sharex=sharex)
 
-    # TODO unstd=True fails since brain_std is normalized by max(), not shifted
-    # and scaled to a z-score.
-    #  => create unstd_[xy]={'shift': 0, 'scale': 1} params?
-    #     Or just change the lmplot API and pass fit_x=xe, fit_y=mu_samp that
-    #     the user computes?
-    # New API:
-    #
-    # # Sample the posterior manually and explicitly
-    # mu_samp = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
-    #                      params=[quap.model.α, quap.model.βn])
-    # # Re-scale the variables
-    # mu_samp *= df['brain'].max()
-    # xe = sts.unstandardize(xe_s, df['mass'])
-    # # Plot
-    # sts.lmplot(fit_x=xe, fit_y=mu_samp,
-    #            x='mass_std', y='brain_std', data=df,
-    #            ax=ax)
-    #
-    # Could have std=True to standardize the plot? Or user just does it.
-
     # Sample the posterior manually and explicitly
     mu_samp = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
                          params=[quap.model.α, quap.model.βn])
@@ -183,6 +163,7 @@ for poly_order in range(1, Np+1):
         ax.set_ylim((0, 2100))
     elif i == 5:
         ax.set_ylim((-500, 2100))
+        ax.axhline(0, c='k', lw=1, ls='--')
 
 plt.ion()
 plt.show()
