@@ -659,7 +659,8 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 # * add "ci" = {'hpdi', 'pi', None} option
 # * add option for observed variable and plots its PI too.
 def lmplot(quap, mean_var, x, y, data=None,
-           eval_at=None, unstd=False, q=0.89, ax=None):
+           eval_at=None, unstd=False, q=0.89, ax=None,
+           line_kws=None, fill_kws=None):
     """Plot the linear model defined by `quap`.
 
     Parameters
@@ -684,6 +685,8 @@ def lmplot(quap, mean_var, x, y, data=None,
         Quartile over which to shade the mean.
     ax : plt.Axes
         Axes object in which to draw the plot.
+    line_kws, fill_kws : dict
+        Maps of additional arguments for the line or fill plots.
 
     Returns
     -------
@@ -741,10 +744,14 @@ def lmplot(quap, mean_var, x, y, data=None,
 
     if data is not None:
         ax.scatter(x, y, data=data, alpha=0.4)
-    ax.plot(xe, mu_mean, 'C0', label='MAP Prediction')
+    ax.plot(xe, mu_mean, label='MAP Prediction',
+            c=line_kws.pop('color', line_kws.pop('c', 'C0')), **line_kws)
     ax.fill_between(xe, mu_pi[0], mu_pi[1],
-                    facecolor='C0', alpha=0.3, interpolate=True,
-                    label=rf"{100*q:g}% Percentile Interval of $\mu$")
+                    facecolor=fill_kws.pop('facecolor', 'C0'), 
+                    alpha=fill_kws.pop('alpha', 0.3),
+                    interpolate=True,
+                    label=rf"{100*q:g}% Percentile Interval of $\mu$",
+                    **fill_kws)
     ax.set(xlabel=x, ylabel=y)
     return ax
 

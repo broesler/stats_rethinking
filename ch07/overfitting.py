@@ -161,7 +161,9 @@ for poly_order in range(1, Np+1):
     sts.lmplot(quap, mean_var=quap.model.μ, 
                x='mass_std', y='brain_std', data=df,
                eval_at={'ind': xe_s},
-               ax=ax)
+               ax=ax,
+               line_kws=dict(c='k', lw=1),
+               fill_kws=dict(facecolor='k', alpha=0.2))
 
     ax.set_title(rf"$R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left', pad=-14)
     ax.set(xlabel='body mass [kg]',
