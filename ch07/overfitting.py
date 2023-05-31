@@ -112,8 +112,7 @@ for poly_order in range(1, Np+1):
     with pm.Model():
         ind = pm.MutableData('ind', df['mass_std'])
         # Define the design matrix [1 x x² x³ ...]
-        X = pm.math.stack([ind**i for i in range(poly_order+1)], axis=1)
-        # X = sts.design_matrix(ind, poly_order)??
+        X = sts.design_matrix(ind, poly_order)
         α = pm.Normal('α', 0.5, 1, shape=(1,))
         βn = pm.Normal('βn', 0, 10, shape=(poly_order,))
         β = pm.math.concatenate([α, βn])

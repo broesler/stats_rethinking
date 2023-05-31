@@ -23,7 +23,7 @@ from pytensor.graph.basic import ancestors
 #     RandomGeneratorSharedVariable,
 #     RandomStateSharedVariable,
 # )
-# from pytensor.tensor.sharedvar import SharedVariable, TensorSharedVariable
+from pytensor.tensor.sharedvar import TensorSharedVariable  #, SharedVariable
 from pytensor.tensor.var import TensorConstant, TensorVariable
 
 from scipy import stats, linalg
@@ -915,14 +915,18 @@ def design_matrix(x, poly_order=0, include_const=True):
     result : (M, poly_order+1) ndarray
         A Vandermonde matrix of increasing powers of `x`.
     """
-    x = np.asarray(x)
-    try:
-        out = np.vander(x, poly_order+1, increasing=True)
-    except ValueError:
-        raise ValueError(f"poly_order value '{poly_order}' is invalid")
-    if not include_const:
-        out = out[:, 1:]
-    return out
+    if isinstance(x, TensorSharedVariable): 
+        start = 0 if include_const else 1
+        return pm.math.stack([x**i for i in range(start, poly_order+1)], axis=1)
+    else:
+        x = np.asarray(x)
+        try:
+            out = np.vander(x, poly_order+1, increasing=True)
+        except ValueError:
+            raise ValueError(f"poly_order value '{poly_order}' is invalid")
+        if not include_const:
+            out = out[:, 1:]
+        return out
 
 
 def pad_knots(knots, k=3):
