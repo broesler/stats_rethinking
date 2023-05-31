@@ -96,7 +96,8 @@ def brain_Rsq(quap):
     post = quap.sample()
     mu_samp = sts.lmeval(quap, out=quap.model.μ, dist=post,
                          params=[quap.model.α, quap.model.βn])
-    h_samp = stats.norm(mu_samp, np.exp(post['log_σ'])).rvs()
+    sigma = np.exp(post['log_σ']) if poly_order < 6 else 0.001
+    h_samp = stats.norm(mu_samp, sigma).rvs()
     r = h_samp.mean(axis=1) - df['brain_std']  # residuals
     # pandas default is ddof=1 => N-1, so explicitly use ddof=0 => N.
     return 1 - r.var(ddof=0) / df['brain_std'].var(ddof=0)
@@ -126,7 +127,6 @@ for poly_order in range(1, Np+1):
         # Store and print the models and R² values
         k = f"m7.{poly_order}"
         models[k] = quap
-        # FIXME Rsq != 1 for poly_order == 6?
         Rsqs[k] = brain_Rsq(quap)
         print(k)
         sts.precis(quap)
