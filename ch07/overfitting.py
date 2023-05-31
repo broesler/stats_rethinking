@@ -150,7 +150,7 @@ for poly_order in range(1, Np+1):
                line_kws=dict(c='k', lw=1),
                fill_kws=dict(facecolor='k', alpha=0.2))
 
-    ax.set_title(rf"m7.{poly_order}: $R^2 = {Rsqs[k]:.2f}$", 
+    ax.set_title(rf"{k}: $R^2 = {Rsqs[k]:.2f}$", 
                  x=0.02, y=1, loc='left', pad=-14)
     ax.set(xlabel='body mass [kg]',
            ylabel='brain volume [cc]')
@@ -172,20 +172,20 @@ for poly_order in range(1, Np+1):
 with pm.Model():
     ind = pm.MutableData('ind', df['mass_std'])
     α = pm.Normal('α', 0.5, 1)
-    μ = pm.Deterministic('μ', α + 0 * ind)  # NOT a function of x!
+    μ = pm.Deterministic('μ', α)  # NOT a function of x!
     log_σ = pm.Normal('log_σ', 0, 1)
     brain_std = pm.Normal('brain_std', μ, pm.math.exp(log_σ),
-                          observed=df['brain_std'], shape=ind.shape)
+                          observed=df['brain_std'])
     # Compute the posterior
     quap = sts.quap(data=df)
     # Store and print the models and R² values
-    k = f"m7.7"
+    k = "m7.7"
     models[k] = quap
 
     # Rsqs[k] = brain_Rsq(quap)
     post = quap.sample()
-    mu_samp = sts.lmeval(quap, out=quap.model.μ, dist=post,
-                        params=[quap.model.α])
+    # No need to evaluate the model! Just tile the posterior
+    mu_samp = np.tile(post['α'], (len(df), 1))
     sigma = np.exp(post['log_σ'])
     h_samp = stats.norm(mu_samp, sigma).rvs()
     r = h_samp.mean(axis=1) - df['brain_std']  # residuals
@@ -199,8 +199,7 @@ fig = plt.figure(3, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 
 # Re-scale the variables
-mu_samp = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
-                    params=[quap.model.α])
+mu_samp = np.tile(post['α'], (len(xe_s), 1))
 mu_samp *= df['brain'].max()
 xe = sts.unstandardize(xe_s, df['mass'])
 
@@ -211,7 +210,7 @@ sts.lmplot(fit_x=xe, fit_y=mu_samp,
            line_kws=dict(c='k', lw=1),
            fill_kws=dict(facecolor='k', alpha=0.2))
 
-ax.set_title(rf"m7.7: $R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left', pad=-14)
+ax.set_title(rf"{k}: $R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left', pad=-14)
 ax.set(xlabel='body mass [kg]',
        ylabel='brain volume [cc]')
 
