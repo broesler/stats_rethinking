@@ -195,6 +195,7 @@ with pm.Model():
     sts.precis(quap)
     print(f"R² = {Rsqs[k]:.4f}")
 
+# Figure 7.4
 fig = plt.figure(3, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 
@@ -213,6 +214,34 @@ sts.lmplot(fit_x=xe, fit_y=mu_samp,
 ax.set_title(rf"{k}: $R^2 = {Rsqs[k]:.2f}$", x=0.02, y=1, loc='left', pad=-14)
 ax.set(xlabel='body mass [kg]',
        ylabel='brain volume [cc]')
+
+
+# ----------------------------------------------------------------------------- 
+#         Variance -- Leave-one-out validation
+# -----------------------------------------------------------------------------
+# Figure 7.5
+# Re-fit N=1 and N=4 polynomials to the data, leaving one data point out.
+
+fig = plt.figure(4, clear=True, constrained_layout=True)
+gs = fig.add_gridspec(nrows=1, ncols=2)
+
+for i, poly_order in enumerate([1, 4]):
+    ax = fig.add_subplot(gs[i])
+    # Fit to the data - 1 row at a time
+    for j in range(len(df)):
+        # Create the model
+        # TODO refactor model into function poly_model
+        model = poly_model(poly_order, x='mass_std', y='brain_std',
+                           data=df.drop(j))
+        quap = sts.quap(model=model)
+        mu_samp = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
+                             params=[quap.model.α, quap.model.βn])
+        mu_mean = mu_samp.mean(axis=1) * df['brain'].max()
+        ax.plot(xe, mu_mean, 'k', lw=1, alpha=0.4)
+    # Plot the results together
+    ax.set_title(f"m7.{poly_order}", x=0.02, y=1, loc='left', pad=-14)
+    ax.set(xlabel='body mass [kg]',
+           ylabel='brain volume [cc]')
 
 plt.ion()
 plt.show()
