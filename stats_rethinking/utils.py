@@ -23,7 +23,7 @@ from pytensor.graph.basic import ancestors
 #     RandomGeneratorSharedVariable,
 #     RandomStateSharedVariable,
 # )
-from pytensor.tensor.sharedvar import TensorSharedVariable  #, SharedVariable
+from pytensor.tensor.sharedvar import TensorSharedVariable  # , SharedVariable
 from pytensor.tensor.var import TensorConstant, TensorVariable
 
 from scipy import stats, linalg
@@ -129,9 +129,9 @@ def percentiles(data, q=0.89, **kwargs):
 
 
 # TODO remove width and precision arguments and just take fstr='8.2f', e.g.
-# * add axis=1 argument -> 
+# * add axis=1 argument ->
 # * allow multiple qs, but print them "nested" like on an x-axis.
-def hpdi(data, q=0.89, verbose=False, width=6, precision=4, 
+def hpdi(data, q=0.89, verbose=False, width=6, precision=4,
          axis=None, **kwargs):
     """Compute highest probability density interval.
 
@@ -461,12 +461,22 @@ Log-likelihood: {self.logp:.2f}
         return f"<{self.__class__.__name__}: {self.__str__()}>"
 
     def sample(self, N=10_000):
-        """Sample the posterior approximation."""
+        """Sample the posterior approximation.
+
+        Analagous to `rethinking::extract.samples`.
+        """
         posterior = stats.multivariate_normal(mean=self.coef, cov=self.cov)
         return pd.DataFrame(posterior.rvs(N), columns=self.coef.index)
 
-    # TODO 
-    # * rename the model variable 
+    # TODO
+    # * rename the model variable itself
+    #   now: 
+    #   >>> model.named_vars
+    #   === {'x': x, 'y': y, 'z': z}
+    #   >>> model.named_vars['x'].name = 'new_name'
+    #   >>> model.named_vars
+    #   === {'x': new_name, 'y': y, 'z': z}
+    #   Want the key 'x' to be changed to 'new_name' as well.
     # * rename any vector parameters 'b__0', 'b__1', etc.
     def rename(self, mapper):
         """Rename a parameter.
@@ -479,7 +489,6 @@ Log-likelihood: {self.logp:.2f}
         for k, v in mapper.items():
             self.model.named_vars[k].name = v
         return self
-
 
 
 def quap(vars=None, var_names=None, model=None, data=None, start=None):
@@ -500,8 +509,7 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
         Dictionary of `scipy.stats.rv_frozen` distributions corresponding to
         the MAP estimates of `vars`.
     """
-    if model is None:
-        model = pm.modelcontext(None)
+    model = pm.modelcontext(model)
 
     if vars is None:
         if var_names is None:
@@ -517,6 +525,10 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
         var_names = [x.name for x in mvars]
 
     with warnings.catch_warnings():
+        # Ignore these warnings:
+        # "UserWarning: Intermediate variables (such as Deterministic or
+        # Potential) were passed. find_MAP will optimize the underlying
+        # free_RVs instead."
         warnings.simplefilter('ignore', category=UserWarning)
         map_est, opt = pm.find_MAP(
                 start=start,
@@ -602,6 +614,9 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
 def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     """Sample the indermediate linear models from the given parameter fit.
 
+    .. note:: This function is similar to `rethinking::link`, but with a more
+        readable name.
+
     Parameters
     ----------
     fit : :class:`stats_rethinking.Quap` or similar
@@ -646,10 +661,10 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         dist_t = dict()
         shapes = fit.model.eval_rv_shapes()
         for name, s in shapes.items():
-          if len(s) > 0 and s[0] > 1:
-              dist_t[name] = dist.filter(regex=f"{name}__[0-9]+")
-          else:
-              dist_t[name] = dist[name]
+            if len(s) > 0 and s[0] > 1:
+                dist_t[name] = dist.filter(regex=f"{name}__[0-9]+")
+            else:
+                dist_t[name] = dist[name]
     else:
         raise TypeError("dist must be a DataFrame!")
 
@@ -709,8 +724,8 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     ax : plt.Axes
         The axes in which the plot was drawn.
     """
-    if ((fit_x is None and fit_y is None) 
-        and (quap is None and mean_var is None)):
+    if ((fit_x is None and fit_y is None)
+            and (quap is None and mean_var is None)):
         raise ValueError('Must provide either fit_[xy] or (quap, mean_var)!')
 
     if ax is None:
@@ -722,7 +737,7 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
         fill_kws = dict()
 
     if quap is not None and mean_var is not None:
-        # TODO? remove ALL of this nonsense and just require mu_samp as an input.
+        # TODO? remove ALL of this nonsense and just require mu_samp as input.
         # User code then calls:
         #   mu_s = lmeval()
         #   lmplot(mu_s, ...)
@@ -741,8 +756,8 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
             elif x in data_names:
                 eval_at = {x: xe}
             elif len(data_vars) > 1:
-                raise ValueError("More than 1 data variable in the model!"\
-                                + " Please specify `eval_at`")
+                raise ValueError("More than 1 data variable in the model!"
+                                 + " Please specify `eval_at`")
         else:
             if len(eval_at) == 1:
                 xe = list(eval_at.values())[0]
@@ -752,7 +767,7 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
                 raise ValueError(f"Variable '{x}' not found in model.")
 
         # Ensure the passed-in variable names match those in the model.
-        # If the user has not done a quap.rename(), this step should be a no-op.
+        # If the user has not done quap.rename(), this step should be a no-op.
         name_map = {v.name: k for k, v in quap.model.named_vars.items()}
         eval_rename = dict()
         for k, v in eval_at.items():
@@ -780,7 +795,7 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     ax.plot(xe, mu_mean, label='MAP Prediction',
             c=line_kws.pop('color', line_kws.pop('c', 'C0')), **line_kws)
     ax.fill_between(xe, mu_pi[0], mu_pi[1],
-                    facecolor=fill_kws.pop('facecolor', 'C0'), 
+                    facecolor=fill_kws.pop('facecolor', 'C0'),
                     alpha=fill_kws.pop('alpha', 0.3),
                     interpolate=True,
                     label=rf"{100*q:g}% Percentile Interval of $\mu$",
@@ -924,7 +939,7 @@ def design_matrix(x, poly_order=0, include_const=True):
     result : (M, poly_order+1) ndarray
         A Vandermonde matrix of increasing powers of `x`.
     """
-    if isinstance(x, TensorSharedVariable): 
+    if isinstance(x, TensorSharedVariable):
         start = 0 if include_const else 1
         return pm.math.stack([x**i for i in range(start, poly_order+1)], axis=1)
     else:
@@ -1026,7 +1041,6 @@ def coef_table(models, mnames=None, params=None, std=True):
         ct = (ct.T  # organize by parameter, then model
                 .melt(ignore_index=False, value_name=value_name)
                 .set_index('param', append=True)
-                # .sort_index()
               )
         return ct
 
