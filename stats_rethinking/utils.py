@@ -1099,5 +1099,16 @@ def plot_coef_table(ct, q=0.89, fignum=None):
     ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
     return fig, ax
 
+
+# ----------------------------------------------------------------------------- 
+#         Utilities
+# -----------------------------------------------------------------------------
+def log_sum_exp(x, axis=None):
+    """Compute the log of the sum of the exponentials."""
+    # Center around the maximum for numerical stability
+    x_max = np.max(x)
+    return x_max + np.log(np.sum(np.exp(x - x_max), axis=axis))
+
+
 # =============================================================================
 # =============================================================================

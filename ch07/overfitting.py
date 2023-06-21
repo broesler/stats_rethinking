@@ -265,13 +265,6 @@ for i, poly_order in enumerate([1, 4]):
 # Compute the log probabilities of the model (R code 7.14, 7.15)
 
 
-def log_sum_exp(x, axis=None):
-    """Compute the log of the sum of the exponentials."""
-    # Center around the maximum for numerical stability
-    x_max = np.max(x)
-    return x_max + np.log(np.sum(np.exp(x - x_max), axis=axis))
-
-
 def lppd(quap, Ns=1000):
     """Compute the log pointwise predictive density for a model."""
     post = quap.sample(Ns)
@@ -283,7 +276,7 @@ def lppd(quap, Ns=1000):
         )
     sigma = np.exp(post['log_σ']) if 'log_σ' in post else SIGMA_CONST
     h_logp = stats.norm(mu_samp, sigma).logpdf(df[['brain_std']])
-    return log_sum_exp(h_logp, axis=1) - np.log(Ns)
+    return sts.log_sum_exp(h_logp, axis=1) - np.log(Ns)
 
 
 # R code 7.14
