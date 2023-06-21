@@ -420,18 +420,21 @@ class Quap():
     map_est : dict
         Maximum *a posteriori* estimates of any Deterministic or Potential
         variables.
+    logp : float
+        The log-likelihood of the model parameters.
     model : :class:`pymc.Model`
         The pymc model object used to define the posterior.
     start : dict
         Initial parameter values for the MAP optimization. Defaults to
         `model.initial_point`.
     """
-    def __init__(self, coef=None, cov=None, data=None, map_est=None,
+    def __init__(self, coef=None, cov=None, data=None, map_est=None, logp=None,
                  model=None, start=None):
         self.coef = coef
         self.cov = cov
         self.data = data
         self.map_est = map_est
+        self.logp = logp
         self.model = model
         self.start = start
 
@@ -449,6 +452,8 @@ Formula:
 
 Posterior Means:
 {meanstr}
+
+Log-likelihood: {self.logp:.2f}
 """
         return out
 
@@ -513,10 +518,13 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=UserWarning)
-        map_est = pm.find_MAP(start=start,
-                              vars=mvars,
-                              progressbar=False,
-                              model=model)
+        map_est, opt = pm.find_MAP(
+                start=start,
+                vars=mvars,
+                return_raw=True,
+                progressbar=False,
+                model=model
+            )
 
     # Need to compute *untransformed* Hessian! See ch02/quad_approx.py
     # See: <https://github.com/pymc-devs/pymc/issues/5443>
@@ -575,6 +583,7 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
                   .sort_index(axis=0).sort_index(axis=1))
     quap.std = pd.Series(np.sqrt(np.diag(quap.cov)), index=cnames).sort_index()
     quap.map_est = {k: map_est[k] for k in dnames}
+    quap.logp = opt.fun
     quap.model = deepcopy(model)
     quap.start = model.initial_point if start is None else start
     quap.data = deepcopy(data)  # TODO pass data for each call of quap!!

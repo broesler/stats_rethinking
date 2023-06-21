@@ -20,6 +20,8 @@ import stats_rethinking as sts
 
 plt.style.use('seaborn-v0_8-darkgrid')
 
+SIGMA_CONST = 0.001
+
 # Manually define data (R code 7.1)
 sppnames = ['afarensis', 'africanus', 'habilis', 'boisei', 'rudolfensis',
             'ergaster', 'sapiens']
@@ -55,8 +57,8 @@ Rsq = 1 - r.var(ddof=0) / df['brain_std'].var(ddof=0)
 print(f"{Rsq = :.4f}")
 
 # NOTE Why is this method incorrect? If we can figure this out, we don't need
-# to write the sim function to correspond to link! It is just the lmeval with
-# a different output variable.
+# to write the `rethinking::sim` function to correspond to `rethinking::link`!
+# It is just the lmeval with a different output variable.
 # ==> I believe this method gives an incorrect answer because it does not touch
 # the internal rng state of pytensor for each draw, so the draws are *not*
 # independent. Thus, the result is a bunch of random points within the PI of
@@ -96,7 +98,7 @@ def brain_Rsq(quap):
     post = quap.sample()
     mu_samp = sts.lmeval(quap, out=quap.model.μ, dist=post,
                          params=[quap.model.α, quap.model.βn])
-    sigma = np.exp(post['log_σ']) if poly_order < 6 else 0.001
+    sigma = np.exp(post['log_σ']) if poly_order < 6 else SIGMA_CONST
     h_samp = stats.norm(mu_samp, sigma).rvs()
     r = h_samp.mean(axis=1) - df['brain_std']  # residuals
     # pandas default is ddof=1 => N-1, so explicitly use ddof=0 => N.
@@ -112,9 +114,12 @@ def poly_model(poly_order, x='mass_std', y='brain_std', data=df):
         βn = pm.Normal('βn', 0, 10, shape=(poly_order,))
         β = pm.math.concatenate([α, βn])
         μ = pm.Deterministic('μ', pm.math.dot(X, β))
-        log_σ = pm.Normal('log_σ', 0, 1)
-        sigma = pm.math.exp(log_σ) if poly_order < 6 else 0.001
-        brain_std = pm.Normal('brain_std', μ, sigma, 
+        if poly_order < 6:
+            log_σ = pm.Normal('log_σ', 0, 1)
+            sigma = pm.math.exp(log_σ)
+        else:
+            sigma = SIGMA_CONST
+        brain_std = pm.Normal('brain_std', μ, sigma,
                               observed=data[y], shape=ind.shape)
         # Compute the posterior
         quap = sts.quap(data=data)
@@ -152,13 +157,13 @@ for poly_order in range(1, Np+1):
     xe = sts.unstandardize(xe_s, df['mass'])
 
     # PLot results
-    sts.lmplot(fit_x=xe, fit_y=mu_samp, 
+    sts.lmplot(fit_x=xe, fit_y=mu_samp,
                x='mass', y='brain', data=df,
                ax=ax,
                line_kws=dict(c='k', lw=1),
                fill_kws=dict(facecolor='k', alpha=0.2))
 
-    ax.set_title(rf"{k}: $R^2 = {Rsqs[k]:.2f}$", 
+    ax.set_title(rf"{k}: $R^2 = {Rsqs[k]:.2f}$",
                  x=0.02, y=1, loc='left', pad=-14)
     ax.set(xlabel='body mass [kg]',
            ylabel='brain volume [cc]')
@@ -174,7 +179,7 @@ for poly_order in range(1, Np+1):
         ax.axhline(0, c='k', lw=1, ls='--')
 
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Underfitting (R code 7.11)
 # -----------------------------------------------------------------------------
 with pm.Model():
@@ -213,7 +218,7 @@ mu_samp *= df['brain'].max()
 xe = sts.unstandardize(xe_s, df['mass'])
 
 # PLot results
-sts.lmplot(fit_x=xe, fit_y=mu_samp, 
+sts.lmplot(fit_x=xe, fit_y=mu_samp,
            x='mass', y='brain', data=df,
            ax=ax,
            line_kws=dict(c='k', lw=1),
@@ -224,7 +229,7 @@ ax.set(xlabel='body mass [kg]',
        ylabel='brain volume [cc]')
 
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Variance -- Leave-one-out validation
 # -----------------------------------------------------------------------------
 # Figure 7.5
@@ -240,7 +245,7 @@ for i, poly_order in enumerate([1, 4]):
     for j in range(len(df)):
         # Create the model
         quap = poly_model(poly_order, x='mass_std', y='brain_std',
-                           data=df.drop(j))
+                          data=df.drop(j))
         mu_samp = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
                              params=[quap.model.α, quap.model.βn])
         mu_mean = mu_samp.mean(axis=1) * df['brain'].max()
@@ -253,6 +258,41 @@ for i, poly_order in enumerate([1, 4]):
     ax.set_title(f"m7.{poly_order}", x=0.02, y=1, loc='left', pad=-14)
     ax.set(xlabel='body mass [kg]',
            ylabel='brain volume [cc]')
+
+# -----------------------------------------------------------------------------
+#         §7.2 Log Pointwise Predictive Density (lppd)
+# -----------------------------------------------------------------------------
+# Compute the log probabilities of the model (R code 7.14, 7.15)
+
+
+def log_sum_exp(x, axis=None):
+    """Compute the log of the sum of the exponentials."""
+    # Center around the maximum for numerical stability
+    x_max = np.max(x)
+    return x_max + np.log(np.sum(np.exp(x - x_max), axis=axis))
+
+
+def lppd(quap, Ns=1000):
+    """Compute the log pointwise predictive density for a model."""
+    post = quap.sample(Ns)
+    mu_samp = sts.lmeval(
+            quap,
+            out=quap.model.μ,
+            dist=post,
+            eval_at={'ind': df['mass_std']}
+        )
+    sigma = np.exp(post['log_σ']) if 'log_σ' in post else SIGMA_CONST
+    h_logp = stats.norm(mu_samp, sigma).logpdf(df[['brain_std']])
+    return log_sum_exp(h_logp, axis=1) - np.log(Ns)
+
+
+# R code 7.14
+# >>> lppd(m7_1)
+# === array([ 0.6156,  0.6508,  0.5414,  0.6316,  0.4698,  0.4349, -0.8536])
+
+# R code 7.16
+print(pd.Series({k: sum(lppd(v)) for k, v in models.items()}))
+
 
 plt.ion()
 plt.show()
