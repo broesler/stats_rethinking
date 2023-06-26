@@ -24,6 +24,9 @@ import stats_rethinking as sts
 
 plt.style.use('seaborn-v0_8-darkgrid')
 
+FORCE_UPDATE = True  # if True, overwrite `tf_file` regardless
+tf_file = Path('./train_test_all.pkl')
+
 # (R code 7.17 - 7.19)
 Y_SIGMA = 1
 
@@ -68,15 +71,17 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
 
     # Generate train/test data
     # NOTE this method of creating the data obfuscates the underlying linear
-    # model:
+    # model, but it is a clean way of accommodating varying parameter lengths.
     #   y_i ~ N(μ_i, 1)
     #   μ_i = α + β_1 * x_{1,i} + β_2 * x_{2,i}
     #   α = 0
     #   β_1 =  0.15
     #   β_2 = -0.4
+
     Rho = np.eye(n_dim)
     Rho[0, 1:len(rho)+1] = rho
     Rho[1:len(rho)+1, 0] = rho
+
     # >>> Rho
     # === array([[ 1.  ,  0.15, -0.4 ],
     #            [ 0.15,  1.  ,  0.  ],
@@ -87,10 +92,15 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
     X_train = true_dist.rvs(N)  # (N, k)
     X_test = true_dist.rvs(N)
 
+    y_train = X_train[:, 0]
+    X_train = X_train[:, 1:]
+    y_test = X_test[:, 0]
+    X_test = X_test[:, 1:]
+
     # Define the training matrix
     mm_train = np.ones((N, 1))  # intercept term
     if k > 1:
-        mm_train = np.c_[mm_train, X_train[:, 1:k]]
+        mm_train = np.c_[mm_train, X_train[:, :k-1]]
 
     # Build and fit the model to the training data
     with pm.Model():
@@ -98,14 +108,14 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
         if k == 1:
             α = pm.Normal('α', 0, b_sigma)
             μ = pm.Deterministic('μ', α)
-            y = pm.Normal('y', μ, Y_SIGMA, observed=X_train[:, 0])
+            y = pm.Normal('y', μ, Y_SIGMA, observed=y_train)
         else:
             α = pm.Normal('α', 0, b_sigma, shape=(1,))
             βn = pm.Normal('βn', 0, b_sigma, shape=(k-1,))
             β = pm.math.concatenate([α, βn])
             μ = pm.Deterministic('μ', pm.math.dot(X, β))
             y = pm.Normal('y', μ, Y_SIGMA,
-                          observed=X_train[:, 0],
+                          observed=y_train,
                           shape=X[:, 0].shape
                           )
         quap = sts.quap()
@@ -113,16 +123,16 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
     # Compute the deviance
     dev = pd.Series(index=['train', 'test'], dtype=float)
     dev['train'] = -2 * np.sum(
-            lppd(quap, data_in=mm_train, data_out=X_train[:, 0])
+            lppd(quap, data_in=mm_train, data_out=y_train)
         )
 
     # Compute the lppd with the test data
     mm_test = np.ones((N, 1))
     if k > 1:
-        mm_test = np.c_[mm_test, X_test[:, 1:k]]
+        mm_test = np.c_[mm_test, X_test[:, :k-1]]
 
     dev['test'] = -2 * np.sum(
-            lppd(quap, data_in=mm_test, data_out=X_test[:, 0])
+            lppd(quap, data_in=mm_test, data_out=y_test)
         )
 
     return dict(dev=dev, model=quap)
@@ -135,9 +145,6 @@ Ne = 100                  # number of replicates
 Ns = [20, 100]            # data points
 params = np.arange(1, 6)  # number of parameters in the model
 
-
-FORCE_UPDATE = True
-tf_file = Path('./train_test_all.pkl')
 
 if not FORCE_UPDATE and tf_file.exists():
     tf = pd.read_pickle(tf_file)
