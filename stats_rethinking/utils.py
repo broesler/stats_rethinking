@@ -1110,5 +1110,107 @@ def log_sum_exp(x, axis=None):
     return x_max + np.log(np.sum(np.exp(x - x_max), axis=axis))
 
 
+# (R code 7.17 - 7.19)
+
+def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
+    """Simulate fitting a model of `k` parameters to `N` data points.
+
+    Parameters
+    ----------
+    N : int
+        The number of simulated data points.
+    k : int
+        The number of parameters in the linear model, including the intercept.
+    rho : 1-D array_like
+        A vector of "true" parameter values, excluding the intercept term.
+    b_sigma : float
+        The model standard deviation of the slope terms.
+
+    Returns
+    -------
+    result : dict
+        'dev' : dict with keys {'train', 'test'}
+            The deviance of the model for the train and test data.
+        'model' : :obj:Quap
+            The model itself.
+    """
+    Y_SIGMA = 1
+
+    def lppd(m, data_in, data_out, Ns=1000):
+        """Compute the log pointwise predictive density for a model."""
+        mu_samp = lmeval(m, out=m.model.μ, eval_at={'X': data_in}, N=Ns)
+        y_logp = stats.norm(mu_samp, Y_SIGMA).logpdf(np.c_[data_out])
+        return log_sum_exp(y_logp, axis=1) - np.log(Ns)
+
+    # Define the dimensions of the "true" distribution to match the model
+    n_dim = 1 + len(rho)
+    if n_dim < k:
+        n_dim = k
+
+    # Generate train/test data
+    # NOTE this method of creating the data obfuscates the underlying linear
+    # model, but it is a clean way of accommodating varying parameter lengths.
+    #   y_i ~ N(μ_i, 1)
+    #   μ_i = α + β_1 * x_{1,i} + β_2 * x_{2,i}
+    #   α = 0
+    #   β_1 =  0.15
+    #   β_2 = -0.4
+
+    Rho = np.eye(n_dim)
+    Rho[0, 1:len(rho)+1] = rho
+    Rho[1:len(rho)+1, 0] = rho
+
+    # >>> Rho
+    # === array([[ 1.  ,  0.15, -0.4 ],
+    #            [ 0.15,  1.  ,  0.  ],
+    #            [-0.4 ,  0.  ,  1.  ]])
+    #
+
+    true_dist = stats.multivariate_normal(mean=np.zeros(n_dim), cov=Rho)
+    X_train = true_dist.rvs(N)  # (N, k)
+    X_test = true_dist.rvs(N)
+
+    y_train = X_train[:, 0]
+    X_train = X_train[:, 1:]
+    y_test = X_test[:, 0]
+    X_test = X_test[:, 1:]
+
+    # Define the training matrix
+    mm_train = np.ones((N, 1))  # intercept term
+    if k > 1:
+        mm_train = np.c_[mm_train, X_train[:, :k-1]]
+
+    # Build and fit the model to the training data
+    with pm.Model():
+        X = pm.MutableData('X', mm_train)
+        if k == 1:
+            α = pm.Normal('α', 0, b_sigma)
+            μ = pm.Deterministic('μ', α)
+            y = pm.Normal('y', μ, Y_SIGMA, observed=y_train)
+        else:
+            α = pm.Normal('α', 0, b_sigma, shape=(1,))
+            βn = pm.Normal('βn', 0, b_sigma, shape=(k-1,))
+            β = pm.math.concatenate([α, βn])
+            μ = pm.Deterministic('μ', pm.math.dot(X, β))
+            y = pm.Normal('y', μ, Y_SIGMA,
+                          observed=y_train,
+                          shape=X[:, 0].shape
+                          )
+        q = quap()
+
+    # Compute the deviance
+    dev = pd.Series(index=['train', 'test'], dtype=float)
+    dev['train'] = -2 * np.sum(lppd(q, data_in=mm_train, data_out=y_train))
+
+    # Compute the lppd with the test data
+    mm_test = np.ones((N, 1))
+    if k > 1:
+        mm_test = np.c_[mm_test, X_test[:, :k-1]]
+
+    dev['test'] = -2 * np.sum(lppd(q, data_in=mm_test, data_out=y_test))
+
+    return dict(dev=dev, model=q)
+
+
 # =============================================================================
 # =============================================================================
