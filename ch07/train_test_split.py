@@ -24,8 +24,7 @@ import stats_rethinking as sts
 
 plt.style.use('seaborn-v0_8-darkgrid')
 
-FORCE_UPDATE = True  # if True, overwrite `tf_file` regardless
-tf_file = Path('./train_test_all.pkl')
+FORCE_UPDATE = False  # if True, overwrite `tf_file` regardless
 
 # (R code 7.17 - 7.19)
 Y_SIGMA = 1
@@ -63,7 +62,6 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
         'model' : :obj:Quap
             The model itself.
     """
-
     # Define the dimensions of the "true" distribution to match the model
     n_dim = 1 + len(rho)
     if n_dim < k:
@@ -144,7 +142,9 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
 Ne = 100                  # number of replicates
 Ns = [20, 100]            # data points
 params = np.arange(1, 6)  # number of parameters in the model
+b_sigmas = [100, 1, 0.5, 0.2]
 
+tf_file = Path(f"./train_test_all_Ne{Ne:d}.pkl")
 
 if not FORCE_UPDATE and tf_file.exists():
     tf = pd.read_pickle(tf_file)
@@ -152,14 +152,15 @@ else:
     # Parallelize All at Once:
     def exp_train_test(args):
         """Run a single simulation."""
-        N, k, _ = args
-        return (sim_train_test(N, k)['dev'], N, k)
+        N, k, _, b = args
+        return (sim_train_test(N, k, b_sigma=b)['dev'], N, k, b)
 
     all_args = [
-            (N, k, i)
+            (N, k, i, b)
             for N in Ns
             for k in params
             for i in range(Ne)
+            for b in b_sigmas
         ]
     res = process_map(
             exp_train_test,
@@ -174,12 +175,13 @@ else:
     tf = pd.concat(lres[0], axis='columns').T
     tf['N'] = lres[1]
     tf['params'] = lres[2]
+    tf['b_sigma'] = lres[3]
 
     # Save the data
     tf.to_pickle(tf_file)
 
 # Compute the mean and std deviance for each number of parameters
-df = tf.groupby(['N', 'params']).agg(['mean', 'std'])
+df = tf.groupby(['b_sigma', 'N', 'params']).agg(['mean', 'std'])
 df.columns.names = ['kind', 'stat']
 
 # Figure 7.7
@@ -191,16 +193,17 @@ jitter = 0.05  # separation between points in x-direction
 for i, N in enumerate(Ns):
     ax = fig.add_subplot(gs[i])
 
-    ax.errorbar(params-jitter, df.loc[N, ('train', 'mean')],
-                yerr=df.loc[N, ('train', 'std')],
+    idx = pd.IndexSlice[100, N]
+    ax.errorbar(params - jitter, df.loc[idx, ('train', 'mean')],
+                yerr=df.loc[idx, ('train', 'std')],
                 fmt='oC0', markerfacecolor='C0', ecolor='C0')
-    ax.errorbar(params+jitter, df.loc[N, ('test', 'mean')],
-                yerr=df.loc[N, ('test', 'std')],
+    ax.errorbar(params + jitter, df.loc[idx, ('test', 'mean')],
+                yerr=df.loc[idx, ('test', 'std')],
                 fmt='ok', markerfacecolor='none', ecolor='k')
 
     # Label the training set
     ax.text(x=(params - 4*jitter)[1],
-            y=df.loc[N].iloc[1]['train', 'mean'],
+            y=df.loc[idx].iloc[1]['train', 'mean'],
             s='train',
             color='C0',
             ha='right',
@@ -209,7 +212,7 @@ for i, N in enumerate(Ns):
 
     # Label the test set
     ax.text(x=(params + 4*jitter)[1],
-            y=df.loc[N].iloc[1]['test', 'mean'],
+            y=df.loc[idx].iloc[1]['test', 'mean'],
             s='test',
             color='k',
             ha='left',
@@ -220,6 +223,35 @@ for i, N in enumerate(Ns):
     ax.set(title=f"{N = }",
            xlabel='number of parameters',
            ylabel='deviance')
+
+
+# Figure 7.9
+fig = plt.figure(2, clear=True, constrained_layout=True)
+fig.set_size_inches((10, 5), forward=True)
+gs = fig.add_gridspec(nrows=1, ncols=2)
+
+for i, N in enumerate(Ns):
+    ax = fig.add_subplot(gs[i])
+
+    idx = pd.IndexSlice[100, N]
+    ax.scatter(params, df.loc[idx, ('train', 'mean')], c='C0')
+    ax.scatter(params, df.loc[idx, ('test', 'mean')],
+               facecolors='none', edgecolors='k')
+
+    # Only plot the regularized curves
+    for b, ls in zip(b_sigmas[1:], ['--', ':', '-']):
+        idx = pd.IndexSlice[b, N]
+        ax.plot(params, df.loc[idx, ('train', 'mean')], c='C0', ls=ls)
+        ax.plot(params, df.loc[idx, ('test', 'mean')], c='k', ls=ls,
+                label=f"N(0, {b})")
+
+    ax.set_xticks(params, labels=params)
+    ax.set(title=f"{N = }",
+           xlabel='number of parameters',
+           ylabel='deviance')
+    if i == 0:
+        ax.legend(loc='lower left')
+
 
 plt.ion()
 plt.show()
