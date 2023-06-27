@@ -120,18 +120,14 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
 
     # Compute the deviance
     dev = pd.Series(index=['train', 'test'], dtype=float)
-    dev['train'] = -2 * np.sum(
-            lppd(quap, data_in=mm_train, data_out=y_train)
-        )
+    dev['train'] = -2 * np.sum(lppd(quap, data_in=mm_train, data_out=y_train))
 
     # Compute the lppd with the test data
     mm_test = np.ones((N, 1))
     if k > 1:
         mm_test = np.c_[mm_test, X_test[:, :k-1]]
 
-    dev['test'] = -2 * np.sum(
-            lppd(quap, data_in=mm_test, data_out=y_test)
-        )
+    dev['test'] = -2 * np.sum(lppd(quap, data_in=mm_test, data_out=y_test))
 
     return dict(dev=dev, model=quap)
 
@@ -156,18 +152,18 @@ else:
         return (sim_train_test(N, k, b_sigma=b)['dev'], N, k, b)
 
     all_args = [
-            (N, k, i, b)
-            for N in Ns
-            for k in params
-            for i in range(Ne)
-            for b in b_sigmas
-        ]
+        (N, k, i, b)
+        for N in Ns
+        for k in params
+        for i in range(Ne)
+        for b in b_sigmas
+    ]
     res = process_map(
-            exp_train_test,
-            all_args,
-            max_workers=16,
-            chunksize=2*len(params)
-        )
+        exp_train_test,
+        all_args,
+        max_workers=16,
+        chunksize=2*len(params)
+    )
 
     # Convert list of tuples (Series(), N, k) to DataFrame with
     # columns=Series.index.
@@ -184,7 +180,10 @@ else:
 df = tf.groupby(['b_sigma', 'N', 'params']).agg(['mean', 'std'])
 df.columns.names = ['kind', 'stat']
 
-# Figure 7.7
+# ----------------------------------------------------------------------------- 
+#         Plots
+# -----------------------------------------------------------------------------
+# Figure 7.7 -- deviance vs number of parameters
 fig = plt.figure(1, clear=True, constrained_layout=True)
 fig.set_size_inches((10, 5), forward=True)
 gs = fig.add_gridspec(nrows=1, ncols=2)
@@ -202,22 +201,24 @@ for i, N in enumerate(Ns):
                 fmt='ok', markerfacecolor='none', ecolor='k')
 
     # Label the training set
-    ax.text(x=(params - 4*jitter)[1],
-            y=df.loc[idx].iloc[1]['train', 'mean'],
-            s='train',
-            color='C0',
-            ha='right',
-            va='center',
-            )
+    ax.text(
+        x=(params - 4*jitter)[1],
+        y=df.loc[idx].iloc[1]['train', 'mean'],
+        s='train',
+        color='C0',
+        ha='right',
+        va='center',
+    )
 
     # Label the test set
-    ax.text(x=(params + 4*jitter)[1],
-            y=df.loc[idx].iloc[1]['test', 'mean'],
-            s='test',
-            color='k',
-            ha='left',
-            va='center',
-            )
+    ax.text(
+        x=(params + 4*jitter)[1],
+        y=df.loc[idx].iloc[1]['test', 'mean'],
+        s='test',
+        color='k',
+        ha='left',
+        va='center',
+    )
 
     ax.set_xticks(params, labels=params)
     ax.set(title=f"{N = }",
@@ -225,7 +226,7 @@ for i, N in enumerate(Ns):
            ylabel='deviance')
 
 
-# Figure 7.9
+# Figure 7.9 -- deviance vs parameters and increasing regularization
 fig = plt.figure(2, clear=True, constrained_layout=True)
 fig.set_size_inches((10, 5), forward=True)
 gs = fig.add_gridspec(nrows=1, ncols=2)
@@ -243,7 +244,7 @@ for i, N in enumerate(Ns):
         idx = pd.IndexSlice[b, N]
         ax.plot(params, df.loc[idx, ('train', 'mean')], c='C0', ls=ls)
         ax.plot(params, df.loc[idx, ('test', 'mean')], c='k', ls=ls,
-                label=f"N(0, {b})")
+                label=rf"$\mathcal{{N}}$(0, {b})")
 
     ax.set_xticks(params, labels=params)
     ax.set(title=f"{N = }",
