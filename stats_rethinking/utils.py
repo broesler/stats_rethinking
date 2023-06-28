@@ -649,6 +649,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 
     if params is None:
         params = inputvars(out)
+        # TODO drop param if shape == 0?
 
     if dist is None:
         dist = fit.sample(N)  # take the posterior
@@ -1100,7 +1101,7 @@ def plot_coef_table(ct, q=0.89, fignum=None):
     return fig, ax
 
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Utilities
 # -----------------------------------------------------------------------------
 def log_sum_exp(x, axis=None):
@@ -1111,7 +1112,6 @@ def log_sum_exp(x, axis=None):
 
 
 # (R code 7.17 - 7.19)
-
 def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
     """Simulate fitting a model of `k` parameters to `N` data points.
 
@@ -1135,6 +1135,8 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
             The model itself.
     """
     Y_SIGMA = 1
+    # NOTE this line is *required* for expected parallel behavior
+    np.random.seed()
 
     def lppd(m, data_in, data_out, Ns=1000):
         """Compute the log pointwise predictive density for a model."""

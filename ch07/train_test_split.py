@@ -20,17 +20,15 @@ import stats_rethinking as sts
 
 plt.style.use('seaborn-v0_8-darkgrid')
 
-FORCE_UPDATE = True  # if True, overwrite `tf_file` regardless
+FORCE_UPDATE = False  # if True, overwrite `tf_file` regardless
 
 # -----------------------------------------------------------------------------
 #         Replicate the experiment Ne times for each k
 # -----------------------------------------------------------------------------
-Ne = 10                       # number of replicates
-Ns = [20]                 # data points
-# params = np.arange(1, 6)       # number of parameters in the model
-params = np.r_[1, 2]
-b_sigmas = [100]  # regularization via small prior variance
-# b_sigmas = [100, 1, 0.5, 0.2]  # regularization via small prior variance
+Ne = 100                       # number of replicates
+Ns = [20, 100]                 # data points
+params = np.arange(1, 6)       # number of parameters in the model
+b_sigmas = [100, 1, 0.5, 0.2]  # regularization via small prior variance
 
 tf_file = Path(f"./train_test_all_Ne{Ne:d}.pkl")
 
@@ -72,38 +70,11 @@ else:
     tf['b_sigma'] = lres[3]
 
     # Save the data
-    # tf.to_pickle(tf_file)
+    tf.to_pickle(tf_file)
 
 # Compute the mean and std deviance for each number of parameters
 df = tf.groupby(['b_sigma', 'N', 'params']).agg(['mean', 'std'])
 df.columns.names = ['kind', 'stat']
-
-# FIXME Many rows (esp. with 1 param) give the *exact* same deviance. Shouldn't
-# these all be a bit difference since the data are random on each call of
-# sim_train_test? Does calling in parallel somehow use the same seed for each
-# instance?
-# >>> cf = (tf.set_index(['N', 'params', 'b_sigma'])
-#             .sort_index()
-#             .xs(100, level='b_sigma')
-#             .loc[pd.IndexSlice[20, 1, 100]]
-#             .sort_values('train')
-#           )
-# >>> cf
-# ===
-#                train       test
-# N  params
-# 20 1       46.863555  62.518767
-#    1       46.863555  62.518767
-#    1       46.863555  62.518767
-#    1       46.863555  62.518767
-#    1       46.863555  62.518767
-# ...              ...        ...
-#    1       68.487539  51.566934
-#    1       71.448650  54.090601
-#    1       71.448650  54.090601
-#    1       71.448650  54.090601
-#    1       71.448650  54.090601
-# [100 rows x 2 columns]
 
 # -----------------------------------------------------------------------------
 #         Plots
