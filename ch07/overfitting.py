@@ -48,33 +48,17 @@ print('m7.1:')
 sts.precis(m7_1)
 
 # Compute R² value (R code 7.4)
-post = m7_1.sample()
-mu_samp = sts.lmeval(m7_1, out=m7_1.model.μ, dist=post)
-h_samp = stats.norm(mu_samp, np.exp(post['log_σ'])).rvs()
+h_samp = sts.lmeval(
+    m7_1,
+    out=m7_1.model.brain_std,
+    params=[m7_1.model.α,
+            m7_1.model.β,
+            m7_1.model.log_σ],
+)
 h_mean = h_samp.mean(axis=1)
 r = h_samp.mean(axis=1) - df['brain_std']  # residuals
 Rsq = 1 - r.var(ddof=0) / df['brain_std'].var(ddof=0)
 print(f"{Rsq = :.4f}")
-
-# NOTE Why is this method incorrect? If we can figure this out, we don't need
-# to write the `rethinking::sim` function to correspond to `rethinking::link`!
-# It is just the lmeval with a different output variable.
-# ==> I believe this method gives an incorrect answer because it does not touch
-# the internal rng state of pytensor for each draw, so the draws are *not*
-# independent. Thus, the result is a bunch of random points within the PI of
-# brain_std, but whose *means* are not necessarily near the brain_std mean.
-#
-# NOTE Update FIXED!! See changes to `sts.lmeval` to use `compile_fn` instead
-# of `eval`; `eval` is only intended for debugging purposes.
-h_test = sts.lmeval(m7_1,
-                    out=m7_1.model.brain_std,
-                    params=[m7_1.model.α,
-                            m7_1.model.β,
-                            m7_1.model.log_σ],
-                    dist=post,
-                    )
-h_mean_test = h_test.mean(axis=1)
-
 
 # Plot the data and linear predictions
 fig = plt.figure(1, clear=True, constrained_layout=True)
@@ -82,10 +66,8 @@ ax = fig.add_subplot()
 ax.scatter('mass', 'brain', data=df)
 for label, x, y in zip(df['species'], df['mass'], df['brain']):
     ax.text(x+0.5, y+2, label)
-# ax.scatter(df['mass'], h_mean * df['brain'].max(), c='k', marker='x')
 idx = np.argsort(df['mass'])
 ax.plot(df.loc[idx, 'mass'], h_mean[idx] * df['brain'].max(), c='k', marker='x')
-ax.plot(df.loc[idx, 'mass'], h_mean_test[idx] * df['brain'].max(), c='C2', marker='x')
 ax.set(xlabel='body mass [kg]',
        ylabel='brain volume [cc]')
 
@@ -101,11 +83,10 @@ Np = 6  # max polynomial terms
 # (R code 7.5)
 def brain_Rsq(quap):
     """Compute the :math:`R^2` value of the model."""
-    post = quap.sample()
-    mu_samp = sts.lmeval(quap, out=quap.model.μ, dist=post,
-                         params=[quap.model.α, quap.model.βn])
-    sigma = np.exp(post['log_σ']) if poly_order < 6 else SIGMA_CONST
-    h_samp = stats.norm(mu_samp, sigma).rvs()
+    params = [quap.model.α, quap.model.βn]
+    if 'log_σ' in quap.model.named_vars.keys():
+        params.append(quap.model.log_σ)
+    h_samp = sts.lmeval(quap, out=quap.model.brain_std, params=params)
     r = h_samp.mean(axis=1) - df['brain_std']  # residuals
     # pandas default is ddof=1 => N-1, so explicitly use ddof=0 => N.
     return 1 - r.var(ddof=0) / df['brain_std'].var(ddof=0)
