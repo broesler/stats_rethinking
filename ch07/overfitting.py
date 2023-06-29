@@ -83,8 +83,11 @@ Np = 6  # max polynomial terms
 # (R code 7.5)
 def brain_Rsq(quap):
     """Compute the :math:`R^2` value of the model."""
-    params = [quap.model.α, quap.model.βn]
-    if 'log_σ' in quap.model.named_vars.keys():
+    params = [quap.model.α]
+    var_names = quap.model.named_vars.keys()
+    if 'βn' in var_names:
+        params.append(quap.model.βn)
+    if 'log_σ' in var_names:
         params.append(quap.model.log_σ)
     h_samp = sts.lmeval(quap, out=quap.model.brain_std, params=params)
     r = h_samp.mean(axis=1) - df['brain_std']  # residuals
@@ -172,35 +175,29 @@ for poly_order in range(1, Np+1):
 with pm.Model():
     ind = pm.MutableData('ind', df['mass_std'])
     α = pm.Normal('α', 0.5, 1)
-    μ = pm.Deterministic('μ', α)  # NOT a function of x!
+    μ = pm.Deterministic('μ', α * pm.math.ones_like(ind))  # NOT function of x!
     log_σ = pm.Normal('log_σ', 0, 1)
     brain_std = pm.Normal('brain_std', μ, pm.math.exp(log_σ),
-                          observed=df['brain_std'])
+                          observed=df['brain_std'], shape=ind.shape)
     # Compute the posterior
-    quap = sts.quap(data=df)
-    # Store and print the models and R² values
-    k = "m7.7"
-    models[k] = quap
+    m7_7 = sts.quap(data=df)
 
-    # Rsqs[k] = brain_Rsq(quap)
-    post = quap.sample()
-    # No need to evaluate the model! Just tile the posterior
-    mu_samp = np.tile(post['α'], (len(df), 1))
-    sigma = np.exp(post['log_σ'])
-    h_samp = stats.norm(mu_samp, sigma).rvs()
-    r = h_samp.mean(axis=1) - df['brain_std']  # residuals
-    Rsqs[k] = 1 - r.var(ddof=0) / df['brain_std'].var(ddof=0)
+# Store and print the models and R² values
+k = "m7.7"
+models[k] = m7_7
+Rsqs[k] = brain_Rsq(m7_7)
 
-    print(k)
-    sts.precis(quap)
-    print(f"R² = {Rsqs[k]:.4f}")
+print(k)
+sts.precis(m7_7)
+print(f"R² = {Rsqs[k]:.4f}")
 
 # Figure 7.4
 fig = plt.figure(3, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 
 # Re-scale the variables
-mu_samp = np.tile(post['α'], (len(xe_s), 1))
+mu_samp = sts.lmeval(m7_7, out=m7_7.model.μ, eval_at={'ind': xe_s},
+                     params=[m7_7.model.α])
 mu_samp *= df['brain'].max()
 xe = sts.unstandardize(xe_s, df['mass'])
 
