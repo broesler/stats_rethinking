@@ -15,6 +15,7 @@ import pandas as pd
 import pymc as pm
 
 from scipy import stats
+from tqdm import tqdm
 
 import stats_rethinking as sts
 
@@ -223,10 +224,17 @@ fig = plt.figure(4, clear=True, constrained_layout=True)
 fig.set_size_inches((10, 5), forward=True)
 gs = fig.add_gridspec(nrows=1, ncols=2)
 
-for i, poly_order in enumerate([1, 4]):
+poly_orders = [1, 4]
+for i, poly_order in tqdm(enumerate(poly_orders),
+                          total=len(poly_orders),
+                          position=0,
+                          desc='poly_order'):
     ax = fig.add_subplot(gs[i])
     # Fit to the data - 1 row at a time
-    for j in range(len(df)):
+    for j in tqdm(range(len(df)),
+                  position=1,
+                  desc='data pts',
+                  leave=False):
         # Create the model
         quap = poly_model(poly_order, x='mass_std', y='brain_std',
                           data=df.drop(j))
@@ -268,6 +276,7 @@ def lppd(quap, Ns=1000):
 # === array([ 0.6156,  0.6508,  0.5414,  0.6316,  0.4698,  0.4349, -0.8536])
 
 # R code 7.16
+print('lppd:')
 print(pd.Series({k: sum(lppd(v)) for k, v in models.items()}))
 
 
