@@ -64,13 +64,16 @@ print(f"{Rsq = :.4f}")
 # independent. Thus, the result is a bunch of random points within the PI of
 # brain_std, but whose *means* are not necessarily near the brain_std mean.
 #
-# h_samp = sts.lmeval(m7_1,
-#                     out=m7_1.model.brain_std,
-#                     params=[m7_1.model.α,
-#                             m7_1.model.β,
-#                             m7_1.model.log_σ]
-#                     )
-#
+# NOTE Update FIXED!! See changes to `sts.lmeval` to use `compile_fn` instead
+# of `eval`; `eval` is only intended for debugging purposes.
+h_test = sts.lmeval(m7_1,
+                    out=m7_1.model.brain_std,
+                    params=[m7_1.model.α,
+                            m7_1.model.β,
+                            m7_1.model.log_σ],
+                    dist=post,
+                    )
+h_mean_test = h_test.mean(axis=1)
 
 
 # Plot the data and linear predictions
@@ -80,6 +83,9 @@ ax.scatter('mass', 'brain', data=df)
 for label, x, y in zip(df['species'], df['mass'], df['brain']):
     ax.text(x+0.5, y+2, label)
 # ax.scatter(df['mass'], h_mean * df['brain'].max(), c='k', marker='x')
+idx = np.argsort(df['mass'])
+ax.plot(df.loc[idx, 'mass'], h_mean[idx] * df['brain'].max(), c='k', marker='x')
+ax.plot(df.loc[idx, 'mass'], h_mean_test[idx] * df['brain'].max(), c='C2', marker='x')
 ax.set(xlabel='body mass [kg]',
        ylabel='brain volume [cc]')
 

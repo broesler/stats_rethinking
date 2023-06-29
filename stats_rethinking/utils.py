@@ -644,8 +644,8 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         An array of values of the linear model evaluated at each of M `eval_at`
         points and `N` parameter samples.
     """
-    if out not in fit.model.deterministics:
-        raise ValueError(f"Variable '{out}' does not exist in the model!")
+    # if out not in fit.model.deterministics:
+    #     raise ValueError(f"Variable '{out}' does not exist in the model!")
 
     if params is None:
         params = inputvars(out)
@@ -669,13 +669,17 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     else:
         raise TypeError("dist must be a DataFrame!")
 
+    # TODO Update to Python 3.11? PyMC/PyTensor 5.5.0 accepts vector inputs.
+    # Compile the graph function to compute. Better than `eval`, which
+    # generates a new random state for each call.
+    out_func = fit.model.compile_fn(out, inputs=params)
     # Manual loop since params are 0-D variables in the model.
     cols = []
     for i in range(len(dist)):
         # Ensure shape of given values matches that of the model variable
-        param_vals = {v: np.reshape(dist_t[v.name].iloc[i], shapes[v.name])
+        param_vals = {v.name: np.reshape(dist_t[v.name].iloc[i], shapes[v.name])
                       for v in params}
-        cols.append(out.eval(param_vals))
+        cols.append(out_func(param_vals))
 
     return np.array(cols).T  # params as columns
 
