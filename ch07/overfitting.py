@@ -268,7 +268,7 @@ def lppd(quap, Ns=1000):
         )
     sigma = np.exp(post['log_σ']) if 'log_σ' in post else SIGMA_CONST
     h_logp = stats.norm(mu_samp, sigma).logpdf(df[['brain_std']])
-    return sts.log_sum_exp(h_logp, axis=1) - np.log(Ns)
+    return sts.logsumexp(h_logp, axis=1) - np.log(Ns)
 
 
 # R code 7.14

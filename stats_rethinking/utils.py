@@ -28,6 +28,7 @@ from pytensor.tensor.var import TensorConstant, TensorVariable
 
 from scipy import stats, linalg
 from scipy.interpolate import BSpline
+from scipy.special import logsumexp as _logsumexp
 from sklearn.utils.extmath import cartesian
 from sparkline import sparkify
 
@@ -1108,11 +1109,9 @@ def plot_coef_table(ct, q=0.89, fignum=None):
 # -----------------------------------------------------------------------------
 #         Utilities
 # -----------------------------------------------------------------------------
-def log_sum_exp(x, axis=None):
-    """Compute the log of the sum of the exponentials."""
-    # Center around the maximum for numerical stability
-    x_max = np.max(x)
-    return x_max + np.log(np.sum(np.exp(x - x_max), axis=axis))
+def logsumexp(*args, **kwargs):
+    """The log of the sum of the exponentials of the inputs."""
+    return _logsumexp(*args, **kwargs)
 
 
 # (R code 7.17 - 7.19)
@@ -1146,7 +1145,7 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
         """Compute the log pointwise predictive density for a model."""
         mu_samp = lmeval(m, out=m.model.μ, eval_at={'X': data_in}, N=Ns)
         y_logp = stats.norm(mu_samp, Y_SIGMA).logpdf(np.c_[data_out])
-        return log_sum_exp(y_logp, axis=1) - np.log(Ns)
+        return logsumexp(y_logp, axis=1) - np.log(Ns)
 
     # Define the dimensions of the "true" distribution to match the model
     n_dim = 1 + len(rho)
