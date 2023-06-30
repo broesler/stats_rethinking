@@ -139,15 +139,10 @@ def frame_to_array(df):
     multi-dimensional parameters, e.g. β__0, β__1, ..., β__N into β (N,).
     """
     tf = df.copy()
-    vf = tf.filter(regex='__[0-9]+', axis='columns')  # get the vector columns
-    tf = tf.drop(vf.columns, axis='columns')          # remove vector columns
-    the_dict = tf.to_dict(orient='list')              # {column -> [values]}
-    # Get each vector variable
-    vec_names = vf.columns.str.replace('__[0-9]+', '', regex=True).unique()
-    for v in vec_names:
-        # Single-dimension arrays (shape == (N,)) are ok, but N-D arrays need
-        # to use np.expand_dims(arr, 0), so (N, M) -> (1, N, M)
-        the_dict[v] = np.expand_dims(vf.filter(like=v).values, 0)
+    var_names = tf.columns.str.replace('__[0-9]+', '', regex=True).unique()
+    the_dict = dict()
+    for v in var_names:
+        the_dict[v] = np.expand_dims(tf.filter(like=v).values, 0)
     return az.convert_to_dataset(the_dict)
 
 
@@ -157,29 +152,34 @@ def array_to_frame(ds):
     """
     df = pd.DataFrame()
     for v_name, var in ds.data_vars.items():
-        v = var.mean('chain')  # remove chain dimension
-        if v.ndim == 1:        # only draw dimension
+        v = var.mean('chain').squeeze()  # remove chain dimension
+        if v.ndim == 1:                  # only draw dimension
             df[v_name] = v.values
         elif v.ndim > 1:
-            # TODO case of 2D, etc. variables
-            fmt = '02d' if (v.ndim - 1) > 10 else 'd'
-            cols = [f"{v_name}__{i:{fmt}}" for i in range(v.shape[1])]
-            df[cols] = v.values
+            df[_names_from_vec(v_name, v.shape[1])] = v.values
         else:
             raise ValueError(f"{v_name} has invalid dimension {v.ndim}.")
     return df
 
 
+def _names_from_vec(v_name, ncols):
+    """Create a list of strings ['x__0', 'x__1', ..., 'x__``ncols``'],
+    where 'x' is ``v_name``."""
+    # TODO case of 2D, etc. variables
+    fmt = '02d' if ncols > 10 else 'd'
+    return [f"{v_name}__{i:{fmt}}" for i in range(ncols)]
+
+
 da = frame_to_array(post)
 df = array_to_frame(da)
 idata = az.convert_to_inference_data(da)
-# idata = pm.compute_log_likelihood(idata, model=q.model, progressbar=False)
+idata = pm.compute_log_likelihood(idata, model=q.model, progressbar=False)
 
-# loo = az.loo(idata)
+loo = az.loo(idata)
 
-# res = pd.concat([dev, waic_s], keys=['deviance', 'WAIC'])
+res = pd.concat([dev, waic_s], keys=['deviance', 'WAIC'])
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Look at actual pymc/arviz examples
 # -----------------------------------------------------------------------------
 trace = pm.sample(model=q.model, idata_kwargs={'log_likelihood': True})
