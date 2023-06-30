@@ -27,6 +27,8 @@ rho = np.r_[0.15, -0.4]
 b_sigma = 0.5
 
 
+# TODO refactor these functions into generics
+
 def loglik(m, data_in, data_out, Ns=1000):
     """Compute the log-likelihood of the data, given the model."""
     mu_samp = sts.lmeval(m, out=m.model.μ, eval_at={'X': data_in}, N=Ns)
@@ -176,14 +178,19 @@ idata = az.convert_to_inference_data(da)
 idata = pm.compute_log_likelihood(idata, model=q.model, progressbar=False)
 
 loo = az.loo(idata)
+print(loo)
+loo_dev = -2 * loo.elpd_loo
+loo_s = pd.Series({'test': loo_dev,
+                   'err': np.abs(loo_dev - dev['test'])})
 
-res = pd.concat([dev, waic_s], keys=['deviance', 'WAIC'])
+res = pd.concat([dev, waic_s, loo_s], keys=['deviance', 'WAIC', 'LOOIC'])
 
 # -----------------------------------------------------------------------------
 #         Look at actual pymc/arviz examples
 # -----------------------------------------------------------------------------
-trace = pm.sample(model=q.model, idata_kwargs={'log_likelihood': True})
-data = az.load_arviz_data('centered_eight')
+# trace = pm.sample(model=q.model, idata_kwargs={'log_likelihood': True})
+# loo = az.loo(trace)
+# data = az.load_arviz_data('centered_eight')
 
 # =============================================================================
 # =============================================================================
