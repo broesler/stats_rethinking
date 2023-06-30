@@ -9,6 +9,7 @@ Overthinking: WAIC Calculations (R Code 7.20 - 25)
 """
 # =============================================================================
 
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -33,30 +34,39 @@ with pm.Model():
     μ = pm.Deterministic('μ', a + b * df['speed'])
     σ = pm.Exponential('σ', 1)
     dist = pm.Normal('dist', μ, σ, observed=df['dist'])
-    quap = sts.quap(data=df)
+    q = sts.quap(data=df)
 
 Ns = 1000
-post = quap.sample(Ns)
+post = q.sample(Ns)  # (Ns, Np)
 
 # Plot the fit
-mu_samp = sts.lmeval(quap, out=quap.model.μ)
+mu_samp = sts.lmeval(q, out=q.model.μ)
 ax = sts.lmplot(fit_x=df['speed'], fit_y=mu_samp, data=df, x='speed', y='dist')
 
-#  Log-likelihood of each observation at each sample from the posterior
+# Log-likelihood of each observation at each sample from the posterior
 # (R code 7.21)
-loglik = stats.norm(mu_samp, post['σ']).logpdf(df[['dist']])  # (N, Ns)
+# >>> loglik = stats.norm(mu_samp, post['σ']).logpdf(df[['dist']])  # (N, Ns)
+# NOTE Instead, we can use pymc to compute it for us from the model without
+# having to compute the mean and reimplement the logpdf ourselves.
 
-# NOTE how do we compute the log-likelihood directly from the model, without
-# having to rely on stats.norm and doing our own evaluation of the parameters?
-# `pm.compile_logp` seems to use the joint probability of the *priors*, with no
-# ability to input specific values (i.e. posterior samples) for the value
-# variables.
+# TODO convert posterior DataFrame with multi-dimensional parameter β__0, β__1,
+# etc. into β with β_dim_1 0 1 in the DataSet.
+# Create InferenceData object with 'posterior' attribute xarray DataSet.
+idata = az.convert_to_inference_data(post.to_dict(orient='list'))
+
+# Add log_likelihood to idata
+idata = pm.compute_log_likelihood(idata, model=q.model, progressbar=False)
+
+# Extract the relevant item
+loglik = idata.log_likelihood['dist'].mean('chain')  # DataArray (Ns, N)
+
+# quap.loglik ≈ -loglik.mean(axis=1).sum()?
 
 # Take the log of the average over each data point (R code 7.22)
-lppd = sts.logsumexp(loglik, axis=1) - np.log(Ns)  # (N,)
+lppd = sts.logsumexp(loglik, axis=0) - np.log(Ns)  # (Ns, N) -> (N,)
 
 # Penalty term (R code 7.23)
-p_WAIC = np.var(loglik, axis=1)
+p_WAIC = np.var(loglik, axis=0)  # (Ns, N) -> (N,)
 
 # Combine! (R code 7.24)
 WAIC = -2 * (lppd.sum() - p_WAIC.sum())
