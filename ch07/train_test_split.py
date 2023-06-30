@@ -25,21 +25,28 @@ FORCE_UPDATE = False  # if True, overwrite `tf_file` regardless
 # -----------------------------------------------------------------------------
 #         Replicate the experiment Ne times for each k
 # -----------------------------------------------------------------------------
-Ne = 100                       # number of replicates
-Ns = [20, 100]                 # data points
-params = np.arange(1, 6)       # number of parameters in the model
-b_sigmas = [100, 1, 0.5, 0.2]  # regularization via small prior variance
+DEBUG = True
+if DEBUG:
+    Ne = 3
+    Ns = [20]
+    params = np.arange(1, 5)
+    b_sigmas = [0.5]
+else:
+    Ne = 100                       # number of replicates
+    Ns = [20, 100]                 # data points
+    params = np.arange(1, 6)       # number of parameters in the model
+    b_sigmas = [100, 1, 0.5, 0.2]  # regularization via small prior variance
 
 tf_file = Path(f"./train_test_all_Ne{Ne:d}.pkl")
 
-if not FORCE_UPDATE and tf_file.exists():
+if not DEBUG and not FORCE_UPDATE and tf_file.exists():
     tf = pd.read_pickle(tf_file)
 else:
     # Parallelize All at Once:
     def exp_train_test(args):
         """Run a single simulation."""
         N, k, _, b = args
-        return (sts.sim_train_test(N, k, b_sigma=b)['dev'], N, k, b)
+        return (sts.sim_train_test(N, k, b_sigma=b)['res'], N, k, b)
 
     all_args = [
         (N, k, i, b)
@@ -49,28 +56,30 @@ else:
         for b in b_sigmas
     ]
 
-    # Parallel:
-    res = process_map(
-        exp_train_test,
-        all_args,
-        max_workers=16,
-        chunksize=2*len(params)
-    )
-
     # Non-parallel:
-    # from tqdm import tqdm
-    # res = [exp_train_test(x) for x in tqdm(all_args)]
+    if DEBUG:
+        from tqdm import tqdm
+        res = [exp_train_test(x) for x in tqdm(all_args)]
+    else:
+        # Parallel:
+        res = process_map(
+            exp_train_test,
+            all_args,
+            max_workers=16,
+            chunksize=2*len(params)
+        )
 
     # Convert list of tuples (Series(), N, k) to DataFrame with
     # columns=Series.index.
     lres = list(zip(*res))
-    tf = pd.concat(lres[0], axis='columns').T
+    tf = pd.DataFrame(lres[0])
     tf['N'] = lres[1]
     tf['params'] = lres[2]
     tf['b_sigma'] = lres[3]
 
     # Save the data
-    tf.to_pickle(tf_file)
+    if not DEBUG:
+        tf.to_pickle(tf_file)
 
 # Compute the mean and std deviance for each number of parameters
 df = tf.groupby(['b_sigma', 'N', 'params']).agg(['mean', 'std'])
