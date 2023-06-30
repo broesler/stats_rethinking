@@ -1116,7 +1116,21 @@ def logsumexp(*args, **kwargs):
 
 # (R code 7.17 - 7.19)
 def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
-    """Simulate fitting a model of `k` parameters to `N` data points.
+    r"""Simulate fitting a model of `k` parameters to `N` data points.
+
+    The default data-generating (i.e. "true") model used is:
+
+    .. math::
+            y_i ~ \mathcal{N}(μ_i, 1)
+            μ_i = α + β_1 x_{1,i} + β_2 x_{2,i}
+            α   = 0
+            β_1 =  0.15
+            β_2 = -0.4
+
+    If `k` is greater than 3, additional :math:`x_{j,i}` and corresponding
+    :math:`\beta_j` values will be included in the model, but should have no
+    effect on predictive power since the underlying data does not depend on any
+    additional parameters.
 
     Parameters
     ----------
@@ -1141,11 +1155,32 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
     # NOTE this line is *required* for expected parallel behavior
     np.random.seed()
 
+    # TODO proper docs on all of these. Generalize outside of this particular
+    # model? Issues:
+    #   1. the "eval_at={'X': data_in}", since "X" is specific to this model.
+    #   2. Y_SIGMA is given here as opposed to sampled in the posterior.
+    #   3. μ is specific to this model. Could use q.model['μ'] instead and
+    #      accept a name as an argument.
+    def loglik(m, data_in, data_out, Ns=1000):
+        """Compute the log probability of the data, given the model."""
+        mu_samp = lmeval(m, out=m.model.μ, eval_at={'X': data_in}, N=Ns)
+        return stats.norm(mu_samp, Y_SIGMA).logpdf(np.c_[data_out])
+
     def lppd(m, data_in, data_out, Ns=1000):
         """Compute the log pointwise predictive density for a model."""
-        mu_samp = lmeval(m, out=m.model.μ, eval_at={'X': data_in}, N=Ns)
-        y_logp = stats.norm(mu_samp, Y_SIGMA).logpdf(np.c_[data_out])
-        return logsumexp(y_logp, axis=1) - np.log(Ns)
+        return logsumexp(loglik(m, data_in, data_out, Ns), axis=1) - np.log(Ns)
+
+    def WAIC(m, data_in, data_out, Ns=1000, pointwise=False):
+        """Compute the Widely Applicable Information Criteria for the model."""
+        y_loglik = loglik(m, data_in, data_out, Ns=1000)
+        y_lppd = logsumexp(y_loglik, axis=1) - np.log(Ns)
+        penalty = np.var(y_loglik, axis=1)
+        waic_vec = -2 * (y_lppd - penalty)
+        n_cases = y_loglik.shape[0]
+        std_err = (n_cases * np.var(waic_vec))**0.5
+        w = waic_vec if pointwise else waic_vec.sum()
+        return dict(waic=w, lppd=y_lppd, penalty=penalty, std=std_err)
+
 
     # Define the dimensions of the "true" distribution to match the model
     n_dim = 1 + len(rho)
@@ -1155,12 +1190,6 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
     # Generate train/test data
     # NOTE this method of creating the data obfuscates the underlying linear
     # model, but it is a clean way of accommodating varying parameter lengths.
-    #   y_i ~ N(μ_i, 1)
-    #   μ_i = α + β_1 * x_{1,i} + β_2 * x_{2,i}
-    #   α = 0
-    #   β_1 =  0.15
-    #   β_2 = -0.4
-
     Rho = np.eye(n_dim)
     Rho[0, 1:len(rho)+1] = rho
     Rho[1:len(rho)+1, 0] = rho
@@ -1175,10 +1204,9 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
     X_train = true_dist.rvs(N)  # (N, k)
     X_test = true_dist.rvs(N)
 
-    y_train = X_train[:, 0]
-    X_train = X_train[:, 1:]
-    y_test = X_test[:, 0]
-    X_test = X_test[:, 1:]
+    # Separate the inputs and outputs for readability
+    y_train, X_train = X_train[:, 0], X_train[:, 1:]
+    y_test, X_test = X_test[:, 0], X_test[:, 1:]
 
     # Define the training matrix
     mm_train = np.ones((N, 1))  # intercept term
@@ -1197,10 +1225,8 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
             βn = pm.Normal('βn', 0, b_sigma, shape=(k-1,))
             β = pm.math.concatenate([α, βn])
             μ = pm.Deterministic('μ', pm.math.dot(X, β))
-            y = pm.Normal('y', μ, Y_SIGMA,
-                          observed=y_train,
-                          shape=X[:, 0].shape
-                          )
+            y = pm.Normal('y', μ, Y_SIGMA, observed=y_train,
+                          shape=X[:, 0].shape)
         q = quap()
 
     # Compute the deviance
@@ -1214,7 +1240,14 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
 
     dev['test'] = -2 * np.sum(lppd(q, data_in=mm_test, data_out=y_test))
 
-    return dict(dev=dev, model=q)
+    # Compute WAIC, LOOIC, and LOOCV
+    wx = WAIC(q, data_in=mm_test, data_out=y_test)
+    waic_s = pd.Series({'test': wx['waic'],
+                        'err': np.abs(wx['waic'] - dev['test'])})
+
+    res = pd.concat([dev, waic_s], keys=['deviance', 'WAIC'])
+
+    return dict(res=res, model=q)
 
 
 # =============================================================================
