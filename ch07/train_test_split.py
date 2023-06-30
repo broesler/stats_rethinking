@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from matplotlib.lines import Line2D
 from pathlib import Path
 from tqdm.contrib.concurrent import process_map
 
@@ -83,7 +84,7 @@ else:
 
 # Compute the mean and std deviance for each number of parameters
 df = tf.groupby(['b_sigma', 'N', 'params']).agg(['mean', 'std'])
-df.columns.names = ['kind', 'stat']
+df.columns.names = ['IC', 'kind', 'stat']
 
 # -----------------------------------------------------------------------------
 #         Plots
@@ -94,21 +95,23 @@ fig.set_size_inches((10, 5), forward=True)
 gs = fig.add_gridspec(nrows=1, ncols=2)
 jitter = 0.05  # separation between points in x-direction
 
+pf = df['deviance']  # just plot the deviance
+
 for i, N in enumerate(Ns):
     ax = fig.add_subplot(gs[i])
 
     idx = pd.IndexSlice[100, N]
-    ax.errorbar(params - jitter, df.loc[idx, ('train', 'mean')],
-                yerr=df.loc[idx, ('train', 'std')],
+    ax.errorbar(params - jitter, pf.loc[idx, ('train', 'mean')],
+                yerr=pf.loc[idx, ('train', 'std')],
                 fmt='oC0', markerfacecolor='C0', ecolor='C0')
-    ax.errorbar(params + jitter, df.loc[idx, ('test', 'mean')],
-                yerr=df.loc[idx, ('test', 'std')],
+    ax.errorbar(params + jitter, pf.loc[idx, ('test', 'mean')],
+                yerr=pf.loc[idx, ('test', 'std')],
                 fmt='ok', markerfacecolor='none', ecolor='k')
 
     # Label the training set
     ax.text(
         x=(params - 4*jitter)[1],
-        y=df.loc[idx].iloc[1]['train', 'mean'],
+        y=pf.loc[idx].iloc[1]['train', 'mean'],
         s='train',
         color='C0',
         ha='right',
@@ -118,7 +121,7 @@ for i, N in enumerate(Ns):
     # Label the test set
     ax.text(
         x=(params + 4*jitter)[1],
-        y=df.loc[idx].iloc[1]['test', 'mean'],
+        y=pf.loc[idx].iloc[1]['test', 'mean'],
         s='test',
         color='k',
         ha='left',
@@ -126,7 +129,7 @@ for i, N in enumerate(Ns):
     )
 
     ax.set_xticks(params, labels=params)
-    ax.set(title=f"{N = }",
+    ax.set(title=f"{N = }, {Ne = }",
            xlabel='number of parameters',
            ylabel='deviance')
 
@@ -140,23 +143,67 @@ for i, N in enumerate(Ns):
     ax = fig.add_subplot(gs[i])
 
     idx = pd.IndexSlice[100, N]
-    ax.scatter(params, df.loc[idx, ('train', 'mean')], c='C0')
-    ax.scatter(params, df.loc[idx, ('test', 'mean')],
+    ax.scatter(params, pf.loc[idx, ('train', 'mean')], c='C0')
+    ax.scatter(params, pf.loc[idx, ('test', 'mean')],
                facecolors='none', edgecolors='k')
 
     # Only plot the regularized curves
     for b, ls in zip(b_sigmas[1:], ['--', ':', '-']):
         idx = pd.IndexSlice[b, N]
-        ax.plot(params, df.loc[idx, ('train', 'mean')], c='C0', ls=ls)
-        ax.plot(params, df.loc[idx, ('test', 'mean')], c='k', ls=ls,
+        ax.plot(params, pf.loc[idx, ('train', 'mean')], c='C0', ls=ls)
+        ax.plot(params, pf.loc[idx, ('test', 'mean')], c='k', ls=ls,
                 label=rf"$\mathcal{{N}}$(0, {b})")
 
     ax.set_xticks(params, labels=params)
-    ax.set(title=f"{N = }",
+    ax.set(title=f"{N = }, {Ne = }",
            xlabel='number of parameters',
            ylabel='deviance')
+
     if i == 0:
-        ax.legend(loc='lower left')
+        # Add lines to the legend for train/test
+        handles, labels = ax.get_legend_handles_labels()
+        custom_lines = [Line2D([0], [0], color='C0', marker='o', lw=2),
+                        Line2D([0], [0], color='k', marker='o',
+                               markerfacecolor='none', lw=2)]
+        handles.extend(custom_lines)
+        labels.extend(['train', 'test'])
+        ax.legend(handles, labels, loc='lower left')
+
+
+# Figure 7.10 Include lines for each information criteria
+fig = plt.figure(3, clear=True, constrained_layout=True)
+gs = fig.add_gridspec(nrows=2, ncols=2)
+
+for i, N in enumerate(Ns):
+    ax = fig.add_subplot(gs[i, 0])
+
+    # Plot one curve for flat priors, one for regularized
+    for b, ls, fc in zip([100, 0.5], ['-', '--'], ['none', 'k']):
+        idx = pd.IndexSlice[b, N]
+        # Points are mean test deviance
+        ax.scatter(params, df.loc[idx, ('deviance', 'test', 'mean')],
+                   facecolors=fc, edgecolors='k')
+
+        # Plot curves for each information criterion
+        # for ic in ['WAIC', 'LOOCV', 'LOOIC']:
+        for ic in ['WAIC']:
+            ax.plot(params, df.loc[idx, (ic, 'test', 'mean')], ls=ls,
+                    label=rf"$\mathcal{{N}}$(0, {b})")
+
+    ax.set_xticks(params, labels=params)
+    ax.set(title=f"{N = }, {Ne = }",
+           xlabel='number of parameters',
+           ylabel='deviance')
+
+    if i == 0:
+        # Add lines to the legend for train/test
+        handles, labels = ax.get_legend_handles_labels()
+        custom_lines = [Line2D([0], [0], color='C0', marker='o', lw=2),
+                        Line2D([0], [0], color='k', marker='o',
+                               markerfacecolor='none', lw=2)]
+        handles.extend(custom_lines)
+        labels.extend(['train', 'test'])
+        ax.legend(handles, labels, loc='lower left')
 
 
 plt.ion()
