@@ -60,7 +60,7 @@ x = np.arange(25., 71.)
 
 mu_samp = post['alpha'].values + post['beta'].values * (np.c_[x] - wbar)
 mu_mean = mu_samp.mean(axis=1)    # (Nd,) average values for each data point
-mu_hpdi = sts.hpdi(mu_samp.T, q=q).T  # (2, Nd)
+mu_hpdi = sts.hpdi(mu_samp, q=q, axis=1)  # (2, Nd)
 
 # Calculate the prediction interval, including sigma (R code 4.59, 4.60, 4.62)
 # Manually write code for:
@@ -74,19 +74,15 @@ h_pi = sts.percentiles(h_samp, q=q, axis=1)  # (2, Nd)
 #   h_mean = h_samp.posterior_predictive['h'].mean(('chain', 'draw'))
 # The catch: we need a posterior sample `trace`. Since we want the quap, not
 # the actual MCMC samples, we can fake the
-# arviz.data.inference_data.InferenceData structure using the normal
+# arviz.InferenceData structure using the normal
 # approximation samples we already have in the post df.
 # Needs coordinates: ('chain' = [0], 'draw' = [0, 1, ..., Ns])
 #
 # See: <https://github.com/rasmusbergpalm/pymc3-quap/blob/main/quap/quap.py>
 # for using `arviz.convert_to_inference_data'
 
-da = (post.to_xarray()
-          .rename({'index': 'draw'})
-          .expand_dims(dim='chain')
-          .assign_coords(chain=('chain', [0]))
-      )
-tr = az.data.inference_data.InferenceData(posterior=da)
+post_dict = post.to_dict(orient='list')  # dict like {column -> [values]}
+tr = az.convert_to_inference_data(post_dict)
 
 # Compute the posterior sample of mu using quap values of alpha and beta.
 with the_model:
@@ -105,13 +101,13 @@ with the_model:
 # Use quap samples directly
 # Manual loop since alpha and beta are 0-D variables in the model.
 mu_s = sts.lmeval(quap, 
+                  out=quap.model.mu,
                   dist=post,
                   eval_at={'ind': x_s},
-                  out='mu',
-                  params=['alpha', 'beta'])
+                  params=[quap.model.alpha, quap.model.beta])
 
 mu_s_mean = mu_s.mean(axis=1)
-mu_s_hpdi = sts.hpdi(mu_s.T, q=q).T
+mu_s_hpdi = sts.hpdi(mu_s, q=q, axis=1)
 
 assert np.allclose(mu_samp, mu_s)
 
