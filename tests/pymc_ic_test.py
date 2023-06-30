@@ -153,24 +153,33 @@ def array_to_frame(ds):
     multi-dimensional parameters, e.g. β (N,) into β__0, β__1, ..., β__N.
     """
     df = pd.DataFrame()
-    for v_name, var in ds.data_vars.items():
+    for vname, var in ds.data_vars.items():
         v = var.mean('chain').squeeze()  # remove chain dimension
         if v.ndim == 1:                  # only draw dimension
-            df[v_name] = v.values
+            df[vname] = v.values
         elif v.ndim > 1:
-            df[_names_from_vec(v_name, v.shape[1])] = v.values
+            df[_names_from_vec(vname, v.shape[1])] = v.values
         else:
-            raise ValueError(f"{v_name} has invalid dimension {v.ndim}.")
+            raise ValueError(f"{vname} has invalid dimension {v.ndim}.")
     return df
 
 
-def _names_from_vec(v_name, ncols):
+def _names_from_vec(vname, ncols):
     """Create a list of strings ['x__0', 'x__1', ..., 'x__``ncols``'],
-    where 'x' is ``v_name``."""
+    where 'x' is ``vname``."""
     # TODO case of 2D, etc. variables
     fmt = '02d' if ncols > 10 else 'd'
-    return [f"{v_name}__{i:{fmt}}" for i in range(ncols)]
+    return [f"{vname}__{i:{fmt}}" for i in range(ncols)]
 
+
+# Convert posterior to az.InferenceData for use in pymc log_likelihood
+# computation.
+# NOTE see pymc.stats.compute_log_likelihood source:
+# elemwise_loglike_fn = model.compile_fn(
+#            inputs=model.value_vars,
+#            outs=model.logp(vars=observed_vars, sum=False),
+#            on_unused_input="ignore",
+#        )
 
 da = frame_to_array(post)
 df = array_to_frame(da)
