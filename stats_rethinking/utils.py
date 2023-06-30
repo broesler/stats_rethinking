@@ -407,6 +407,9 @@ def sparklines_from_array(arr, width=12):
     return sparklines
 
 
+# TODO
+# * deviance method = -2*self.loglik
+# * AIC method = self.deviance + 2*len(self.coef)
 class Quap():
     """The quadratic (*i.e.* Gaussian) approximation of the posterior.
 
@@ -421,7 +424,7 @@ class Quap():
     map_est : dict
         Maximum *a posteriori* estimates of any Deterministic or Potential
         variables.
-    logp : float
+    loglik : float
         The log-likelihood of the model parameters.
     model : :class:`pymc.Model`
         The pymc model object used to define the posterior.
@@ -429,13 +432,13 @@ class Quap():
         Initial parameter values for the MAP optimization. Defaults to
         `model.initial_point`.
     """
-    def __init__(self, coef=None, cov=None, data=None, map_est=None, logp=None,
-                 model=None, start=None):
+    def __init__(self, /, coef=None, cov=None, data=None, map_est=None,
+                 loglik=None, model=None, start=None):
         self.coef = coef
         self.cov = cov
         self.data = data
         self.map_est = map_est
-        self.logp = logp
+        self.loglik = loglik
         self.model = model
         self.start = start
 
@@ -454,7 +457,7 @@ Formula:
 Posterior Means:
 {meanstr}
 
-Log-likelihood: {self.logp:.2f}
+Log-likelihood: {self.loglik:.2f}
 """
         return out
 
@@ -471,7 +474,7 @@ Log-likelihood: {self.logp:.2f}
 
     # TODO
     # * rename the model variable itself
-    #   now: 
+    #   now:
     #   >>> model.named_vars
     #   === {'x': x, 'y': y, 'z': z}
     #   >>> model.named_vars['x'].name = 'new_name'
@@ -575,6 +578,7 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
             cvals.append(float(x))
             hnames.append(v)
         elif x.size > 1:
+            # TODO refactor little function to create column names
             # TODO case of 2D, etc. variables
             # Flatten vectors into singletons 'b__0', 'b__1', ..., 'b__n'
             fmt = '02d' if x.size > 10 else 'd'
@@ -596,7 +600,7 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
                   .sort_index(axis=0).sort_index(axis=1))
     quap.std = pd.Series(np.sqrt(np.diag(quap.cov)), index=cnames).sort_index()
     quap.map_est = {k: map_est[k] for k in dnames}
-    quap.logp = opt.fun
+    quap.loglik = opt.fun
     quap.model = deepcopy(model)
     quap.start = model.initial_point if start is None else start
     quap.data = deepcopy(data)  # TODO pass data for each call of quap!!
@@ -604,6 +608,12 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
 
 
 # TODO
+# * `rethinking::sim` equivalent:
+#   - For each Observed variable,
+#       - get its inputvars
+#       - remove Determinstic vars from inputvars
+#       - compile_fn and apply with the posterior samples
+#
 # * Loop over each Deterministic and Observed variables if none specified,
 #   return a dict. Then, lmplot can plot both the mean and the observed
 #   confidence intervals in one shot.
@@ -628,7 +638,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         The parameters of the linear model. If not all parameters are
         specified, the values will be determined by the state of the random
         number generator in the PyTensor graph.
-    eval_at : dict of str: array_like
+    eval_at : dict like {str: array_like}
         A dictionary of the independent variables over which to evaluate the
         model. Keys must be strings of variable names, and values must be
         array-like, with dimension equivalent to the corresponding variable
@@ -650,7 +660,6 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 
     if params is None:
         params = inputvars(out)
-        # TODO drop param if shape == 0?
 
     if dist is None:
         dist = fit.sample(N)  # take the posterior
@@ -662,6 +671,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         # Concatenate vector parameters
         dist_t = dict()
         shapes = fit.model.eval_rv_shapes()
+        # TODO drop from params if shape == 0?
         for name, s in shapes.items():
             if len(s) > 0 and s[0] > 1:
                 dist_t[name] = dist.filter(regex=f"{name}__[0-9]+")
@@ -673,7 +683,12 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     # TODO Update to Python 3.11? PyMC/PyTensor 5.5.0 accepts vector inputs.
     # Compile the graph function to compute. Better than `eval`, which
     # generates a new random state for each call.
-    out_func = fit.model.compile_fn(out, inputs=params)
+    out_func = fit.model.compile_fn(
+        inputs=params,
+        outs=out,
+        on_unused_input='ignore',
+    )
+
     # Manual loop since params are 0-D variables in the model.
     cols = []
     for i in range(len(dist)):
@@ -764,6 +779,8 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
             elif len(data_vars) > 1:
                 raise ValueError("More than 1 data variable in the model!"
                                  + " Please specify `eval_at`")
+            # FIXME What happens when "data_vars" is empty?
+            # See waic_example.py.
         else:
             if len(eval_at) == 1:
                 xe = list(eval_at.values())[0]
