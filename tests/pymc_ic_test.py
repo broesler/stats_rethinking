@@ -16,6 +16,7 @@ import pandas as pd
 import pymc as pm
 
 from scipy import stats
+from tqdm import tqdm
 
 import stats_rethinking as sts
 
@@ -66,9 +67,6 @@ def _names_from_vec(vname, ncols):
 
 
 # TODO refactor these functions into generics
-
-# In order to use `pm.compute_log_likelihood` we need to have ind/obs variables
-# in the model itself, and set them to be mm_test/y_test.
 
 def loglik(m, data_in, data_out, Ns=1000):
     """Compute the log-likelihood of the data, given the model."""
@@ -134,6 +132,8 @@ if k > 1:
     mm_train = np.c_[mm_train, X_train[:, :k-1]]
 
 # Build and fit the model to the training data
+# NOTE In order to use `pm.compute_log_likelihood` we need to have ind/obs
+# variables in the model itself, and set them to be mm_test/y_test.
 with pm.Model():
     X = pm.MutableData('X', mm_train)
     obs = pm.MutableData('obs', y_train)
@@ -146,23 +146,13 @@ with pm.Model():
         βn = pm.Normal('βn', 0, b_sigma, shape=(k-1,))
         β = pm.math.concatenate([α, βn])
         μ = pm.Deterministic('μ', pm.math.dot(X, β))
-        y = pm.Normal('y', μ, Y_SIGMA,
-                      observed=obs,
-                      shape=obs.shape
-                      )
+        y = pm.Normal('y', μ, Y_SIGMA, observed=obs, shape=obs.shape)
     q = sts.quap()
 
 # Convert posterior to az.InferenceData for use in pymc log_likelihood
 # computation.
 # NOTE see pymc.stats.compute_log_likelihood source:
 # elemwise_loglike_fn = model.compile_fn(
-#            inputs=model.value_vars,
-#            outs=model.logp(vars=observed_vars, sum=False),
-#            on_unused_input="ignore",
-#        )
-
-# TODO Try this?
-# elemwise_lppd_fn = model.compile_fn(
 #            inputs=model.value_vars,
 #            outs=model.logp(vars=observed_vars, sum=False),
 #            on_unused_input="ignore",
@@ -175,7 +165,7 @@ da = frame_to_dataset(post)
 
 # post = dataset_to_frame(da)  # test inverse function
 
-id_train = pm.compute_log_likelihood(
+idata_train = pm.compute_log_likelihood(
     idata=az.convert_to_inference_data(da),
     model=q.model,
     progressbar=False,
@@ -184,7 +174,7 @@ id_train = pm.compute_log_likelihood(
 # Compute the deviance
 dev = pd.Series(index=['train', 'test'], dtype=float)
 
-loglik_train = id_train.log_likelihood['y'].mean('chain').values
+loglik_train = idata_train.log_likelihood['y'].mean('chain').values
 lppd_train = (sts.logsumexp(loglik_train, axis=0)
               - np.log(Ns))
 dev['train'] = -2 * np.sum(lppd_train)
@@ -198,14 +188,14 @@ if k > 1:
 q.model.set_data('X', mm_test)
 q.model.set_data('obs', y_test)
 
-id_test = pm.compute_log_likelihood(
+idata_test = pm.compute_log_likelihood(
     idata=az.convert_to_inference_data(da),
     model=q.model,
     progressbar=False,
 )
 
 
-loglik_test = id_test.log_likelihood['y'].mean('chain').values
+loglik_test = idata_test.log_likelihood['y'].mean('chain').values
 lppd_test = sts.logsumexp(loglik_test, axis=0) - np.log(Ns)
 dev['test'] = -2 * np.sum(lppd_test)
 
@@ -227,41 +217,99 @@ dev['test'] = -2 * np.sum(lppd_test)
 #         Compute WAIC
 # -----------------------------------------------------------------------------
 # wx = WAIC(q, data_in=mm_test, data_out=y_test)
+pointwise = False
 penalty = np.var(loglik_test, axis=0)
 waic_vec = -2 * (lppd_test - penalty)
 n_cases = loglik_test.shape[1]
 std_err = (n_cases * np.var(waic_vec))**0.5
-# w = waic_vec if pointwise else waic_vec.sum()
-# p = penalty if pointwise else penalty.sum()
-w = waic_vec.sum()
-p = penalty.sum()
-wx = dict(waic=w, lppd=lppd_test, penalty=p, std=std_err)
+lppd_w = lppd_test if pointwise else lppd_test.sum()
+w = waic_vec if pointwise else waic_vec.sum()
+p = penalty if pointwise else penalty.sum()
+wx = dict(waic=w, lppd=lppd_w, penalty=p, std=std_err)
+
 waic_s = pd.Series({'test': wx['waic'],
                     'err': np.abs(wx['waic'] - dev['test'])})
 
 # -----------------------------------------------------------------------------
 #         Compute LOOIC
 # -----------------------------------------------------------------------------
-loo = az.loo(id_test)
+# with warnings.catch_warnings():
+#     warnings.simplefilter('ignore', category=UserWarning)
+
+loo = az.loo(idata_test, pointwise=pointwise)
+
 # print(loo)
 
 lx = dict(
     PSIS=-2*loo.elpd_loo,  # == loo_list$estimates['looic', 'Estimate']
     lppd=loo.elpd_loo,
-    penalty=loo.p_loo,
-    std_err=2*loo.se,      # == loo_list$estimates['looic', 'SE']
+    penalty=loo.p_loo,     # == loo_list$p_loo?
+    std=2*loo.se,          # == loo_list$estimates['looic', 'SE']
 )
+
 psis_s = pd.Series({'test': lx['PSIS'],
-                   'err': np.abs(lx['PSIS'] - dev['test'])})
+                    'err': np.abs(lx['PSIS'] - dev['test'])})
 
 # -----------------------------------------------------------------------------
 #         Compute LOOCV
 # -----------------------------------------------------------------------------
 # See rethinking::cv_quap -> expensive!!
+# outcome = q.model.observed_RVs  # user-defined?
+N = len(y_train)
+# lno = N // 4  # number of data points to leave out per iteration
+lno = 1  # number of data points to leave out per iteration
+M = N // lno  # number of chunks of data
 
-res = pd.concat([dev, waic_s, psis_s], keys=['deviance', 'WAIC', 'LOOIC'])
-# res = pd.concat([dev, waic_s, psis_s, loocv_s],
-#                 keys=['deviance', 'WAIC', 'LOOIC', 'LOOCV'])
+y_list = np.split(y_train, M)
+mm_list = np.split(mm_train, M)
+
+
+def leave_out(data_list, i):
+    """Return an array with one element of the list removed."""
+    return np.concatenate([data_list[j] for j in range(M) if j != i])
+
+
+# Fit a model to each chunk of data
+# lppd_cv = np.zeros((M, lno))
+lppd_list = []
+for i in tqdm(range(M), desc='LOOCV'):
+    # Train the model on the data without chunk i
+    q.model.set_data('X', leave_out(mm_list, i))
+    q.model.set_data('obs', leave_out(y_list, i))
+    the_quap = sts.quap(model=q.model)
+    # mlist.append(the_quap)
+
+    # Compute the LPPD on the left-out chunk of data
+    the_quap.model.set_data('X', mm_list[i])
+    the_quap.model.set_data('obs', y_list[i])
+    da = frame_to_dataset(the_quap.sample(Ns))
+    idata = pm.compute_log_likelihood(
+        idata=az.convert_to_inference_data(da),
+        model=the_quap.model,
+        progressbar=False,
+    )
+    the_loglik = idata.log_likelihood['y'].mean('chain').values
+    the_lppd = sts.logsumexp(the_loglik, axis=0) - np.log(Ns)
+    lppd_list.append(the_lppd)
+
+lppd_cv = np.array(lppd_list)
+c = lppd_cv.squeeze() if pointwise else lppd_cv.sum()
+
+cx = dict(
+    loocv=-2*c,
+    lppd=c,
+    # std=lppd_cv.std(axis=0).mean(),
+)
+
+loocv_s = pd.Series({'test': cx['loocv'],
+                     'err': np.abs(cx['loocv'] - dev['test'])})
+
+# -----------------------------------------------------------------------------
+#         Compile Results
+# -----------------------------------------------------------------------------
+# res = pd.concat([dev, waic_s, psis_s], keys=['deviance', 'WAIC', 'LOOIC'])
+res = pd.concat([dev, waic_s, psis_s, loocv_s],
+                keys=['deviance', 'WAIC', 'LOOIC', 'LOOCV'])
 print(res)
 
 # -----------------------------------------------------------------------------
