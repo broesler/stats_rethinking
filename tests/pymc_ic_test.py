@@ -69,10 +69,41 @@ def _names_from_vec(vname, ncols):
 
 # TODO refactor these functions into generics
 
-def loglik(m, data_in, data_out, Ns=1000):
-    """Compute the log-likelihood of the data, given the model."""
-    mu_samp = sts.lmeval(m, out=m.model.μ, eval_at={'X': data_in}, N=Ns)
-    return stats.norm(mu_samp, Y_SIGMA).logpdf(np.c_[data_out])
+def loglik(quap, var_names=None, eval_at=None, Ns=1000):
+    """Compute the log-likelihood of the data, given the model.
+
+    Parameters
+    ----------
+    quap : :obj:`Quap`
+        The fitted model object.
+    var_names : sequence of str
+        List of observed variables for which to compute log likelihood.
+        Defaults to all observed variables.
+    eval_at : dict like {var_name: values}
+        The data over which to evaluate the log likelihood. If not given, the
+        data currently in the model is used.
+    Ns : int
+        The number of samples to take of the posterior.
+
+    Returns
+    -------
+    result : xarray.Dataset
+        Log likelihood for each of the ``var_names``. Each will be an array of
+        size (Ns, N), for ``Ns`` samples of the posterior, and `N` data points.
+    """
+    post = quap.sample(Ns)  # DataFrame with ['α', 'βn__0', 'βn__1', ...]
+
+    if eval_at is not None:
+        for k, v in eval_at.items():
+            quap.model.set_data(k, v)
+
+    idata = pm.compute_log_likelihood(
+        idata=az.convert_to_inference_data(frame_to_dataset(post)),
+        model=quap.model,
+        var_names=var_names,
+        progressbar=False,
+    )
+    return idata.log_likelihood.mean('chain')
 
 
 def lppd(m, data_in, data_out, Ns=1000):
@@ -161,23 +192,17 @@ with pm.Model():
 
 # Compute the log likelihood
 Ns = 1000
-post = q.sample(Ns)  # DataFrame with columns = ['α', 'βn__0', 'βn__1', ...]
-da = frame_to_dataset(post)
 
+# TODO move to testing script for frame_to_dataset/dataset_to_frame
+# post = q.sample(Ns)  # DataFrame with columns = ['α', 'βn__0', 'βn__1', ...]
+# da = frame_to_dataset(post)
 # post = dataset_to_frame(da)  # test inverse function
-
-idata_train = pm.compute_log_likelihood(
-    idata=az.convert_to_inference_data(da),
-    model=q.model,
-    progressbar=False,
-)
 
 # Compute the deviance
 dev = pd.Series(index=['train', 'test'], dtype=float)
 
-loglik_train = idata_train.log_likelihood['y'].mean('chain').values
-lppd_train = (sts.logsumexp(loglik_train, axis=0)
-              - np.log(Ns))
+loglik_train = loglik(q)['y']  # (Ns, N)
+lppd_train = sts.logsumexp(loglik_train, axis=0) - np.log(Ns)
 dev['train'] = -2 * np.sum(lppd_train)
 
 # Compute the lppd with the test data
@@ -185,18 +210,7 @@ mm_test = np.ones((N, 1))
 if k > 1:
     mm_test = np.c_[mm_test, X_test[:, :k-1]]
 
-# Re-compute the log-likelihood with the new data
-q.model.set_data('X', mm_test)
-q.model.set_data('obs', y_test)
-
-idata_test = pm.compute_log_likelihood(
-    idata=az.convert_to_inference_data(da),
-    model=q.model,
-    progressbar=False,
-)
-
-
-loglik_test = idata_test.log_likelihood['y'].mean('chain').values
+loglik_test = loglik(q, eval_at={'X': mm_test, 'obs': y_test})['y']
 lppd_test = sts.logsumexp(loglik_test, axis=0) - np.log(Ns)
 dev['test'] = -2 * np.sum(lppd_test)
 
@@ -244,7 +258,7 @@ loo = az.loo(idata_test, pointwise=pointwise)
 lx = dict(
     PSIS=-2*loo.elpd_loo,  # == loo_list$estimates['looic', 'Estimate']
     lppd=loo.elpd_loo,
-    penalty=loo.p_loo,     # == loo_list$p_loo?
+    penalty=loo.p_loo,     # == loo_list$p_loo
     std=2*loo.se,          # == loo_list$estimates['looic', 'SE']
 )
 
