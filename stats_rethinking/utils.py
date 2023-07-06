@@ -10,6 +10,7 @@
 # =============================================================================
 
 import arviz as az
+import itertools
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -29,7 +30,6 @@ from pytensor.tensor.var import TensorConstant, TensorVariable
 from scipy import stats, linalg
 from scipy.interpolate import BSpline
 from scipy.special import logsumexp as _logsumexp
-from sklearn.utils.extmath import cartesian
 from sparkline import sparkify
 
 # TODO
@@ -290,7 +290,8 @@ def expand_grid(**kwargs):
     --------
     numpy.meshgrid
     """
-    return pd.DataFrame(cartesian(kwargs.values()), columns=kwargs.keys())
+    return pd.DataFrame(itertools.product(*kwargs.values()),
+                        columns=kwargs.keys())
 
 
 # TODO
