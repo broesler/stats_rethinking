@@ -16,7 +16,8 @@ import pandas as pd
 import pymc as pm
 
 from scipy import stats
-from tqdm import tqdm
+# from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
 
 import stats_rethinking as sts
 
@@ -270,35 +271,41 @@ def leave_out(data_list, i):
 
 
 # Fit a model to each chunk of data
-# lppd_cv = np.zeros((M, lno))
-lppd_list = []
-for i in tqdm(range(M), desc='LOOCV'):
+def loocv_func(i):
+    """Perform cross-validation on data chunk `i`."""
     # Train the model on the data without chunk i
     q.model.set_data('X', leave_out(mm_list, i))
     q.model.set_data('obs', leave_out(y_list, i))
     the_quap = sts.quap(model=q.model)
-    # mlist.append(the_quap)
 
     # Compute the LPPD on the left-out chunk of data
     the_quap.model.set_data('X', mm_list[i])
     the_quap.model.set_data('obs', y_list[i])
-    da = frame_to_dataset(the_quap.sample(Ns))
+    post = the_quap.sample(Ns)
     idata = pm.compute_log_likelihood(
-        idata=az.convert_to_inference_data(da),
+        idata=az.convert_to_inference_data(frame_to_dataset(post)),
         model=the_quap.model,
         progressbar=False,
     )
     the_loglik = idata.log_likelihood['y'].mean('chain').values
     the_lppd = sts.logsumexp(the_loglik, axis=0) - np.log(Ns)
-    lppd_list.append(the_lppd)
+    return the_lppd
 
-lppd_cv = np.array(lppd_list)
-c = lppd_cv.squeeze() if pointwise else lppd_cv.sum()
+
+# NOTE **WARNING** SLOW CODE
+lppd_list = process_map(loocv_func, range(M), max_workers=16, desc='LOOCV')
+
+lppd_cv = np.array(lppd_list).squeeze()
+c = lppd_cv if pointwise else lppd_cv.sum()
+
+# mean of chunks, var of data
+var = lppd_cv.var() if lno == 1 else lppd_cv.mean(axis=0).var()
+std_err = (N * var)**0.5
 
 cx = dict(
     loocv=-2*c,
     lppd=c,
-    # std=lppd_cv.std(axis=0).mean(),
+    std=std_err,
 )
 
 loocv_s = pd.Series({'test': cx['loocv'],
