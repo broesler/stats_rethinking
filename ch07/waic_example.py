@@ -49,8 +49,6 @@ ax = sts.lmplot(fit_x=df['speed'], fit_y=mu_samp, data=df, x='speed', y='dist')
 # NOTE Instead, we can use pymc to compute it for us from the model without
 # having to compute the mean and reimplement the logpdf ourselves.
 
-# TODO convert posterior DataFrame with multi-dimensional parameter β__0, β__1,
-# etc. into β with β_dim_1 0 1 in the DataSet.
 # Create InferenceData object with 'posterior' attribute xarray DataSet.
 idata = az.convert_to_inference_data(post.to_dict(orient='list'))
 
@@ -70,12 +68,12 @@ p_WAIC = np.var(loglik, axis=0)  # (Ns, N) -> (N,)
 
 # Combine! (R code 7.24)
 WAIC = -2 * (lppd.sum() - p_WAIC.sum())
-print(f"{WAIC = :.4f}")
+print(f"{WAIC = :.4f}")  # ~ 423.4012
 
 # Estimate the standard error of the WAIC (R code 7.25)
 waic_vec = -2 * (lppd - p_WAIC)
 std_WAIC = (N * np.var(waic_vec))**0.5
-print(f"{std_WAIC = :.4f}")
+print(f"{std_WAIC = :.4f}")  # ~ 17.7069
 
 assert np.isclose(WAIC, waic_vec.sum())
 
