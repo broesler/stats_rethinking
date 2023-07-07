@@ -23,20 +23,22 @@ plt.style.use('seaborn-v0_8-darkgrid')
 
 FORCE_UPDATE = False  # if True, overwrite `tf_file` regardless
 
+FLAT = 100  # `b_sigma` value for a "flat" prior.
+
 # -----------------------------------------------------------------------------
 #         Replicate the experiment Ne times for each k
 # -----------------------------------------------------------------------------
 DEBUG = True
 if DEBUG:
-    Ne = 3
+    Ne = 5
     Ns = [20]
     params = np.arange(1, 5)
-    b_sigmas = [0.5]
+    b_sigmas = [FLAT, 0.5]
 else:
     Ne = 100                       # number of replicates
     Ns = [20, 100]                 # data points
     params = np.arange(1, 6)       # number of parameters in the model
-    b_sigmas = [100, 1, 0.5, 0.2]  # regularization via small prior variance
+    b_sigmas = [FLAT, 1, 0.5, 0.2]  # regularization via small prior variance
 
 tf_file = Path(f"./train_test_all_Ne{Ne:d}.pkl")
 
@@ -66,7 +68,6 @@ else:
         res = process_map(
             exp_train_test,
             all_args,
-            max_workers=16,
             chunksize=2*len(params)
         )
 
@@ -100,7 +101,7 @@ pf = df['deviance']  # just plot the deviance
 for i, N in enumerate(Ns):
     ax = fig.add_subplot(gs[i])
 
-    idx = pd.IndexSlice[100, N]
+    idx = pd.IndexSlice[FLAT, N]
     ax.errorbar(params - jitter, pf.loc[idx, ('train', 'mean')],
                 yerr=pf.loc[idx, ('train', 'std')],
                 fmt='oC0', markerfacecolor='C0', ecolor='C0')
@@ -142,7 +143,7 @@ gs = fig.add_gridspec(nrows=1, ncols=2)
 for i, N in enumerate(Ns):
     ax = fig.add_subplot(gs[i])
 
-    idx = pd.IndexSlice[100, N]
+    idx = pd.IndexSlice[FLAT, N]
     ax.scatter(params, pf.loc[idx, ('train', 'mean')], c='C0')
     ax.scatter(params, pf.loc[idx, ('test', 'mean')],
                facecolors='none', edgecolors='k')
@@ -170,40 +171,51 @@ for i, N in enumerate(Ns):
         ax.legend(handles, labels, loc='lower left')
 
 
-# Figure 7.10 Include lines for each information criteria
-fig = plt.figure(3, clear=True, constrained_layout=True)
-gs = fig.add_gridspec(nrows=2, ncols=2)
-
-for i, N in enumerate(Ns):
-    ax = fig.add_subplot(gs[i, 0])
+# Figure 7.10 -- Test deviance/err with lines for each information criteria
+def plot_N(N, kind, legend=False, ax=None):
+    """Plot average deviance or error."""
+    if ax is None:
+        ax = plt.gca()
 
     # Plot one curve for flat priors, one for regularized
-    for b, ls, fc in zip([100, 0.5], ['-', '--'], ['none', 'k']):
+    for b, c in zip([FLAT, 0.5], ['C0', 'k']):
         idx = pd.IndexSlice[b, N]
-        # Points are mean test deviance
-        ax.scatter(params, df.loc[idx, ('deviance', 'test', 'mean')],
-                   facecolors=fc, edgecolors='k')
+
+        # Points are mean test deviance, with different priors
+        if kind == 'test':
+            ax.scatter(params, df.loc[idx, ('deviance', 'test', 'mean')],
+                       facecolors='none' if c == 'C0' else c, edgecolors=c)
 
         # Plot curves for each information criterion
-        # for ic in ['WAIC', 'LOOCV', 'LOOIC']:
-        for ic in ['WAIC']:
-            ax.plot(params, df.loc[idx, (ic, 'test', 'mean')], ls=ls,
-                    label=rf"$\mathcal{{N}}$(0, {b})")
+        # for ic, ls in zip(['WAIC', 'LOOCV', 'LOOIC'], ['-', '--', '-.']):
+        for ic, ls in zip(['WAIC'], ['-']):
+            ax.plot(params, df.loc[idx, (ic, kind, 'mean')],
+                    color=c, ls=ls, label=ic if c == 'C0' else None)
 
     ax.set_xticks(params, labels=params)
     ax.set(title=f"{N = }, {Ne = }",
            xlabel='number of parameters',
            ylabel='deviance')
 
-    if i == 0:
-        # Add lines to the legend for train/test
+    if legend:
+        # Add lines to the legend for scatter points + lines
         handles, labels = ax.get_legend_handles_labels()
         custom_lines = [Line2D([0], [0], color='C0', marker='o', lw=2),
                         Line2D([0], [0], color='k', marker='o',
                                markerfacecolor='none', lw=2)]
         handles.extend(custom_lines)
-        labels.extend(['train', 'test'])
+        labels.extend([f"σ = {FLAT}", 'σ = 0.5'])
         ax.legend(handles, labels, loc='lower left')
+
+    return ax
+
+
+fig = plt.figure(3, clear=True, constrained_layout=True)
+gs = fig.add_gridspec(nrows=2, ncols=2)
+
+for i, N in enumerate(Ns):
+    plot_N(N, 'test', legend=True, ax=fig.add_subplot(gs[i, 0]))
+    plot_N(N, 'err', legend=False, ax=fig.add_subplot(gs[i, 1]))
 
 
 plt.ion()
