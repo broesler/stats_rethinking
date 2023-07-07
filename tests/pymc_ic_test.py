@@ -19,7 +19,8 @@ import stats_rethinking as sts
 
 # Function arguments
 N = 20
-k = 3
+k = 1  # FIXME compute_log_likelihood breaks for k == 1
+# k = 3
 rho = np.r_[0.15, -0.4]
 b_sigma = 0.5
 
@@ -76,11 +77,11 @@ with pm.Model():
     X = pm.MutableData('X', mm_train)
     obs = pm.MutableData('obs', y_train)
     if k == 1:
-        α = pm.Normal('α', 0, b_sigma)
+        α = pm.Normal('α', 0, b_sigma)  # shape=(1,) works
         μ = pm.Deterministic('μ', α)
         y = pm.Normal('y', μ, Y_SIGMA, observed=obs)
     else:
-        α = pm.Normal('α', 0, b_sigma, shape=(1,))
+        α = pm.Normal('α', 0, b_sigma)
         βn = pm.Normal('βn', 0, b_sigma, shape=(k-1,))
         β = pm.math.concatenate([α, βn])
         μ = pm.Deterministic('μ', pm.math.dot(X, β))
@@ -93,60 +94,91 @@ with pm.Model():
 # NOTE for more efficient computation, we could get the inference data once to
 # use for LOOIS, and then extract the log-likelihood for lppd and WAIC.
 # LOOIS.
+Ns = 1000
 
-# Compute the lppd
-lppd_train = sts.lppd(q)['y']
+import arviz as az
+post = q.sample(Ns)
 
-# Compute the lppd with the test data
-mm_test = np.ones((N, 1))
-if k > 1:
-    mm_test = np.c_[mm_test, X_test[:, :k-1]]
-
-# Compute the posterior and log-likelihood
-idata = sts.inference_data(q, eval_at={'X': mm_test, 'obs': y_test})
-loglik = idata.log_likelihood.mean('chain')
-
-lppd_test = sts.lppd(loglik=loglik)['y']
-
-# Compute the deviance
-dev = pd.Series({'train': -2 * np.sum(lppd_train),
-                 'test': -2 * np.sum(lppd_test)})
-
-# NOTE how to convert these into functions and not have to recompute the
-# log-likelihood each time?
+# NOTE fix for k == 1 involves setting α shape=(1,) above, *or* not having
+# a defined dimension 'α_dim_0' in the Dataset `ds`. Would be better to fix the
+# internal frame_to_dataset() function so that we don't have to remember to
+# define the model shape each time?
+# See: `np.expand_dims` line for all variables, vs. just vectors?
 #
-# Solution: multiple dispatch:
-#
-# rethinking::WAIC and rethinking::LOO/PSIS take:
-#   * quap and re-computes log-likelihood, lppd, and penalty term
-#   * list[['log-likelihood',]] and computes lppd and penalty term
-#
-# rethinking::cv_quap takes quap_model only
-#
-# rethinking::LOO/PSIS uses outside library, others computes internally
+# trace always works with pm.compute_log_likelihood because pm.sample knows the
+# variable shapes! Our method does not have a way to differentiate between
+# a singleton variable with shape (), and a vector variable with shape (1,),
+# because there is just a single name in the posterior DataFrame either way.
+# If we switch the quap() function to use an xarray, we can track the shapes.
+# Then the only issue if when we call model.set_data() with new data that has
+# varying shape? That shouldn't affect the parameter shapes in the posterior
+# though.
 
-wx = sts.WAIC(loglik=loglik)['y']
-lx = sts.LOOIS(idata=idata)
-cx = sts.LOOCV(
-    model=q,
-    ind_var='X',
-    obs_var='obs',
-    out_var='y',
-    X_data=mm_train,
-    y_data=y_train,
+ds = sts.frame_to_dataset(post)
+idata = az.convert_to_inference_data(ds)
+
+trace = pm.sample(model=q.model)
+
+loglik_train = pm.compute_log_likelihood(
+    idata=trace,
+    model=q.model,
+    progressbar=False,
 )
 
-waic_s = pd.Series({'test': wx['waic'],
-                    'err': np.abs(wx['waic'] - dev['test'])})
-psis_s = pd.Series({'test': lx['PSIS'],
-                    'err': np.abs(lx['PSIS'] - dev['test'])})
-loocv_s = pd.Series({'test': cx['loocv'],
-                     'err': np.abs(cx['loocv'] - dev['test'])})
+## Compute the lppd
+## FIXME breaks for k == 1
+#lppd_train = sts.lppd(q)['y']
 
-# Compile Results
-res = pd.concat([dev, waic_s, psis_s, loocv_s],
-                keys=['deviance', 'WAIC', 'LOOIC', 'LOOCV'])
-print(res)
+## Compute the lppd with the test data
+#mm_test = np.ones((N, 1))
+#if k > 1:
+#    mm_test = np.c_[mm_test, X_test[:, :k-1]]
 
-# =============================================================================
-# =============================================================================
+## Compute the posterior and log-likelihood
+#idata = sts.inference_data(q, eval_at={'X': mm_test, 'obs': y_test})
+#loglik = idata.log_likelihood.mean('chain')
+
+#lppd_test = sts.lppd(loglik=loglik)['y']
+
+## Compute the deviance
+#dev = pd.Series({'train': -2 * np.sum(lppd_train),
+#                 'test': -2 * np.sum(lppd_test)})
+
+## NOTE how to convert these into functions and not have to recompute the
+## log-likelihood each time?
+##
+## Solution: multiple dispatch:
+##
+## rethinking::WAIC and rethinking::LOO/PSIS take:
+##   * quap and re-computes log-likelihood, lppd, and penalty term
+##   * list[['log-likelihood',]] and computes lppd and penalty term
+##
+## rethinking::cv_quap takes quap_model only
+##
+## rethinking::LOO/PSIS uses outside library, others computes internally
+
+#wx = sts.WAIC(loglik=loglik)['y']
+#lx = sts.LOOIS(idata=idata)
+#cx = sts.LOOCV(
+#    model=q,
+#    ind_var='X',
+#    obs_var='obs',
+#    out_var='y',
+#    X_data=mm_train,
+#    y_data=y_train,
+#)
+
+#waic_s = pd.Series({'test': wx['waic'],
+#                    'err': np.abs(wx['waic'] - dev['test'])})
+#psis_s = pd.Series({'test': lx['PSIS'],
+#                    'err': np.abs(lx['PSIS'] - dev['test'])})
+#loocv_s = pd.Series({'test': cx['loocv'],
+#                     'err': np.abs(cx['loocv'] - dev['test'])})
+
+## Compile Results
+#res = pd.concat([dev, waic_s, psis_s, loocv_s],
+#                keys=['deviance', 'WAIC', 'LOOIC', 'LOOCV'])
+#print(res)
+
+## =============================================================================
+## =============================================================================
