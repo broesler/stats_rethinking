@@ -141,8 +141,8 @@ loglik = idata.log_likelihood.mean('chain')
 lppd_test = sts.lppd(loglik=loglik)['y']
 
 # Compute the deviance
-dev = pd.Series({'train': -2 * np.sum(lppd_train),
-                 'test': -2 * np.sum(lppd_test)})
+res = pd.Series({('deviance', 'train'): -2 * np.sum(lppd_train),
+                 ('deviance', 'test'): -2 * np.sum(lppd_test)})
 
 # NOTE how to convert these into functions and not have to recompute the
 # log-likelihood each time?
@@ -168,16 +168,16 @@ cx = sts.LOOCV(
     y_data=y_train,
 )
 
-waic_s = pd.Series({'test': wx['waic'],
-                    'err': np.abs(wx['waic'] - dev['test'])})
-psis_s = pd.Series({'test': lx['PSIS'],
-                    'err': np.abs(lx['PSIS'] - dev['test'])})
-loocv_s = pd.Series({'test': cx['loocv'],
-                     'err': np.abs(cx['loocv'] - dev['test'])})
-
 # Compile Results
-res = pd.concat([dev, waic_s, psis_s, loocv_s],
-                keys=['deviance', 'WAIC', 'LOOIC', 'LOOCV'])
+res[('WAIC', 'test')] = wx['waic']
+res[('WAIC', 'err')] = np.abs(wx['waic'] - res[('deviance', 'test')])
+
+res[('LOOIC', 'test')] = lx['PSIS']
+res[('LOOIC', 'err')] = np.abs(lx['PSIS'] - res[('deviance', 'test')])
+
+res[('LOOCV', 'test')] = cx['loocv']
+res[('LOOCV', 'err')] = np.abs(cx['loocv'] - res[('deviance', 'test')])
+
 print(res)
 
 # =============================================================================

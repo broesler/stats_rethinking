@@ -1604,17 +1604,15 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
     # Build and fit the model to the training data
     with pm.Model():
         X = pm.MutableData('X', mm_train)
+        obs = pm.MutableData('obs', y_train)
+        α = pm.Normal('α', 0, b_sigma, shape=(1,))
         if k == 1:
-            α = pm.Normal('α', 0, b_sigma)
             μ = pm.Deterministic('μ', α)
-            y = pm.Normal('y', μ, Y_SIGMA, observed=y_train)
         else:
-            α = pm.Normal('α', 0, b_sigma, shape=(1,))
             βn = pm.Normal('βn', 0, b_sigma, shape=(k-1,))
             β = pm.math.concatenate([α, βn])
             μ = pm.Deterministic('μ', pm.math.dot(X, β))
-            y = pm.Normal('y', μ, Y_SIGMA, observed=y_train,
-                          shape=X[:, 0].shape)
+        y = pm.Normal('y', μ, Y_SIGMA, observed=obs, shape=obs.shape)
         q = quap()
 
     # -------------------------------------------------------------------------
@@ -1639,8 +1637,8 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
     lppd_test = lppd(loglik=loglik)['y']
 
     # Compute the deviance
-    dev = pd.Series({'train': -2 * np.sum(lppd_train),
-                    'test': -2 * np.sum(lppd_test)})
+    res = pd.Series({('deviance', 'train'): -2 * np.sum(lppd_train),
+                     ('deviance', 'test'): -2 * np.sum(lppd_test)})
 
     wx = WAIC(loglik=loglik)['y']
     lx = LOOIS(idata=idata)
@@ -1653,16 +1651,15 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
         y_data=y_train,
     )
 
-    waic_s = pd.Series({'test': wx['waic'],
-                        'err': np.abs(wx['waic'] - dev['test'])})
-    psis_s = pd.Series({'test': lx['PSIS'],
-                        'err': np.abs(lx['PSIS'] - dev['test'])})
-    loocv_s = pd.Series({'test': cx['loocv'],
-                        'err': np.abs(cx['loocv'] - dev['test'])})
-
     # Compile Results
-    res = pd.concat([dev, waic_s, psis_s, loocv_s],
-                    keys=['deviance', 'WAIC', 'LOOIC', 'LOOCV'])
+    res[('WAIC', 'test')] = wx['waic']
+    res[('WAIC', 'err')] = np.abs(wx['waic'] - res[('deviance', 'test')])
+
+    res[('LOOIC', 'test')] = lx['PSIS']
+    res[('LOOIC', 'err')] = np.abs(lx['PSIS'] - res[('deviance', 'test')])
+
+    res[('LOOCV', 'test')] = cx['loocv']
+    res[('LOOCV', 'err')] = np.abs(cx['loocv'] - res[('deviance', 'test')])
 
     return dict(res=res, model=q)
 
