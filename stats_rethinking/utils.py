@@ -1547,7 +1547,15 @@ def LOOCV(model, ind_var, obs_var, out_var, X_data, y_data,
 #         Simulations
 # -----------------------------------------------------------------------------
 # (R code 7.17 - 7.19)
-def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
+def sim_train_test(
+    N=20,
+    k=3,
+    rho=np.r_[0.15, -0.4],
+    b_sigma=100,
+    compute_WAIC=False,
+    compute_LOOIC=False,
+    compute_LOOCV=False
+):
     r"""Simulate fitting a model of `k` parameters to `N` data points.
 
     The default data-generating (i.e. "true") model used is:
@@ -1574,6 +1582,8 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
         A vector of "true" parameter values, excluding the intercept term.
     b_sigma : float
         The model standard deviation of the slope terms.
+    compute_WAIC, compute_LOOIC, compute_LOOCV : bool
+        If True, compute the WAIC, LOOIC, and/or LOOCV criteria, respectively.
 
     Returns
     -------
@@ -1657,26 +1667,29 @@ def sim_train_test(N=20, k=3, rho=np.r_[0.15, -0.4], b_sigma=100):
     res = pd.Series({('deviance', 'train'): -2 * np.sum(lppd_train),
                      ('deviance', 'test'): -2 * np.sum(lppd_test)})
 
-    wx = WAIC(loglik=loglik)['y']
-    lx = LOOIS(idata=idata)
-    cx = LOOCV(
-        model=q,
-        ind_var='X',
-        obs_var='obs',
-        out_var='y',
-        X_data=mm_train,
-        y_data=y_train,
-    )
-
     # Compile Results
-    res[('WAIC', 'test')] = wx['waic']
-    res[('WAIC', 'err')] = np.abs(wx['waic'] - res[('deviance', 'test')])
+    if compute_WAIC:
+        wx = WAIC(loglik=loglik)['y']
+        res[('WAIC', 'test')] = wx['waic']
+        res[('WAIC', 'err')] = np.abs(wx['waic'] - res[('deviance', 'test')])
 
-    res[('LOOIC', 'test')] = lx['PSIS']
-    res[('LOOIC', 'err')] = np.abs(lx['PSIS'] - res[('deviance', 'test')])
+    if compute_LOOIC:
+        lx = LOOIS(idata=idata)
+        res[('LOOIC', 'test')] = lx['PSIS']
+        res[('LOOIC', 'err')] = np.abs(lx['PSIS'] - res[('deviance', 'test')])
 
-    res[('LOOCV', 'test')] = cx['loocv']
-    res[('LOOCV', 'err')] = np.abs(cx['loocv'] - res[('deviance', 'test')])
+    if compute_LOOCV:
+        warnings.warn('Computing LOOCV, may be slow!')
+        cx = LOOCV(
+            model=q,
+            ind_var='X',
+            obs_var='obs',
+            out_var='y',
+            X_data=mm_train,
+            y_data=y_train,
+        )
+        res[('LOOCV', 'test')] = cx['loocv']
+        res[('LOOCV', 'err')] = np.abs(cx['loocv'] - res[('deviance', 'test')])
 
     return dict(res=res, model=q)
 

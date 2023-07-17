@@ -49,7 +49,15 @@ else:
     def exp_train_test(args):
         """Run a single simulation."""
         N, k, _, b = args
-        return (sts.sim_train_test(N, k, b_sigma=b)['res'], N, k, b)
+        res = sts.sim_train_test(
+            N,
+            k,
+            b_sigma=b,
+            compute_WAIC=True,
+            compute_LOOIC=True,
+            compute_LOOCV=False,  # SLOW if True
+        )
+        return (res['res'], N, k, b)
 
     all_args = [
         (N, k, i, b)
