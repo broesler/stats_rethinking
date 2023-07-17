@@ -35,6 +35,8 @@ from scipy import stats, linalg
 from scipy.interpolate import BSpline
 from scipy.special import logsumexp as _logsumexp
 from sparkline import sparkify
+
+from multiprocessing import Pool
 from tqdm.contrib.concurrent import process_map
 
 # TODO
@@ -1441,7 +1443,7 @@ def globalized(func):
 
 
 def LOOCV(model, ind_var, obs_var, out_var, X_data, y_data,
-          lno=1, pointwise=False):
+          lno=1, pointwise=False, parallel=True, progressbar=True):
     """Compute the leave-one-out cross-validation score of the model.
 
     Parameters
@@ -1462,6 +1464,10 @@ def LOOCV(model, ind_var, obs_var, out_var, X_data, y_data,
         Number of data points to leave out per iteration.
     pointwise : bool
         If True, return the score for each data point.
+    parallel : bool
+        If True, run the main loop in parallel.
+    progressbar : bool
+        If True, print a progress bar.
 
     Returns
     -------
@@ -1502,15 +1508,26 @@ def LOOCV(model, ind_var, obs_var, out_var, X_data, y_data,
         )
 
     # NOTE **WARNING** SLOW CODE
-    # Parallel:
-    with globalized(loocv_func):
-        lppd_list = process_map(loocv_func, range(M), desc='LOOCV')
-
-    # Non-parallel:
-    # from tqdm import tqdm
-    # lppd_list = []
-    # for i in tqdm(range(M), desc='LOOCV'):
-    #     lppd_list.append(loocv_func(i))
+    if parallel:
+        with globalized(loocv_func):
+            if progressbar:
+                lppd_list = process_map(
+                    loocv_func,
+                    range(M),
+                    desc='LOOCV',
+                    leave=False,
+                    max_workers=4,
+                    position=1,
+                )
+            else:
+                with Pool(4) as pool:
+                    pool.map(loocv_func, range(M))
+    else:
+        iters = range(M)
+        if progressbar:
+            from tqdm import tqdm
+            iters = tqdm(iters, desc='LOOCV')
+        lppd_list = [loocv_func(i) for i in iters]
 
     lppd_cv = np.array(lppd_list).squeeze()
     c = lppd_cv if pointwise else lppd_cv.sum()
