@@ -457,6 +457,15 @@ class Quap():
     def std(self):
         return pd.Series(np.sqrt(np.diag(self.cov)), index=self.cov.index)
 
+    @property
+    def corr(self):
+        D = pd.DataFrame(
+            np.diag(1 / self.std),
+            index=self.cov.index,
+            columns=self.cov.columns,
+        )
+        return D @ self.cov @ D
+
     def sample(self, N=10_000):
         """Sample the posterior approximation.
 
@@ -571,13 +580,13 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
             continue
 
     # Filter variables for output
-    basic_vars = model.free_RVs
+    free_vars = model.free_RVs
     dnames = [x.name for x in model.deterministics]
 
     # If requested variables are not basic, just return all of them
-    out_vars = set(mvars).intersection(set(basic_vars))
+    out_vars = set(mvars).intersection(set(free_vars))
     if not out_vars:
-        out_vars = basic_vars
+        out_vars = free_vars
 
     cnames = []
     hnames = []
@@ -590,11 +599,11 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
             cvals.append(float(x))
             hnames.append(v)
         elif x.size > 1:
-            # TODO refactor little function to create column names
             # TODO case of 2D, etc. variables
             # Flatten vectors into singletons 'b__0', 'b__1', ..., 'b__n'
-            fmt = '02d' if x.size > 10 else 'd'
-            cnames.extend([f"{v}__{k:{fmt}}" for k in range(len(x))])
+            # fmt = '02d' if x.size > 10 else 'd'
+            # cnames.extend([f"{v}__{k:{fmt}}" for k in range(len(x))])
+            cnames.extend(_names_from_vec(v, x.size))
             cvals.extend(x)
             hnames.append(v)  # need the root name for Hessian
 
