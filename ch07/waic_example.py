@@ -56,15 +56,15 @@ idata = az.convert_to_inference_data(post.to_dict(orient='list'))
 idata = pm.compute_log_likelihood(idata, model=q.model, progressbar=False)
 
 # Extract the relevant item
-loglik = idata.log_likelihood['dist'].mean('chain')  # DataArray (Ns, N)
+loglik = idata.log_likelihood.mean('chain')  # Dataset: 'dist' (Ns, N)
 
 # quap.loglik ≈ -loglik.mean(axis=1).sum()?
 
 # Take the log of the average over each data point (R code 7.22)
-lppd = sts.logsumexp(loglik, axis=0) - np.log(Ns)  # (Ns, N) -> (N,)
+lppd = sts.logsumexp(loglik['dist'], axis=0) - np.log(Ns)  # (Ns, N) -> (N,)
 
 # Penalty term (R code 7.23)
-p_WAIC = np.var(loglik, axis=0)  # (Ns, N) -> (N,)
+p_WAIC = loglik['dist'].var(dim='draw')  # (Ns, N) -> (N,)
 
 # Combine! (R code 7.24)
 WAIC = -2 * (lppd.sum() - p_WAIC.sum())
@@ -76,6 +76,14 @@ std_WAIC = (N * np.var(waic_vec))**0.5
 print(f"{std_WAIC = :.4f}")  # ~ 17.7069
 
 assert np.isclose(WAIC, waic_vec.sum())
+
+# Test WAIC function
+wx = sts.WAIC(loglik=loglik)['dist']
+print(f"{wx['waic'] = :.4f}")
+print(f"{wx['std'] = :.4f}")
+
+np.testing.assert_allclose(wx['waic'], WAIC)
+np.testing.assert_allclose(wx['std'], std_WAIC)
 
 plt.ion()
 plt.show()
