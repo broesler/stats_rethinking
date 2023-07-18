@@ -1201,9 +1201,12 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
 
     Returns
     -------
-    result : xarray.Dataset
-        Log likelihood for each of the ``var_names``. Each will be an array of
-        size (Ns, N), for ``Ns`` samples of the posterior, and `N` data points.
+    result : az.InferenceData
+        An InferenceData object with groups
+        posterior : xarray.Dataset of (chain=1, draw=Ns, var_dim)
+            The posterior distribution for each unobserved model parameter.
+        log_liklihood : xarray.Dataset of (chain=1, draw=Ns, var_dim=N)
+            The log likelihood of each observed variable.
     """
     if post is None:
         post = model.sample(Ns)  # DataFrame with ['α', 'βn__0', 'βn__1', ...]
@@ -1212,6 +1215,8 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
         for k, v in eval_at.items():
             model.model.set_data(k, v)
 
+    # FIXME compute_log_likelihood fails for parameters with shape (), because
+    # frame_to_dataset assumes they are shape (1,).
     return pm.compute_log_likelihood(
         idata=az.convert_to_inference_data(frame_to_dataset(post)),
         model=model.model,
@@ -1242,7 +1247,7 @@ def loglikelihood(model, post=None, var_names=None, eval_at=None, Ns=1000):
 
     Returns
     -------
-    result : xarray.Dataset
+    result : xarray.Dataset (draw=Ns, var_dim=N)
         Log likelihood for each of the ``var_names``. Each will be an array of
         size (Ns, N), for ``Ns`` samples of the posterior, and `N` data points.
     """
@@ -1255,7 +1260,15 @@ def loglikelihood(model, post=None, var_names=None, eval_at=None, Ns=1000):
 
 def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
          Ns=1000):
-    """Compute the log pointwise predictive density for a model.
+    r"""Compute the log pointwise predictive density for a model.
+
+    The lppd is defined as follows:
+
+    .. math::
+        \text{lppd}(y, \Theta) = \sum_i \log \frac{1}{S} \sum_s p(y_i | \Theta_s)
+
+    where :math:`S` is the number of samples, and :math:`\Theta_s` is the
+    :math:`s`-th set of sampled parameter values in the posterior distribution.
 
     Parameters
     ----------
@@ -1286,6 +1299,7 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
     Returns
     -------
     result : dict like {var_name: lppd}
+        A dictionary of the lppd for each observed variable.
     """
     if model is None and loglik is None:
         raise ValueError('One of `quap` or `loglik` must be given!')
@@ -1310,12 +1324,25 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
 
 def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
          Ns=1000, pointwise=False):
-    """Compute the Widely Applicable Information Criteria for the model.
+    r"""Compute the Widely Applicable Information Criteria for the model.
+
+    The WAIC is defined as:
+
+    .. math::
+        \text{WAIC}(y, \Theta) = -2 \left(
+            \text{lppd}
+            - \sum_i \var_\Theta \log p(y_i | \Theta)
+        \right)
+
+    An estimate of the standard error for out-of-sample deviance is:
+
+    .. math::
+        s_{\text{WAIC}} = \sqrt{ N \var\[-2 (\text{lppd}_i - p_i) \] }
 
     Parameters
     ----------
     model : :obj:`Quap`
-        The fitted model object. If ``loglik`` is not given, ``quap`` will be
+        The fitted model object. If ``loglik`` is not given, ``model`` will be
         used to compute it.
     loglik : dict like {var_name: (Ns, N) ndarray}
         The log-likelihood of each desired output variable in the model, where
@@ -1323,12 +1350,12 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
         of data points for that variable.
 
     .. note::
-        Only one of ``quap`` or ``loglik`` may be given.
+        Only one of ``model`` or ``loglik`` may be given.
 
     post : (Ns, p) DataFrame
         Samples of the posterior distribution with model free variables as
         column names. If ``post`` is not given, ``Ns`` samples will be drawn
-        from the ``quap`` distribution.
+        from the ``model`` distribution.
     var_names : sequence of str
         List of observed variables for which to compute log likelihood.
         Defaults to all observed variables.
@@ -1344,10 +1371,10 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
     Returns
     -------
     result : dict like {var_name: WAIC}
-        The WAIC
+        A dictionary of the WAIC for each observed variable.
     """
     if model is None and loglik is None:
-        raise ValueError('One of `quap` or `loglik` must be given!')
+        raise ValueError('One of `model` or `loglik` must be given!')
 
     if loglik is None:
         loglik = loglikelihood(
@@ -1380,12 +1407,12 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
 
     Parameters
     ----------
-    quap : :obj:`Quap`
+    model : :obj:`Quap`
         The fitted model object.
     post : (Ns, p) DataFrame
         Samples of the posterior distribution with model free variables as
         column names. If ``post`` is not given, ``Ns`` samples will be drawn
-        from the ``quap`` distribution.
+        from the ``model`` distribution.
     var_names : sequence of str
         List of observed variables for which to compute log likelihood.
         Defaults to all observed variables.
@@ -1400,11 +1427,11 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
 
     Returns
     -------
-    result : dict like {var_name: WAIC}
-        The WAIC
+    result : dict like {var_name: LOOIS}
+        A dictionary of the LOOIS for each observed variable.
     """
     if model is None and idata is None:
-        raise ValueError('One of `quap` or `idata` must be given!')
+        raise ValueError('One of `model` or `idata` must be given!')
 
     if idata is None:
         idata = inference_data(
@@ -1679,7 +1706,6 @@ def sim_train_test(
         res[('LOOIC', 'err')] = np.abs(lx['PSIS'] - res[('deviance', 'test')])
 
     if compute_LOOCV:
-        warnings.warn('Computing LOOCV, may be slow!')
         cx = LOOCV(
             model=q,
             ind_var='X',
