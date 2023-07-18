@@ -426,7 +426,9 @@ class Quap():
     coef : dict
         Dictionary of maximum *a posteriori* (MAP) coefficient values.
     cov : (M, M) DataFrame
-        Covariance matrix.
+        Covariance matrix of the parameters.
+    std : (M,) Series
+        Standard deviation. The square root of the diagonal of `cov`.
     data : (M, N) array_like
         Matrix of the data used to compute the likelihood.
     map_est : dict
@@ -451,29 +453,10 @@ class Quap():
         self.model = model
         self.start = start
 
-    def __str__(self):
-        with pd.option_context('display.float_format', '{:.4f}'.format):
-            # remove "dtype: object" line from the Series repr
-            meanstr = repr(self.coef).rsplit('\n', 1)[0]
+    @property
+    def std(self):
+        return pd.Series(np.sqrt(np.diag(self.cov)), index=self.cov.index)
 
-        # FIXME indentation. inspect.cleandoc() fails because the
-        # model.str_repr() is not always aligned left.
-        out = f"""Quadratic Approximate Posterior Distribution
-
-Formula:
-{self.model.str_repr()}
-
-Posterior Means:
-{meanstr}
-
-Log-likelihood: {self.loglik:.2f}
-"""
-        return out
-
-    def __repr__(self):
-        return f"<{self.__class__.__name__}: {self.__str__()}>"
-
-    # TODO use frame_to_dataset to convert this to a dataset by default?
     def sample(self, N=10_000):
         """Sample the posterior approximation.
 
@@ -503,6 +486,28 @@ Log-likelihood: {self.loglik:.2f}
         for k, v in mapper.items():
             self.model.named_vars[k].name = v
         return self
+
+    def __str__(self):
+        with pd.option_context('display.float_format', '{:.4f}'.format):
+            # remove "dtype: object" line from the Series repr
+            meanstr = repr(self.coef).rsplit('\n', 1)[0]
+
+        # FIXME indentation. inspect.cleandoc() fails because the
+        # model.str_repr() is not always aligned left.
+        out = f"""Quadratic Approximate Posterior Distribution
+
+Formula:
+{self.model.str_repr()}
+
+Posterior Means:
+{meanstr}
+
+Log-likelihood: {self.loglik:.2f}
+"""
+        return out
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__}: {self.__str__()}>"
 
 
 def quap(vars=None, var_names=None, model=None, data=None, start=None):
@@ -565,10 +570,6 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
             # warnings.warn(f"Hessian for '{v.name}' may be incorrect!")
             continue
 
-    # Build output structure
-    # TODO assign in a single call so attributes can be read-only.
-    quap = Quap()
-
     # Filter variables for output
     basic_vars = model.free_RVs
     dnames = [x.name for x in model.deterministics]
@@ -603,19 +604,20 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
     # user-code needs to do the "unflattening" to combine [alpha, b0, b1, ...]
     # for mathematical computations.
 
-    # Coefficients are just the basic RVs, without the observed RVs
-    quap.coef = pd.Series({x: v for x, v in zip(cnames, cvals)}).sort_index()
     # The Hessian of a Gaussian == "precision" == 1 / sigma**2
     H = pm.find_hessian(map_est, vars=[model[x] for x in hnames], model=model)
-    quap.cov = (pd.DataFrame(linalg.inv(H), index=cnames, columns=cnames)
-                  .sort_index(axis=0).sort_index(axis=1))
-    quap.std = pd.Series(np.sqrt(np.diag(quap.cov)), index=cnames).sort_index()
-    quap.map_est = {k: map_est[k] for k in dnames}
-    quap.loglik = opt.fun  # equivalent of sum(loglik(model, pointwise=False))
-    quap.model = deepcopy(model)
-    quap.start = model.initial_point if start is None else start
-    quap.data = deepcopy(data)  # TODO pass data for each call of quap!!
-    return quap
+
+    # Coefficients are just the basic RVs, without the observed RVs
+    return Quap(
+        coef=pd.Series({x: v for x, v in zip(cnames, cvals)}).sort_index(),
+        cov=(pd.DataFrame(linalg.inv(H), index=cnames, columns=cnames)
+                  .sort_index(axis=0).sort_index(axis=1)),
+        data=deepcopy(data),
+        map_est={k: map_est[k] for k in dnames},
+        loglik=opt.fun,  # equivalent of sum(loglik(model, pointwise=False))
+        model=deepcopy(model),
+        start=model.initial_point() if start is None else start,
+    )
 
 
 # TODO
