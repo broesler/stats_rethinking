@@ -19,7 +19,9 @@ import seaborn as sns
 import sys
 import uuid
 import warnings
+import xarray as xr
 
+from arviz.data.base import generate_dims_coords
 from contextlib import contextmanager
 from copy import deepcopy
 
@@ -471,8 +473,10 @@ class Quap():
 
         Analagous to `rethinking::extract.samples`.
         """
-        posterior = stats.multivariate_normal(mean=self.coef, cov=self.cov)
-        return pd.DataFrame(posterior.rvs(N), columns=self.coef.index)
+        mean = flatten_dataset(self.coef).values
+        posterior = stats.multivariate_normal(mean=mean, cov=self.cov)
+        # TODO use frame_to_dataset to convert this to a dataset by default
+        return pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
 
     # TODO
     # * rename the model variable itself
@@ -499,7 +503,8 @@ class Quap():
     def __str__(self):
         with pd.option_context('display.float_format', '{:.4f}'.format):
             # remove "dtype: object" line from the Series repr
-            meanstr = repr(self.coef).rsplit('\n', 1)[0]
+            # meanstr = repr(self.coef).rsplit('\n', 1)[0]
+            meanstr = repr(self.coef)
 
         # FIXME indentation. inspect.cleandoc() fails because the
         # model.str_repr() is not always aligned left.
@@ -583,44 +588,21 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
     free_vars = model.free_RVs
     dnames = [x.name for x in model.deterministics]
 
-    # If requested variables are not basic, just return all of them
-    out_vars = set(mvars).intersection(set(free_vars))
-    if not out_vars:
-        out_vars = free_vars
+    # If requested variables are not free, just return all of them
+    out_vars = set(mvars).intersection(set(free_vars)) or free_vars
+    out_vars = sorted(out_vars, key=lambda x: x.name)
 
-    cnames = []
-    hnames = []
-    cvals = []
-    for ov in out_vars:
-        v = ov.name
-        x = map_est[v]
-        if x.size == 1:
-            cnames.append(v)
-            cvals.append(float(x))
-            hnames.append(v)
-        elif x.size > 1:
-            # TODO case of 2D, etc. variables
-            # Flatten vectors into singletons 'b__0', 'b__1', ..., 'b__n'
-            # fmt = '02d' if x.size > 10 else 'd'
-            # cnames.extend([f"{v}__{k:{fmt}}" for k in range(len(x))])
-            cnames.extend(_names_from_vec(v, x.size))
-            cvals.extend(x)
-            hnames.append(v)  # need the root name for Hessian
-
-    # TODO store coefficients as an xarray Dataset to accomodate
-    # multi-dimensional parameters? Having flat Series/DataFrame for means and
-    # covariance matrix makes using stats.multivariate_normal simple, but then
-    # user-code needs to do the "unflattening" to combine [alpha, b0, b1, ...]
-    # for mathematical computations.
+    # Convert coefficients to an xarray.Dataset to retain variable shape info
+    coef = dict_to_dataset({v.name: map_est.get(v.name) for v in out_vars})
+    cnames = cnames_from_dataset(coef)
 
     # The Hessian of a Gaussian == "precision" == 1 / sigma**2
-    H = pm.find_hessian(map_est, vars=[model[x] for x in hnames], model=model)
+    H = pm.find_hessian(map_est, vars=tuple(out_vars), model=model)
 
     # Coefficients are just the basic RVs, without the observed RVs
     return Quap(
-        coef=pd.Series({x: v for x, v in zip(cnames, cvals)}).sort_index(),
-        cov=(pd.DataFrame(linalg.inv(H), index=cnames, columns=cnames)
-                  .sort_index(axis=0).sort_index(axis=1)),
+        coef=coef,
+        cov=pd.DataFrame(linalg.inv(H), index=cnames, columns=cnames),
         data=deepcopy(data),
         map_est={k: map_est[k] for k in dnames},
         loglik=opt.fun,  # equivalent of sum(loglik(model, pointwise=False))
@@ -1149,6 +1131,40 @@ def plot_coef_table(ct, q=0.89, fignum=None):
 #         Utilities
 # -----------------------------------------------------------------------------
 logsumexp = _logsumexp
+
+
+def numpy_to_data_array(values, var_name=None):
+    """Convert numpy array to an xarray.DataArray."""
+    if var_name is None:
+        var_name = 'data'
+    dims, coords = generate_dims_coords(np.shape(values), var_name)
+    return xr.DataArray(values, dims=dims, coords=coords)
+
+
+def dict_to_dataset(data):
+    """Convert a dictionary to an xarray.Dataset with default dimensions."""
+    data_vars = {
+        k: numpy_to_data_array(v, var_name=k) 
+        for k, v in data.items()
+    }
+    return xr.Dataset(data_vars=data_vars)
+
+
+def flatten_dataset(ds):
+    """Return a flattened DataArray and a vector of variable names."""
+    return ds.to_stacked_array('data', sample_dims=[], name='data')
+
+
+def cnames_from_dataset(ds):
+    """Return a list of variable names from the flattened Dataset."""
+    da = flatten_dataset(ds)
+    # Flatten vector names into singletons 'b__0', 'b__1', ..., 'b__n'
+    # TODO case of 2D, etc. variables
+    df = pd.DataFrame(da.coords['variable'].values)
+    g = df.groupby(0)
+    df.loc[g[0].transform('size').gt(1), 0] += '__' + g.cumcount().astype(str)
+    dnames = list(df[0].values)
+    return dnames
 
 
 def frame_to_dataset(df):
