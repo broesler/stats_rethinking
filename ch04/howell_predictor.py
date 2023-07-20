@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-  Description: Make a linear model of the Howell data. Section 4.4.
+  Description: Make a linear model of the Howell data. §4.4.
 """
 # =============================================================================
 
@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
+import xarray as xr
 
 from scipy import stats
 
@@ -127,7 +128,7 @@ quap = sts.quap(model=the_model)
 post = quap.sample(Ns)
 sts.precis(post)
 print('covariance:')
-print(post.cov())
+print(quap.cov)
 
 # -----------------------------------------------------------------------------
 #        Posterior Prediction
@@ -141,12 +142,11 @@ N_test = [10, 50, 150, adults.shape[0]]
 N_lines = 20
 
 
-# TODO rwwrite using xarrays to avoid ugly array conversions
 def post_mu(w, alpha, beta):
     """Compute linear model of 'mu'."""
-    res = (np.asarray(alpha)
-           + np.asarray(beta) * (np.atleast_1d(w)[:, np.newaxis] - wbar_n))
-    return np.squeeze(res.T)
+    w = xr.DataArray(w, dims='N' if np.shape(w) else None)
+    res = alpha + beta * (w - wbar_n)
+    return res
 
 
 # Figure 4.7
@@ -215,14 +215,14 @@ mu_samp = post_mu(x, post['alpha'], post['beta'])
 # (R code 4.56)
 # Plot the credible interval for the mean of the height (not including sigma)
 mu_mean = mu_samp.mean(axis=0)    # (Nd,) average values for each data point
-mu_hpdi = sts.hpdi(mu_samp, q=q)  # (Nd, 2)
+mu_hpdi = sts.hpdi(mu_samp, q=q, axis=0)  # (Nd, 2)
 
 # Figure 4.10 (R code 4.55, 4.57)
 fig = plt.figure(5, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
 ax.plot(x, mu_mean, 'C3', label='MAP Estimate')
-ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
+ax.fill_between(x, mu_hpdi[0], mu_hpdi[1],
                 facecolor='k', alpha=0.3, interpolate=True,
                 label=rf"{100*q:g}% Credible Interval of $\mu$")
 ax.set(xlabel='weight [kg]',
@@ -232,8 +232,8 @@ ax.legend()
 # Calculate the prediction interval, including sigma (R code 4.59, 4.60, 4.62)
 # Manually write code for:
 #   h_samp = sts.sim(the_model, Ns)
-h_samp = stats.norm(mu_samp, post['sigma'].values[:, np.newaxis]).rvs()  # (Nd, Ns)
-# h_hpdi = sts.hpdi(h_samp, q=q)  # (Nd, 2)
+h_samp = stats.norm(mu_samp, post['sigma'].values[:, np.newaxis]).rvs()  # (Ns, Nd)
+# h_hpdi = sts.hpdi(h_samp, q=q, axis=0)  # (Nd, 2)
 h_pi = sts.percentiles(h_samp, q=q, axis=0)  # (2, Nd)
 
 # (R code 4.61)

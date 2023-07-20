@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-  Description: Quadratic approximation to the data (R code 4.26 -- 4.30)
+§4.3.5: Quadratic approximation to the data (R code 4.26--4.30)
 """
 # =============================================================================
 

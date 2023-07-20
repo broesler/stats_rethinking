@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-Description: Solutions to the "Hard" exercises.
+Solutions to the "Hard" exercises.
 """
 # =============================================================================
 
@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
+import xarray as xr
 
 from scipy import stats
 
@@ -67,10 +68,10 @@ with pm.Model() as the_model:
     quap = sts.quap()
     post = quap.sample()
 
-mu_samp = post['alpha'].values + post['beta'].values * (np.c_[UNK_W] - w_bar)
-h_samp = stats.norm(mu_samp, post['sigma']).rvs()
-h_mean = h_samp.mean(axis=1)
-h_hpdi = sts.hpdi(h_samp, q=0.89, axis=1)  # (2, ...)
+mu_samp = post['alpha'] + post['beta'] * (xr.DataArray(UNK_W) - w_bar)
+h_samp = stats.norm(mu_samp, post['sigma'].values[:, np.newaxis]).rvs()
+h_mean = h_samp.mean(axis=0)
+h_hpdi = sts.hpdi(h_samp, q=0.89, axis=0)  # (2, ...)
 
 with pd.option_context('display.float_format', '{:.2f}'.format):
     print(pd.DataFrame(np.c_[UNK_W, h_mean, h_hpdi.T], 

@@ -139,6 +139,7 @@ def percentiles(data, q=0.89, **kwargs):
 
 
 # TODO remove width and precision arguments and just take fstr='8.2f', e.g.
+# * update docs to show that it matches sts.quantile shapes.
 # * add axis=1 argument ->
 # * allow multiple qs, but print them "nested" like on an x-axis.
 def hpdi(data, q=0.89, verbose=False, width=6, precision=4,
@@ -146,7 +147,7 @@ def hpdi(data, q=0.89, verbose=False, width=6, precision=4,
     """Compute highest probability density interval.
 
     .. note::
-        This function calls `sts.quantile` with `pymc.stats.hpd` function.
+        This function depends on `arviz.hdi`.
 
     Parameters
     ----------
@@ -332,7 +333,7 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
         A DataFrame with a row for each variable, and columns for mean,
         standard deviation, and low/high percentiles of the variable.
     """
-    if not isinstance(obj, (Quap, pd.DataFrame, np.ndarray)):
+    if not isinstance(obj, (Quap, xr.Dataset, pd.DataFrame, np.ndarray)):
         raise TypeError(f"quap of type '{type(quap)}' is unsupported!")
 
     a = (1-p)/2
@@ -341,13 +342,32 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     if isinstance(obj, Quap):
         title = None
         # Compute density intervals
+        coef = dataset_to_series(obj.coef)
         z = stats.norm.ppf(1 - a)
-        lo = obj.coef - z * obj.std
-        hi = obj.coef + z * obj.std
-        df = pd.concat([obj.coef, obj.std, lo, hi], axis=1)
+        lo = coef - z * obj.std
+        hi = coef + z * obj.std
+        df = pd.concat([coef, obj.std, lo, hi], axis=1)
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
         # if hist:
         #     df['histogram'] = sparklines_from_norm(df['mean'], df['std'])
+
+    # Dataset of data points (i.e. posterior distribution)
+    if isinstance(obj, xr.Dataset):
+        if 'draw' not in obj.dims:
+            raise TypeError("Expected dimensions ['draw'] in `obj`")
+        if 'chain' in obj.dims:
+            obj = obj.mean('chain')
+        title = (f"'DataFrame': {obj.sizes['draw']:d} obs."
+                 f" of {len(obj.data_vars)} variables:")
+        mean = obj.mean('draw')
+        std = obj.std('draw')
+        z = stats.norm.ppf(1 - a)
+        lo = mean - z * std
+        hi = mean + z * std
+        df = xr.concat([mean, std, lo, hi], dim='data').to_dataframe().T
+        df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
+        if hist:
+            df['histogram'] = sparklines_from_dataset(obj)
 
     # DataFrame of data points
     if isinstance(obj, pd.DataFrame):
@@ -396,6 +416,17 @@ def sparklines_from_norm(means, stds, width=12):
     sparklines = []
     for s in samp:
         sparklines.append(sparkify(np.histogram(s, bins=width)[0]))
+    return sparklines
+
+
+def sparklines_from_dataset(ds, width=12):
+    """Generate list of sparklines from a Dataset."""
+    if 'draw' not in ds.dims:
+        raise TypeError("Expected dimension 'draw' in `ds`")
+    sparklines = []
+    for v in ds.data_vars:
+        data = ds[v].dropna(dim='draw')
+        sparklines.append(sparkify(np.histogram(data, bins=width)[0]))
     return sparklines
 
 
@@ -476,7 +507,7 @@ class Quap():
         mean = flatten_dataset(self.coef).values
         posterior = stats.multivariate_normal(mean=mean, cov=self.cov)
         df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
-        return frame_to_dataset(df, model=self.model)
+        return frame_to_dataset(df, model=self.model).mean('chain')
 
     # TODO
     # * rename the model variable itself
@@ -1150,6 +1181,11 @@ def cnames_from_dataset(ds):
     return dnames
 
 
+def dataset_to_series(ds):
+    """Return a Series indexed by the data variables."""
+    return pd.Series(flatten_dataset(ds), index=cnames_from_dataset(ds))
+
+
 def frame_to_dataset(df, model=None):
     """Convert DataFrame to ArviZ Dataset by combinining columns with
     multi-dimensional parameters, e.g. β__0, β__1, ..., β__N into β (N,).
@@ -1170,9 +1206,13 @@ def frame_to_dataset(df, model=None):
     return ds
 
 
+# TODO NOT USED other than one test. Remove.
 def dataset_to_frame(ds):
     """Convert ArviZ Dataset to DataFrame by separating columns with
     multi-dimensional parameters, e.g. β (N,) into β__0, β__1, ..., β__N.
+
+    This function assumes that the dataset has standard dimensions 
+    ['chain', 'draw'], as created by ArviZ.
     """
     df = pd.DataFrame()
     for vname, da in ds.items():
@@ -1186,6 +1226,7 @@ def dataset_to_frame(ds):
     return df
 
 
+# TODO NOT USED other than one test. Remove.
 def _names_from_vec(vname, ncols):
     """Create a list of strings ['x__0', 'x__1', ..., 'x__``ncols``'],
     where 'x' is ``vname``."""

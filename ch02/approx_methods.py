@@ -49,7 +49,7 @@ with pm.Model() as normal_approx:
 
     # Compute quadratic approximation (see R code 2.6)
     globe_qa = sts.quap()
-    mean_p, std_p = globe_qa.coef['p'], globe_qa.std['p']
+    mean_p, std_p = float(globe_qa.coef['p']), globe_qa.std['p']
     norm_a = stats.norm(mean_p, std_p)
     sts.precis(globe_qa)
 
