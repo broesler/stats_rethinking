@@ -40,8 +40,10 @@ Ns = 1000
 post = q.sample(Ns)  # (Ns, Np)
 
 # Plot the fit
+# FIXME breaks with non-DataFrame post
 mu_samp = sts.lmeval(q, out=q.model.μ)
 ax = sts.lmplot(fit_x=df['speed'], fit_y=mu_samp, data=df, x='speed', y='dist')
+ax.set_title('Cars')
 
 # Log-likelihood of each observation at each sample from the posterior
 # (R code 7.21)
@@ -50,7 +52,7 @@ ax = sts.lmplot(fit_x=df['speed'], fit_y=mu_samp, data=df, x='speed', y='dist')
 # having to compute the mean and reimplement the logpdf ourselves.
 
 # Create InferenceData object with 'posterior' attribute xarray DataSet.
-idata = az.convert_to_inference_data(post.to_dict(orient='list'))
+idata = az.convert_to_inference_data(post)
 
 # Add log_likelihood to idata
 idata = pm.compute_log_likelihood(idata, model=q.model, progressbar=False)
@@ -77,13 +79,25 @@ print(f"{std_WAIC = :.4f}")  # ~ 17.7069
 
 assert np.isclose(WAIC, waic_vec.sum())
 
-# Test WAIC function
+# Test WAIC function with log likelihood
 wx = sts.WAIC(loglik=loglik)['dist']
 print(f"{wx['waic'] = :.4f}")
 print(f"{wx['std'] = :.4f}")
 
+# Should be exact
 np.testing.assert_allclose(wx['waic'], WAIC)
 np.testing.assert_allclose(wx['std'], std_WAIC)
+
+# Test WAIC function with model itself
+ww = sts.WAIC(model=q, post=post)['dist']
+
+# Should be exact if we give post
+print(f"{ww['waic'] = :.4f}")
+print(f"{ww['std'] = :.4f}")
+
+np.testing.assert_allclose(wx['waic'], WAIC)
+np.testing.assert_allclose(wx['std'], std_WAIC)
+
 
 plt.ion()
 plt.show()

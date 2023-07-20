@@ -475,8 +475,8 @@ class Quap():
         """
         mean = flatten_dataset(self.coef).values
         posterior = stats.multivariate_normal(mean=mean, cov=self.cov)
-        # TODO use frame_to_dataset to convert this to a dataset by default
-        return pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
+        df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
+        return frame_to_dataset(df, model=self.model)
 
     # TODO
     # * rename the model variable itself
@@ -666,27 +666,13 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         params = inputvars(out)
 
     if dist is None:
-        dist = fit.sample(N)  # take the posterior
+        dist = fit.sample(N).mean('chain')  # take the posterior
 
     if eval_at is not None:
         pm.set_data(eval_at, model=fit.model)
 
-    if isinstance(dist, pd.DataFrame):
-        # Concatenate vector parameters
-        dist_t = dict()
-        shapes = fit.model.eval_rv_shapes()
-        # TODO drop from params if shape == 0?
-        for name, s in shapes.items():
-            if len(s) > 0 and s[0] > 1:
-                dist_t[name] = dist.filter(regex=f"{name}__[0-9]+")
-            else:
-                dist_t[name] = dist[name]
-    else:
-        raise TypeError("dist must be a DataFrame!")
-
-    # TODO Update to Python 3.11? PyMC/PyTensor 5.5.0 accepts vector inputs.
     # Compile the graph function to compute. Better than `eval`, which
-    # generates a new random state for each call.
+    # does *not* generate a new random state for each call.
     out_func = fit.model.compile_fn(
         inputs=params,
         outs=out,
@@ -695,10 +681,9 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 
     # Manual loop since params are 0-D variables in the model.
     cols = []
-    for i in range(len(dist)):
+    for i in range(dist.sizes['draw']):
         # Ensure shape of given values matches that of the model variable
-        param_vals = {v.name: np.reshape(dist_t[v.name].iloc[i], shapes[v.name])
-                      for v in params}
+        param_vals = {v.name: dist[v.name].isel(draw=i) for v in params}
         cols.append(out_func(param_vals))
 
     return np.array(cols).T  # params as columns
@@ -783,8 +768,6 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
             elif len(data_vars) > 1:
                 raise ValueError("More than 1 data variable in the model!"
                                  + " Please specify `eval_at`")
-            # FIXME What happens when "data_vars" is empty?
-            # See waic_example.py.
         else:
             if len(eval_at) == 1:
                 xe = list(eval_at.values())[0]
@@ -1144,7 +1127,7 @@ def numpy_to_data_array(values, var_name=None):
 def dict_to_dataset(data):
     """Convert a dictionary to an xarray.Dataset with default dimensions."""
     data_vars = {
-        k: numpy_to_data_array(v, var_name=k) 
+        k: numpy_to_data_array(v, var_name=k)
         for k, v in data.items()
     }
     return xr.Dataset(data_vars=data_vars)
@@ -1167,20 +1150,28 @@ def cnames_from_dataset(ds):
     return dnames
 
 
-def frame_to_dataset(df):
-    """Convert DataFrame to ArviZ DataSet by combinining columns with
+def frame_to_dataset(df, model=None):
+    """Convert DataFrame to ArviZ Dataset by combinining columns with
     multi-dimensional parameters, e.g. β__0, β__1, ..., β__N into β (N,).
     """
+    model = pm.modelcontext(model)
     tf = df.copy()
     var_names = tf.columns.str.replace('__[0-9]+', '', regex=True).unique()
     the_dict = dict()
     for v in var_names:
+        # Add 'chain' dimension to match expected shape
         the_dict[v] = np.expand_dims(tf.filter(like=v).values, 0)
-    return az.convert_to_dataset(the_dict)
+    ds = az.convert_to_dataset(the_dict)
+    # Remove dims for scalar variables with shape ()
+    shapes = model.eval_rv_shapes()
+    for v in var_names:
+        if shapes[v] == ():
+            ds = ds.squeeze(dim=f"{v}_dim_0", drop=True)
+    return ds
 
 
 def dataset_to_frame(ds):
-    """Convert ArviZ DataSet to DataFrame by separating columns with
+    """Convert ArviZ Dataset to DataFrame by separating columns with
     multi-dimensional parameters, e.g. β (N,) into β__0, β__1, ..., β__N.
     """
     df = pd.DataFrame()
@@ -1242,10 +1233,8 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
         for k, v in eval_at.items():
             model.model.set_data(k, v)
 
-    # FIXME compute_log_likelihood fails for parameters with shape (), because
-    # frame_to_dataset assumes they are shape (1,).
     return pm.compute_log_likelihood(
-        idata=az.convert_to_inference_data(frame_to_dataset(post)),
+        idata=az.convert_to_inference_data(post),
         model=model.model,
         var_names=var_names,
         progressbar=False,
