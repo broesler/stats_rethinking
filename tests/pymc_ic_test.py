@@ -20,22 +20,12 @@ import stats_rethinking as sts
 
 # Function arguments
 N = 20
-k = 1  # FIXME compute_log_likelihood breaks for k == 1
-# k = 3
+k = 3
 rho = np.r_[0.15, -0.4]
 b_sigma = 0.5
 
 # Internal model parameters
 Y_SIGMA = 1
-
-
-# -----------------------------------------------------------------------------
-#         Utilities
-# -----------------------------------------------------------------------------
-# TODO move to testing script for frame_to_dataset/dataset_to_frame
-# post = q.sample(Ns)  # DataFrame with columns = ['α', 'βn__0', 'βn__1', ...]
-# da = frame_to_dataset(post)
-# post = dataset_to_frame(da)  # test inverse function
 
 # -----------------------------------------------------------------------------
 #         Define the model
@@ -74,10 +64,10 @@ if k > 1:
 # Build and fit the model to the training data
 # NOTE In order to use `pm.compute_log_likelihood` we need to have ind/obs
 # variables in the model itself, and set them to be mm_test/y_test.
-with pm.Model():
+with pm.Model() as model:
     X = pm.MutableData('X', mm_train)
     obs = pm.MutableData('obs', y_train)
-    α = pm.Normal('α', 0, b_sigma, shape=(1,))  # shape=(1,) works
+    α = pm.Normal('α', 0, b_sigma, shape=(1,))
     if k == 1:
         μ = pm.Deterministic('μ', α)
     else:
@@ -97,6 +87,8 @@ Ns = 1000
 
 post = q.sample(Ns)
 
+da = sts.dataset_to_frame(post)  # test inverse function
+
 # NOTE fix for k == 1 involves setting α shape=(1,) above, *or* not having
 # a defined dimension 'α_dim_0' in the Dataset `ds`. Would be better to fix the
 # internal frame_to_dataset() function so that we don't have to remember to
@@ -115,8 +107,8 @@ post = q.sample(Ns)
 # `idata.posterior` with α.shape = () should have dims (chain=1, draw=Ns), as
 # opposed to dims (chain=1, draw=Ns, α_dim_0=1).
 
-ds = sts.frame_to_dataset(post)
-idata = az.convert_to_inference_data(ds)
+# ds = sts.frame_to_dataset(post, model)
+idata = az.convert_to_inference_data(post)
 
 trace = pm.sample(model=q.model)
 
@@ -157,8 +149,15 @@ res = pd.Series({('deviance', 'train'): -2 * np.sum(lppd_train),
 #
 # rethinking::LOO/PSIS uses outside library, others computes internally
 
+# Compile Results
 wx = sts.WAIC(loglik=loglik)['y']
+res[('WAIC', 'test')] = wx['waic']
+res[('WAIC', 'err')] = np.abs(wx['waic'] - res[('deviance', 'test')])
+
 lx = sts.LOOIS(idata=idata)
+res[('LOOIC', 'test')] = lx['PSIS']
+res[('LOOIC', 'err')] = np.abs(lx['PSIS'] - res[('deviance', 'test')])
+
 cx = sts.LOOCV(
     model=q,
     ind_var='X',
@@ -167,14 +166,6 @@ cx = sts.LOOCV(
     X_data=mm_train,
     y_data=y_train,
 )
-
-# Compile Results
-res[('WAIC', 'test')] = wx['waic']
-res[('WAIC', 'err')] = np.abs(wx['waic'] - res[('deviance', 'test')])
-
-res[('LOOIC', 'test')] = lx['PSIS']
-res[('LOOIC', 'err')] = np.abs(lx['PSIS'] - res[('deviance', 'test')])
-
 res[('LOOCV', 'test')] = cx['loocv']
 res[('LOOCV', 'err')] = np.abs(cx['loocv'] - res[('deviance', 'test')])
 
