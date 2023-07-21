@@ -359,15 +359,15 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
             obj = obj.mean('chain')
         title = (f"'DataFrame': {obj.sizes['draw']:d} obs."
                  f" of {len(obj.data_vars)} variables:")
-        mean = obj.mean('draw')
-        std = obj.std('draw')
+        mean = dataset_to_series(obj.mean('draw'))
+        std = dataset_to_series(obj.std('draw'))
         z = stats.norm.ppf(1 - a)
         lo = mean - z * std
         hi = mean + z * std
-        df = xr.concat([mean, std, lo, hi], dim='data').to_dataframe().T
+        df = pd.concat([mean, std, lo, hi], axis=1)
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
         if hist:
-            df['histogram'] = sparklines_from_dataset(obj)
+            df['histogram'] = sparklines_from_dataframe(dataset_to_frame(obj))
 
     # DataFrame of data points
     if isinstance(obj, pd.DataFrame):
@@ -419,6 +419,7 @@ def sparklines_from_norm(means, stds, width=12):
     return sparklines
 
 
+# TODO sparklines_from_dataset fails for N-D variables.
 def sparklines_from_dataset(ds, width=12):
     """Generate list of sparklines from a Dataset."""
     if 'draw' not in ds.dims:
@@ -526,7 +527,6 @@ class Quap():
         """
         self.coef = self.coef.rename(mapper)
         self.cov = self.cov.rename(index=mapper, columns=mapper)
-        self.std = self.std.rename(mapper)
         for k, v in mapper.items():
             self.model.named_vars[k].name = v
         return self
@@ -697,7 +697,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         params = inputvars(out)
 
     if dist is None:
-        dist = fit.sample(N).mean('chain')  # take the posterior
+        dist = fit.sample(N)  # take the posterior
 
     if eval_at is not None:
         pm.set_data(eval_at, model=fit.model)
@@ -1060,7 +1060,7 @@ def coef_table(models, mnames=None, params=None, std=True):
     ct, cs : pd.DataFrame
         DataFrames of the coefficients and their standard deviations.
     """
-    coefs = [m.coef for m in models]
+    coefs = [dataset_to_series(m.coef) for m in models]
     stds = [m.std for m in models]
 
     def transform_ct(ct, mnames=None, params=None, value_name='coef'):
@@ -1177,8 +1177,7 @@ def cnames_from_dataset(ds):
     df = pd.DataFrame(da.coords['variable'].values)
     g = df.groupby(0)
     df.loc[g[0].transform('size').gt(1), 0] += '__' + g.cumcount().astype(str)
-    dnames = list(df[0].values)
-    return dnames
+    return list(df[0].values)
 
 
 def dataset_to_series(ds):
@@ -1191,12 +1190,11 @@ def frame_to_dataset(df, model=None):
     multi-dimensional parameters, e.g. β__0, β__1, ..., β__N into β (N,).
     """
     model = pm.modelcontext(model)
-    tf = df.copy()
-    var_names = tf.columns.str.replace('__[0-9]+', '', regex=True).unique()
+    var_names = df.columns.str.replace('__[0-9]+', '', regex=True).unique()
     the_dict = dict()
     for v in var_names:
         # Add 'chain' dimension to match expected shape
-        the_dict[v] = np.expand_dims(tf.filter(like=v).values, 0)
+        the_dict[v] = np.expand_dims(df.filter(like=v).values, 0)
     ds = az.convert_to_dataset(the_dict)
     # Remove dims for scalar variables with shape ()
     shapes = model.eval_rv_shapes()
@@ -1206,23 +1204,32 @@ def frame_to_dataset(df, model=None):
     return ds
 
 
-# TODO NOT USED other than one test. Remove.
 def dataset_to_frame(ds):
     """Convert ArviZ Dataset to DataFrame by separating columns with
     multi-dimensional parameters, e.g. β (N,) into β__0, β__1, ..., β__N.
 
-    This function assumes that the dataset has standard dimensions 
-    ['chain', 'draw'], as created by ArviZ.
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset containing variables with at least 1 dimension.
+
+    Returns
+    -------
+    result : pandas.DataFrame
+        DataFrame with columns for each variable in the dataset. Vector
+        variables will be separated into columns.
     """
+    if 'chain' in ds.dims:
+        ds = ds.mean('chain')
+
     df = pd.DataFrame()
     for vname, da in ds.items():
-        v = da.mean('chain').squeeze()  # remove chain dimension
-        if v.ndim == 1:                 # only draw dimension
-            df[vname] = v.values
-        elif v.ndim > 1:
-            df[_names_from_vec(vname, v.shape[1])] = v.values
+        if da.ndim == 1:
+            df[vname] = da.values
+        elif da.ndim > 1:
+            df[_names_from_vec(vname, da.shape[1])] = da.values
         else:
-            raise ValueError(f"{vname} has invalid dimension {v.ndim}.")
+            raise ValueError(f"{vname} has invalid dimension {da.ndim}.")
     return df
 
 

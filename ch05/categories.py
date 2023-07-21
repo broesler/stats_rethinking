@@ -81,7 +81,7 @@ sts.precis(quap5_8)
 
 # Compute a contrast between female and male heights (R code 5.38)
 post = quap5_8.sample()
-post['diff_fm'] = post['α__0'] - post['α__1']
+post['diff_fm'] = post['α'][:, 0] - post['α'][:, 1]
 print()
 print('Posterior with Contrast:')
 sts.precis(post)
