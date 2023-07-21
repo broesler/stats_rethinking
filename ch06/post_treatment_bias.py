@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-Description: §6.2 Post-Treatment Bias.
+§6.2 Post-Treatment Bias.
 """
 # =============================================================================
 
