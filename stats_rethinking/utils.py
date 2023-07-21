@@ -1277,6 +1277,9 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
     if post is None:
         post = model.sample(Ns)  # DataFrame with ['α', 'βn__0', 'βn__1', ...]
 
+    if 'chain' not in post.dims:
+        post = post.expand_dims('chain')
+
     if eval_at is not None:
         for k, v in eval_at.items():
             model.model.set_data(k, v)
