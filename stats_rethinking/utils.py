@@ -1380,13 +1380,13 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
             Ns=Ns,
         )
 
+    if Ns is None:
+        Ns = loglik.sizes['draw']
+
     if var_names is None:
         var_names = loglik.keys()
 
-    out = dict()
-    for v in var_names:
-        out[v] = logsumexp(loglik[v], axis=0) - np.log(Ns)
-    return out
+    return {v: logsumexp(loglik[v], axis=0) - np.log(Ns) for v in var_names}
 
 
 def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
