@@ -21,6 +21,7 @@ import stats_rethinking as sts
 
 plt.style.use('seaborn-v0_8-darkgrid')
 
+DEBUG = True
 FORCE_UPDATE = False  # if True, overwrite `tf_file` regardless
 
 FLAT = 100  # `b_sigma` value for a "flat" prior.
@@ -28,19 +29,18 @@ FLAT = 100  # `b_sigma` value for a "flat" prior.
 # -----------------------------------------------------------------------------
 #         Replicate the experiment Ne times for each k
 # -----------------------------------------------------------------------------
-DEBUG = True
 if DEBUG:
-    Ne = 5
-    Ns = [20]
-    params = np.arange(1, 5)
-    b_sigmas = [FLAT, 0.5]
+    Ne = 10
+    Ns = [17, 156]
+    params = np.arange(1, 6)
+    b_sigmas = [FLAT]
 else:
     Ne = 100                       # number of replicates
     Ns = [20, 100]                 # data points
     params = np.arange(1, 6)       # number of parameters in the model
     b_sigmas = [FLAT, 1, 0.5, 0.2]  # regularization via small prior variance
 
-tf_file = Path(f"./train_test_all_Ne{Ne:d}.pkl")
+tf_file = Path(f"./train_test_Ne{Ne:d}.pkl")
 
 if not DEBUG and not FORCE_UPDATE and tf_file.exists():
     tf = pd.read_pickle(tf_file)
@@ -49,12 +49,13 @@ else:
     def exp_train_test(args):
         """Run a single simulation."""
         N, k, _, b = args
+        ic = ((b == FLAT) or (b == 0.5))
         res = sts.sim_train_test(
             N,
             k,
             b_sigma=b,
-            compute_WAIC=True,
-            compute_LOOIC=True,
+            compute_WAIC=ic,
+            compute_LOOIC=ic,
             compute_LOOCV=False,  # SLOW if True
         )
         return (res['res'], N, k, b)
@@ -68,16 +69,17 @@ else:
     ]
 
     # Non-parallel:
-    if DEBUG:
-        from tqdm import tqdm
-        res = [exp_train_test(x) for x in tqdm(all_args)]
-    else:
-        # Parallel:
-        res = process_map(
-            exp_train_test,
-            all_args,
-            chunksize=2*len(params)
-        )
+    # if DEBUG:
+    #     from tqdm import tqdm
+    #     res = [exp_train_test(x) for x in tqdm(all_args)]
+    # else:
+    # Parallel:
+    res = process_map(
+        exp_train_test,
+        all_args,
+        chunksize=2*len(params),
+        max_workers=8,
+    )
 
     # Convert list of tuples (Series(), N, k) to DataFrame with
     # columns=Series.index.
@@ -106,21 +108,23 @@ jitter = 0.05  # separation between points in x-direction
 
 pf = df['deviance']  # just plot the deviance
 
+idx = pd.IndexSlice
+
 for i, N in enumerate(Ns):
     ax = fig.add_subplot(gs[i])
 
-    idx = pd.IndexSlice[FLAT, N]
-    ax.errorbar(params - jitter, pf.loc[idx, ('train', 'mean')],
-                yerr=pf.loc[idx, ('train', 'std')],
+    ix = idx[FLAT, N]
+    ax.errorbar(params - jitter, pf.loc[ix, ('train', 'mean')],
+                yerr=pf.loc[ix, ('train', 'std')],
                 fmt='oC0', markerfacecolor='C0', ecolor='C0')
-    ax.errorbar(params + jitter, pf.loc[idx, ('test', 'mean')],
-                yerr=pf.loc[idx, ('test', 'std')],
+    ax.errorbar(params + jitter, pf.loc[ix, ('test', 'mean')],
+                yerr=pf.loc[ix, ('test', 'std')],
                 fmt='ok', markerfacecolor='none', ecolor='k')
 
     # Label the training set
     ax.text(
         x=(params - 4*jitter)[1],
-        y=pf.loc[idx].iloc[1]['train', 'mean'],
+        y=pf.loc[ix].iloc[1]['train', 'mean'],
         s='train',
         color='C0',
         ha='right',
@@ -130,7 +134,7 @@ for i, N in enumerate(Ns):
     # Label the test set
     ax.text(
         x=(params + 4*jitter)[1],
-        y=pf.loc[idx].iloc[1]['test', 'mean'],
+        y=pf.loc[ix].iloc[1]['test', 'mean'],
         s='test',
         color='k',
         ha='left',
@@ -138,7 +142,7 @@ for i, N in enumerate(Ns):
     )
 
     ax.set_xticks(params, labels=params)
-    ax.set(title=f"{N = }, {Ne = }",
+    ax.set(title=f"{N = } ({Ne} simulations)",
            xlabel='number of parameters',
            ylabel='deviance')
 
@@ -151,20 +155,20 @@ gs = fig.add_gridspec(nrows=1, ncols=2)
 for i, N in enumerate(Ns):
     ax = fig.add_subplot(gs[i])
 
-    idx = pd.IndexSlice[FLAT, N]
-    ax.scatter(params, pf.loc[idx, ('train', 'mean')], c='C0')
-    ax.scatter(params, pf.loc[idx, ('test', 'mean')],
+    ix = idx[FLAT, N]
+    ax.scatter(params, pf.loc[ix, ('train', 'mean')], c='C0')
+    ax.scatter(params, pf.loc[ix, ('test', 'mean')],
                facecolors='none', edgecolors='k')
 
     # Only plot the regularized curves
     for b, ls in zip(b_sigmas[1:], ['--', ':', '-']):
-        idx = pd.IndexSlice[b, N]
-        ax.plot(params, pf.loc[idx, ('train', 'mean')], c='C0', ls=ls)
-        ax.plot(params, pf.loc[idx, ('test', 'mean')], c='k', ls=ls,
+        ix = idx[b, N]
+        ax.plot(params, pf.loc[ix, ('train', 'mean')], c='C0', ls=ls)
+        ax.plot(params, pf.loc[ix, ('test', 'mean')], c='k', ls=ls,
                 label=rf"$\mathcal{{N}}$(0, {b})")
 
     ax.set_xticks(params, labels=params)
-    ax.set(title=f"{N = }, {Ne = }",
+    ax.set(title=f"{N = } ({Ne} simulations)",
            xlabel='number of parameters',
            ylabel='deviance')
 
@@ -180,32 +184,35 @@ for i, N in enumerate(Ns):
 
 
 # Figure 7.10 -- Test deviance/err with lines for each information criteria
-def plot_N(N, kind, legend=False, ax=None):
+def plot_ICs(N, kind, legend=False, ax=None):
     """Plot average deviance or error."""
     if ax is None:
         ax = plt.gca()
 
     # Plot one curve for flat priors, one for regularized
-    for b, c in zip([FLAT, 0.5], ['C0', 'k']):
-        idx = pd.IndexSlice[b, N]
+    # for b, c in zip([FLAT, 0.5], ['C0', 'k']):
+    for b, c in zip([FLAT], ['C0']):
+        ix = idx[b, N]
 
         # Points are mean test deviance, with different priors
         if kind == 'test':
-            ax.scatter(params, df.loc[idx, ('deviance', 'test', 'mean')],
+            ax.scatter(params, df.loc[ix, ('deviance', 'test', 'mean')],
                        facecolors='none' if c == 'C0' else c, edgecolors=c)
 
         # Plot curves for each information criterion
         # for ic, ls in zip(['WAIC', 'LOOCV', 'LOOIC'], ['-', '--', '-.']):
-        for ic, ls in zip(['WAIC'], ['-']):
-            ax.plot(params, df.loc[idx, (ic, kind, 'mean')],
+        for ic, ls in zip(['WAIC', 'LOOIC'], ['-', '-.']):
+            ax.plot(params, df.loc[ix, (ic, kind, 'mean')],
                     color=c, ls=ls, label=ic if c == 'C0' else None)
 
     ax.set_xticks(params, labels=params)
-    ax.set(title=f"{N = }, {Ne = }",
+    ax.set(title=f"{N = } ({Ne} simulations)",
            xlabel='number of parameters',
-           ylabel='deviance')
+           ylabel=('average deviance'
+                   if kind == 'test'
+                   else 'average error (test deviance)'))
 
-    if legend:
+    if legend and N == 20:
         # Add lines to the legend for scatter points + lines
         handles, labels = ax.get_legend_handles_labels()
         custom_lines = [Line2D([0], [0], color='C0', marker='o', lw=2),
@@ -213,17 +220,20 @@ def plot_N(N, kind, legend=False, ax=None):
                                markerfacecolor='none', lw=2)]
         handles.extend(custom_lines)
         labels.extend([f"σ = {FLAT}", 'σ = 0.5'])
-        ax.legend(handles, labels, loc='lower left')
+        ax.legend(handles, labels)  # , loc='lower left')
 
     return ax
 
 
 fig = plt.figure(3, clear=True, constrained_layout=True)
+fig.set_size_inches((10, 10), forward=True)
 gs = fig.add_gridspec(nrows=2, ncols=2)
 
+# FIXME WAIC and LOOIS are ~ 2*params > deviance? Figure 7.10 shows the two
+# numbers as almost identical to the deviance as N increases.
 for i, N in enumerate(Ns):
-    plot_N(N, 'test', legend=True, ax=fig.add_subplot(gs[i, 0]))
-    plot_N(N, 'err', legend=False, ax=fig.add_subplot(gs[i, 1]))
+    plot_ICs(N, 'test', legend=True, ax=fig.add_subplot(gs[i, 0]))
+    plot_ICs(N, 'err', legend=False, ax=fig.add_subplot(gs[i, 1]))
 
 
 plt.ion()

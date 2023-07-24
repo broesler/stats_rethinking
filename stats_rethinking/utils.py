@@ -1248,6 +1248,10 @@ def _names_from_vec(vname, ncols):
 # -----------------------------------------------------------------------------
 #         IC Functions
 # -----------------------------------------------------------------------------
+# TODO
+# * use constant string for inference_data and loglikelihood docs.
+# * use constant string for lppd, WAIC, LOOIS, LOOCV docs.
+
 def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
     """Prepare the inference data structure for the model.
 
@@ -1278,10 +1282,10 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
             The log likelihood of each observed variable.
     """
     if post is None:
-        post = model.sample(Ns)  # DataFrame with ['α', 'βn__0', 'βn__1', ...]
+        post = model.sample(Ns)
 
     if 'chain' not in post.dims:
-        post = post.expand_dims('chain')
+        post = post.expand_dims('chain', axis=0)
 
     if eval_at is not None:
         for k, v in eval_at.items():
@@ -1342,8 +1346,8 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
 
     Parameters
     ----------
-    quap : :obj:`Quap`
-        The fitted model object. If ``loglik`` is not given, ``quap`` will be
+    model : :obj:`Quap`
+        The fitted model object. If ``loglik`` is not given, ``model`` will be
         used to compute it.
     loglik : dict like {var_name: (Ns, N) ndarray}
         The log-likelihood of each desired output variable in the model, where
@@ -1351,12 +1355,12 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
         of data points for that variable.
 
     .. note::
-        Only one of ``quap`` or ``loglik`` may be given.
+        Only one of ``model`` or ``loglik`` may be given.
 
     post : (Ns, p) DataFrame
         Samples of the posterior distribution with model free variables as
         column names. If ``post`` is not given, ``Ns`` samples will be drawn
-        from the ``quap`` distribution.
+        from the ``model`` distribution.
     var_names : sequence of str
         List of observed variables for which to compute log likelihood.
         Defaults to all observed variables.
@@ -1372,7 +1376,7 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
         A dictionary of the lppd for each observed variable.
     """
     if model is None and loglik is None:
-        raise ValueError('One of `quap` or `loglik` must be given!')
+        raise ValueError('One of `model` or `loglik` must be given!')
 
     if loglik is None:
         loglik = loglikelihood(
@@ -1455,6 +1459,8 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
             Ns=Ns,
         )
 
+    # FIXME WAIC and LOOIS are ~ 2*params > deviance? Figure 7.10 shows the two
+    # numbers as almost identical to the deviance as N increases.
     the_lppd = lppd(loglik=loglik, var_names=var_names)
 
     out = dict()
@@ -1743,11 +1749,6 @@ def sim_train_test(
     # -------------------------------------------------------------------------
     #         Compute the Information Criteria
     # -------------------------------------------------------------------------
-    # NOTE for more efficient computation, we could get the inference data once
-    # to use for LOOIS, and then extract the log-likelihood for lppd and WAIC.
-    # LOOIS.
-
-    # Compute the lppd
     lppd_train = lppd(q)['y']
 
     # Compute the lppd with the test data
@@ -1766,15 +1767,20 @@ def sim_train_test(
                      ('deviance', 'test'): -2 * np.sum(lppd_test)})
 
     # Compile Results
+    # FIXME WAIC and LOOIS are ~ 2*params > deviance? Figure 7.10 shows the two
+    # numbers as almost identical to the deviance as N increases.
+    # * ONLY for N = 100! For N = 20, still have increase with k
     if compute_WAIC:
         wx = WAIC(loglik=loglik)['y']
         res[('WAIC', 'test')] = wx['waic']
-        res[('WAIC', 'err')] = np.abs(wx['waic'] - res[('deviance', 'test')])
+        res[('WAIC', 'err')] = np.abs(res[('WAIC', 'test')] 
+                                      - res[('deviance', 'test')])
 
     if compute_LOOIC:
         lx = LOOIS(idata=idata)
         res[('LOOIC', 'test')] = lx['PSIS']
-        res[('LOOIC', 'err')] = np.abs(lx['PSIS'] - res[('deviance', 'test')])
+        res[('LOOIC', 'err')] = np.abs(res[('LOOIC', 'test')] 
+                                       - res[('deviance', 'test')])
 
     if compute_LOOCV:
         cx = LOOCV(
