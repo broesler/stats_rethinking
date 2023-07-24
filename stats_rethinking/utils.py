@@ -1227,7 +1227,10 @@ def dataset_to_frame(ds):
         if da.ndim == 1:
             df[vname] = da.values
         elif da.ndim > 1:
-            df[_names_from_vec(vname, da.shape[1])] = da.values
+            if da.shape[1] == 1:
+                df[vname] = da.values.squeeze()
+            else:
+                df[_names_from_vec(vname, da.shape[1])] = da.values
         else:
             raise ValueError(f"{vname} has invalid dimension {da.ndim}.")
     return df
