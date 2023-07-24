@@ -283,7 +283,8 @@ def lppd(quap, Ns=1000):
 
 # R code 7.16
 print('lppd:')
-print(pd.Series({k: sum(lppd(v)) for k, v in models.items()}))
+the_lppds = pd.Series({k: sum(lppd(v)) for k, v in models.items()})
+print(the_lppds)
 
 
 plt.ion()
