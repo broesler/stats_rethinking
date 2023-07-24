@@ -18,7 +18,7 @@ import pymc as pm
 import stats_rethinking as sts
 
 from pathlib import Path
-from scipy import stats
+# from scipy import stats
 
 plt.style.use('seaborn-v0_8-darkgrid')
 
@@ -40,7 +40,6 @@ Ns = 1000
 post = q.sample(Ns)  # (Ns, Np)
 
 # Plot the fit
-# FIXME breaks with non-DataFrame post
 mu_samp = sts.lmeval(q, out=q.model.μ)
 ax = sts.lmplot(fit_x=df['speed'], fit_y=mu_samp, data=df, x='speed', y='dist')
 ax.set_title('Cars')
@@ -52,7 +51,7 @@ ax.set_title('Cars')
 # having to compute the mean and reimplement the logpdf ourselves.
 
 # Create InferenceData object with 'posterior' attribute xarray DataSet.
-idata = az.convert_to_inference_data(post)
+idata = az.convert_to_inference_data(post.expand_dims('chain'))
 
 # Add log_likelihood to idata
 idata = pm.compute_log_likelihood(idata, model=q.model, progressbar=False)
@@ -97,7 +96,6 @@ print(f"{ww['std'] = :.4f}")
 
 np.testing.assert_allclose(wx['waic'], WAIC)
 np.testing.assert_allclose(wx['std'], std_WAIC)
-
 
 plt.ion()
 plt.show()
