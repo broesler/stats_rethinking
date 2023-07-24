@@ -1460,9 +1460,10 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
         waic_vec = -2 * (the_lppd[v] - penalty)
         n_cases = loglik[v].shape[1]
         std_err = (n_cases * np.var(waic_vec))**0.5
-        lppd_w = the_lppd[v] if pointwise else the_lppd[v].sum()
-        w = waic_vec if pointwise else waic_vec.sum()
-        p = penalty if pointwise else penalty.sum()
+        if pointwise:
+            lppd_w, w, p = the_lppd[v], waic_vec, penalty
+        else:
+            lppd_w, w, p = the_lppd[v].sum(), waic_vec.sum(), penalty.sum()
         out[v] = dict(waic=w, lppd=lppd_w, penalty=p, std=std_err)
     return out
 
