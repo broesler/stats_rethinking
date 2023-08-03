@@ -259,6 +259,7 @@ for i, poly_order in tqdm(enumerate(poly_orders),
 
 def lppd(quap, Ns=1000):
     """Compute the log pointwise predictive density for a model."""
+    Ns = int(Ns)
     post = quap.sample(Ns)
     mu_samp = sts.lmeval(
             quap,
@@ -278,14 +279,118 @@ def lppd(quap, Ns=1000):
 # >>> lppd(models['m7.1'])
 # === array([ 0.6156,  0.6508,  0.5414,  0.6316,  0.4698,  0.4349, -0.8536])
 # OR:
-# >>> sts.lppd(m7_1)
-# === {'brain_std': array([ 0.6286,  0.6678,  0.5485,  0.6373,  0.4579,  0.4187, -0.8548])}
+# >>> sts.lppd(m7_1)['brain_std']
+# === array([ 0.6286,  0.6678,  0.5485,  0.6373,  0.4579,  0.4187, -0.8548])
 
 # R code 7.16
 print('lppd:')
-the_lppds = pd.Series({k: sum(lppd(v)) for k, v in models.items()})
-print(the_lppds)
+np.random.seed(1)
+the_lppds = pd.DataFrame({k: lppd(v) for k, v in models.items()})
+the_lppds.loc['Sum', :] = the_lppds.sum(axis='rows')
+print(the_lppds.loc['Sum'])
 
+# Compute WAIC and LOOIS to check variation with number of parameters
+np.random.seed(1)
+the_waics = pd.DataFrame({k: sts.WAIC(v)['brain_std'] for k, v in models.items()})
+
+R_waics = pd.DataFrame(
+    data={
+        'waic':    [6.821, 10   , 11.25, 15.56, -0.04896, -71.38, 5.376],
+        'lppd':    [2.49 , 2.566, 3.707, 5.334, 14.11   , 39.45 , 0.3619],
+        'penalty': [5.901, 7.568, 9.331, 13.11, 14.08   , 3.756 , 3.05],
+        'std':     [9.67 , 8.092, 9.046, 6.493, 3.616   , 0.1714, 6.685],
+    },
+    index=the_waics.columns,
+).T
+
+np.random.seed(1)
+the_loos = pd.DataFrame({k: sts.LOOIS(v) for k, v in models.items()})
+
+R_loos = pd.DataFrame(
+    data={
+        'PSIS':    [17.6  , 29.36 , 34.71 , 55.3  , 55.7  , -68.68, 9.802],
+        'lppd':    [-8.802, -14.68, -17.36, -27.65, -27.85, 34.34 , -4.901],
+        'penalty': [11.29 , 17.24 , 21.06 , 32.98 , 41.96 , 5.104 , 5.263],
+        'std':     [19.65 , 17.78 , 18.58 , 16.76 , 7.355 , 0.4465, 11.56],
+    },
+    index=the_waics.columns
+).T
+
+fig, axes = plt.subplots(ncols=2, num=5, clear=True, constrained_layout=True)
+params = np.r_[range(1, 7), 0]
+ax = axes[0]
+ax.scatter(params, the_waics.loc['waic'], c='C0', label='py WAIC')
+ax.scatter(params, R_waics.loc['waic'], edgecolor='C0', facecolor='none', label='R WAIC')
+
+ax.scatter(params, the_loos.loc['PSIS'], c='k', label='py LOOIS')
+ax.scatter(params, R_loos.loc['PSIS'], edgecolor='k', facecolor='none', label='R LOOIS')
+
+ax.set_xlabel('# of parameters')
+ax.legend()
+
+ax = axes[1]
+ax.scatter(params, (the_waics.loc['waic'] - R_waics.loc['waic']) / the_waics.loc['waic'], c='C0', label='WAIC')
+ax.scatter(params, (the_loos.loc['PSIS'] - R_loos.loc['PSIS']) / the_loos.loc['PSIS'], c='k', label='LOOIS')
+
+ax.set(xlabel='# of parameters',
+       ylabel='py - R [% err]')
+ax.legend()
+
+# ----------------------------------------------------------------------------- 
+#         Compare to R versions
+# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
+#         LPPD
+# -----------------------------------------------------------------------------
+# >>> print(the_lppds.loc['Sum'])
+# m7.1     2.482847
+# m7.2     2.583188
+# m7.3     3.628317
+# m7.4     5.337486
+# m7.5    14.124919
+# m7.6    39.540737
+# m7.7     0.355546
+# Name: Sum, dtype: float64
+
+# R> sapply( list(m7.1, m7.2, m7.3, m7.4, m7.5, m7.6, m7.7) , function(m) sum(lppd(m)) )
+# [1]  2.453  2.620  3.719  5.338 14.053 39.554  0.385
+
+# ----------------------------------------------------------------------------- 
+#         WAIC
+# -----------------------------------------------------------------------------
+# >>> the_waics
+# ===
+#              m7.1      m7.2       m7.3       m7.4       m7.5       m7.6      m7.7
+# waic     3.964978  8.436108  11.182932  13.854514  -1.292793 -72.061388  6.139253
+# lppd     2.495198  2.628192   3.651979   5.328711  14.001523  39.541272  0.361894
+# penalty  4.477687  6.846246   9.243445  12.255969  13.355126   3.510578  3.431521
+# std      7.402316  7.021514   9.390872   7.025531   6.234243   0.271815  7.321834
+
+# R> set.seed(1)
+# R> sapply( list(m7.1, m7.2, m7.3, m7.4, m7.5, m7.6, m7.7) , function(m) WAIC(m) )
+#         [,1]  [,2]  [,3]  [,4]  [,5]     [,6]   [,7]
+# WAIC    6.821 10    11.25 15.56 -0.04896 -71.38 5.376
+# lppd    2.49  2.566 3.707 5.334 14.11    39.45  0.3619
+# penalty 5.901 7.568 9.331 13.11 14.08    3.756  3.05
+# std_err 9.67  8.092 9.046 6.493 3.616    0.1714 6.685
+
+# ----------------------------------------------------------------------------- 
+#         LOOIS
+# -----------------------------------------------------------------------------
+# >>> the_loos
+# ===
+#               m7.1       m7.2       m7.3       m7.4       m7.5       m7.6       m7.7
+# PSIS     10.475741  19.331760  33.701941  47.261409  44.966345 -68.971715  13.449618
+# lppd     -5.237870  -9.665880 -16.850971 -23.630705 -22.483173  34.485857  -6.724809
+# penalty   7.733069  12.294072  20.502950  28.959416  36.484696   5.055414   7.086703
+# std      11.512229  10.328729  20.815729  13.641037  14.543865   0.696069  13.987098
+
+# R> sapply( list(m7.1, m7.2, m7.3, m7.4, m7.5, m7.6, m7.7) , function(m) LOO(m, warn=FALSE) )
+#         [,1]   [,2]   [,3]   [,4]   [,5]   [,6]   [,7]
+# PSIS    17.6   29.36  34.71  55.3   55.7   -68.68 9.802
+# lppd    -8.802 -14.68 -17.36 -27.65 -27.85 34.34  -4.901
+# penalty 11.29  17.24  21.06  32.98  41.96  5.104  5.263
+# std_err 19.65  17.78  18.58  16.76  7.355  0.4465 11.56
 
 plt.ion()
 plt.show()
