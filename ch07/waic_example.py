@@ -14,11 +14,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
+import xarray as xr
 
 import stats_rethinking as sts
 
 from pathlib import Path
-# from scipy import stats
+from scipy import stats
 
 plt.style.use('seaborn-v0_8-darkgrid')
 
@@ -49,6 +50,12 @@ ax.set_title('Cars')
 # >>> loglik = stats.norm(mu_samp, post['σ']).logpdf(df[['dist']])  # (N, Ns)
 # NOTE Instead, we can use pymc to compute it for us from the model without
 # having to compute the mean and reimplement the logpdf ourselves.
+loglik_m = xr.Dataset({'dist':
+    xr.DataArray(
+        stats.norm(mu_samp, post['σ']).logpdf(df[['dist']]).T,  # (Ns, N)
+        dims=['draw', 'dist_dim_0']
+    )
+})
 
 # Create InferenceData object with 'posterior' attribute xarray DataSet.
 idata = az.convert_to_inference_data(post.expand_dims('chain'))
@@ -58,6 +65,8 @@ idata = pm.compute_log_likelihood(idata, model=q.model, progressbar=False)
 
 # Extract the relevant item
 loglik = idata.log_likelihood.mean('chain')  # Dataset: 'dist' (Ns, N)
+
+# np.linalg.norm((loglik_m.mean('draw') - loglik.mean('draw'))['dist']) ≈ 0.063
 
 # quap.loglik ≈ -loglik.mean(axis=1).sum()?
 
