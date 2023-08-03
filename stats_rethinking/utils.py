@@ -1268,7 +1268,10 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
         Defaults to all observed variables.
     eval_at : dict like {var_name: values}
         The data over which to evaluate the log likelihood. If not given, the
-        data currently in the model is used.
+        data currently in the model is used. Note that the posterior
+        distribution is *not* recomputed (_i.e._ the model is not re-fit to the
+        ``eval_at`` data). This behavior allows the user to train the model
+        with one dataset, and test it with another.
     Ns : int
         The number of samples to take of the posterior.
 
@@ -1282,6 +1285,7 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
             The log likelihood of each observed variable.
     """
     if post is None:
+        Ns = int(Ns)
         post = model.sample(Ns)
 
     if 'chain' not in post.dims:
@@ -1394,6 +1398,9 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
         var_names = loglik.keys()
 
     return {v: logsumexp(loglik[v], axis=0) - np.log(Ns) for v in var_names}
+
+
+# TODO define AIC and DIC for comparison. See waic_understand3.pdf, §3.2 [p 7].
 
 
 def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
@@ -1714,9 +1721,12 @@ def sim_train_test(
     Rho[1:len(rho)+1, 0] = rho
 
     # >>> Rho
-    # === array([[ 1.  ,  0.15, -0.4 ],
-    #            [ 0.15,  1.  ,  0.  ],
-    #            [-0.4 ,  0.  ,  1.  ]])
+    # === array([[ 1.  ,  0.15, -0.4 , 0. ,      0. ],
+    #            [ 0.15,  1.  ,  0.  , 0. ,      0. ],
+    #            [-0.4 ,  0.  ,  1.  , 0. ,      0. ],
+    #            [ 0.  ,  0.  ,  0.  , 1. ,      0. ],
+    #              ...          ...       , ...  
+    #            [ 0.  ,  0.  ,  0.  , 0. ,      1. ]])
     #
 
     true_dist = stats.multivariate_normal(mean=np.zeros(n_dim), cov=Rho)
@@ -1756,7 +1766,7 @@ def sim_train_test(
     if k > 1:
         mm_test = np.c_[mm_test, X_test[:, :k-1]]
 
-    # Compute the posterior and log-likelihood
+    # Compute the posterior and log-likelihood of the test data
     idata = inference_data(q, eval_at={'X': mm_test, 'obs': y_test})
     loglik = idata.log_likelihood.mean('chain')
 
@@ -1764,7 +1774,7 @@ def sim_train_test(
 
     # Compute the deviance
     res = pd.Series({('deviance', 'train'): -2 * np.sum(lppd_train),
-                     ('deviance', 'test'): -2 * np.sum(lppd_test)})
+                     ('deviance', 'test'):  -2 * np.sum(lppd_test)})
 
     # Compile Results
     # FIXME WAIC and LOOIS are ~ 2*params > deviance? Figure 7.10 shows the two
@@ -1792,7 +1802,8 @@ def sim_train_test(
             y_data=y_train,
         )
         res[('LOOCV', 'test')] = cx['loocv']
-        res[('LOOCV', 'err')] = np.abs(cx['loocv'] - res[('deviance', 'test')])
+        res[('LOOCV', 'err')] = np.abs(res[('LOOCV', 'test')] 
+                                       - res[('deviance', 'test')])
 
     return dict(res=res, model=q)
 
