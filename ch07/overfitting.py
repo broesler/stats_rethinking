@@ -282,15 +282,17 @@ def lppd(quap, Ns=1000):
 # >>> sts.lppd(m7_1)['brain_std']
 # === array([ 0.6286,  0.6678,  0.5485,  0.6373,  0.4579,  0.4187, -0.8548])
 
+
 # R code 7.16
 print('lppd:')
-np.random.seed(1)
+SEED = 1
+np.random.seed(SEED)
 the_lppds = pd.DataFrame({k: lppd(v) for k, v in models.items()})
 the_lppds.loc['Sum', :] = the_lppds.sum(axis='rows')
 print(the_lppds.loc['Sum'])
 
 # Compute WAIC and LOOIS to check variation with number of parameters
-np.random.seed(1)
+np.random.seed(SEED)
 the_waics = pd.DataFrame({k: sts.WAIC(v)['brain_std'] for k, v in models.items()})
 
 R_waics = pd.DataFrame(
@@ -303,7 +305,7 @@ R_waics = pd.DataFrame(
     index=the_waics.columns,
 ).T
 
-np.random.seed(1)
+np.random.seed(SEED)
 the_loos = pd.DataFrame({k: sts.LOOIS(v) for k, v in models.items()})
 
 R_loos = pd.DataFrame(
@@ -316,9 +318,34 @@ R_loos = pd.DataFrame(
     index=the_waics.columns
 ).T
 
+# ----------------------------------------------------------------------------- 
+#         Plot the criteria vs deviance
+# -----------------------------------------------------------------------------
 fig, axes = plt.subplots(ncols=2, num=5, clear=True, constrained_layout=True)
+
+# Sort data by the number of parameters
 params = np.r_[range(1, 7), 0]
+pdx = np.argsort(params)
+params = params[pdx]
+
+the_lppds = the_lppds.iloc(axis=1)[pdx]
+the_waics = the_waics.iloc(axis=1)[pdx]
+the_loos = the_loos.iloc(axis=1)[pdx]
+R_waics = R_waics.iloc(axis=1)[pdx]
+R_loos = R_loos.iloc(axis=1)[pdx]
+
+deviance = -2 * the_lppds.loc['Sum']
+
+# R> the_devs <- sapply(
+#   list(m7.7, m7.1, m7.2, m7.3, m7.4, m7.5, m7.6) ,
+#   function(m) -2 * sum(lppd(m)) 
+# )
+R_dev = np.r_[-0.7792, -4.9616, -5.2139, -7.4706, -10.6454, -27.9447, -78.9699]
+
 ax = axes[0]
+ax.plot(params, deviance, c='C0', label='py deviance')
+ax.plot(params, R_dev, 'k--', label='R deviance')
+
 ax.scatter(params, the_waics.loc['waic'], c='C0', label='py WAIC')
 ax.scatter(params, R_waics.loc['waic'], edgecolor='C0', facecolor='none', label='R WAIC')
 
@@ -329,6 +356,7 @@ ax.set_xlabel('# of parameters')
 ax.legend()
 
 ax = axes[1]
+ax.scatter(params, (deviance - R_dev) / deviance, edgecolor='k', facecolor='none', label='deviance')
 ax.scatter(params, (the_waics.loc['waic'] - R_waics.loc['waic']) / the_waics.loc['waic'], c='C0', label='WAIC')
 ax.scatter(params, (the_loos.loc['PSIS'] - R_loos.loc['PSIS']) / the_loos.loc['PSIS'], c='k', label='LOOIS')
 
