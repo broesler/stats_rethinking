@@ -31,11 +31,11 @@ FLAT = 100  # `b_sigma` value for a "flat" prior.
 # -----------------------------------------------------------------------------
 if DEBUG:
     Ne = 10
-    Ns = [20, 100]
+    Ns = [20]
     params = np.arange(1, 6)
     b_sigmas = [FLAT]
 else:
-    Ne = 100                       # replicates
+    Ne = 100                        # replicates
     Ns = [20, 100]                  # data points
     params = np.arange(1, 6)        # parameters in the model
     b_sigmas = [FLAT, 1, 0.5, 0.2]  # regularization via small prior variance
@@ -68,18 +68,18 @@ else:
         for b in b_sigmas
     ]
 
-    # Non-parallel:
-    # if DEBUG:
-    #     from tqdm import tqdm
-    #     res = [exp_train_test(x) for x in tqdm(all_args)]
-    # else:
-    # Parallel:
-    res = process_map(
-        exp_train_test,
-        all_args,
-        chunksize=2*len(params),
-        max_workers=8,
-    )
+    if DEBUG:
+        # Non-parallel:
+        from tqdm import tqdm
+        res = [exp_train_test(x) for x in tqdm(all_args)]
+    else:
+        # Parallel:
+        res = process_map(
+            exp_train_test,
+            all_args,
+            chunksize=2*len(params),
+            max_workers=8,
+        )
 
     # Convert list of tuples (Series(), N, k, b) to DataFrame with
     # columns=Series.index.
@@ -90,7 +90,6 @@ else:
     tf['b_sigma'] = lres[3]
 
     # Save the data
-    # if not DEBUG:
     tf.to_pickle(tf_file)
 
 # Compute the mean and std deviance for each number of parameters
@@ -205,9 +204,6 @@ def plot_ICs(N, kind, legend=False, ax=None):
         for ic, ls in zip(['WAIC', 'LOOIC'], ['-', '-.']):
             ax.plot(params, df.loc[ix, (ic, kind, 'mean')],
                     color=c, ls=ls, label=ic if c == 'C0' else None)
-            # Adjusted by 2p
-            ax.plot(params, df.loc[ix, (ic, kind, 'mean')] - 2*params,
-                    color=c, ls='--', label=ic if c == 'C0' else None)
 
     ax.set_xticks(params, labels=params)
     ax.set(title=f"{N = } ({Ne} simulations)",
@@ -233,9 +229,6 @@ fig = plt.figure(3, clear=True, constrained_layout=True)
 fig.set_size_inches((10, 10), forward=True)
 gs = fig.add_gridspec(nrows=2, ncols=2)
 
-# FIXME WAIC and LOOIS are ~ 2*params > deviance? Figure 7.10 shows the two
-# numbers as almost identical to the deviance as N increases.
-# FIXME error plot is incorrect.
 for i, N in enumerate(Ns):
     plot_ICs(N, 'test', legend=True, ax=fig.add_subplot(gs[i, 0]))
     plot_ICs(N, 'err', legend=False, ax=fig.add_subplot(gs[i, 1]))

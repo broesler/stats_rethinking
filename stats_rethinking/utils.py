@@ -1281,7 +1281,7 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
         An InferenceData object with groups
         posterior : xarray.Dataset of (chain=1, draw=Ns, var_dim)
             The posterior distribution for each unobserved model parameter.
-        log_liklihood : xarray.Dataset of (chain=1, draw=Ns, var_dim=N)
+        log_likelihood : xarray.Dataset of (chain=1, draw=Ns, var_dim=N)
             The log likelihood of each observed variable.
     """
     if post is None:
@@ -1754,40 +1754,48 @@ def sim_train_test(
             β = pm.math.concatenate([α, βn])
             μ = pm.Deterministic('μ', pm.math.dot(X, β))
         y = pm.Normal('y', μ, Y_SIGMA, observed=obs, shape=obs.shape)
-        q = quap()
+        q = quap(data=dict(X=mm_train, obs=y_train))
 
     # -------------------------------------------------------------------------
     #         Compute the Information Criteria
     # -------------------------------------------------------------------------
-    lppd_train = lppd(q)['y']
+    # NOTE WAIC, LOOIC, LOOCV must be computed on the *TRAINING* data, not the
+    # test data. The idea is that these criteria are used to predict what the
+    # test error would be without having the test data available.
+    # Store these values for WAIC and LOOIC:
+    idata_train = inference_data(q)
+    loglik_train = idata_train.log_likelihood.mean('chain')
+
+    lppd_train = lppd(loglik=loglik_train)['y']
 
     # Compute the lppd with the test data
     mm_test = np.ones((N, 1))
     if k > 1:
         mm_test = np.c_[mm_test, X_test[:, :k-1]]
 
-    # Compute the posterior and log-likelihood of the test data
-    idata = inference_data(q, eval_at={'X': mm_test, 'obs': y_test})
-    loglik = idata.log_likelihood.mean('chain')
+    # NOTE inference_data has the side effect of setting the model data to
+    # `eval_at`, and not changing it back. No known way to extract the data
+    # from the model (e.g. within a function call) without explicitly providing
+    # the original data variable names and calling `q.model.X.eval()`. Can also
+    # rely on user to store `q.data` as a df/dict with the proper names.
 
-    lppd_test = lppd(loglik=loglik)['y']
+    # Compute the posterior and log-likelihood of the test data
+    lppd_test = lppd(q, eval_at={'X': mm_test, 'obs': y_test})['y']
 
     # Compute the deviance
     res = pd.Series({('deviance', 'train'): -2 * np.sum(lppd_train),
                      ('deviance', 'test'):  -2 * np.sum(lppd_test)})
 
     # Compile Results
-    # FIXME WAIC and LOOIS are ~ 2*params > deviance? Figure 7.10 shows the two
-    # numbers as almost identical to the deviance as N increases.
-    # * ONLY for N = 100! For N = 20, still have increase with k
+    # TODO could move the 'err' calcs into the top level function.
     if compute_WAIC:
-        wx = WAIC(loglik=loglik)['y']
+        wx = WAIC(loglik=loglik_train)['y']
         res[('WAIC', 'test')] = wx['waic']
         res[('WAIC', 'err')] = np.abs(res[('WAIC', 'test')] 
                                       - res[('deviance', 'test')])
 
     if compute_LOOIC:
-        lx = LOOIS(idata=idata)
+        lx = LOOIS(idata=idata_train)
         res[('LOOIC', 'test')] = lx['PSIS']
         res[('LOOIC', 'err')] = np.abs(res[('LOOIC', 'test')] 
                                        - res[('deviance', 'test')])
