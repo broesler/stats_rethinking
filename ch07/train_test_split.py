@@ -21,7 +21,7 @@ import stats_rethinking as sts
 
 plt.style.use('seaborn-v0_8-darkgrid')
 
-DEBUG = True
+DEBUG = False
 FORCE_UPDATE = False  # if True, overwrite `tf_file` regardless
 
 FLAT = 100  # `b_sigma` value for a "flat" prior.
@@ -31,18 +31,18 @@ FLAT = 100  # `b_sigma` value for a "flat" prior.
 # -----------------------------------------------------------------------------
 if DEBUG:
     Ne = 10
-    Ns = [17, 156]
+    Ns = [20, 100]
     params = np.arange(1, 6)
     b_sigmas = [FLAT]
 else:
-    Ne = 100                       # number of replicates
-    Ns = [20, 100]                 # data points
-    params = np.arange(1, 6)       # number of parameters in the model
+    Ne = 100                       # replicates
+    Ns = [20, 100]                  # data points
+    params = np.arange(1, 6)        # parameters in the model
     b_sigmas = [FLAT, 1, 0.5, 0.2]  # regularization via small prior variance
 
 tf_file = Path(f"./train_test_Ne{Ne:d}.pkl")
 
-if not DEBUG and not FORCE_UPDATE and tf_file.exists():
+if not FORCE_UPDATE and tf_file.exists():
     tf = pd.read_pickle(tf_file)
 else:
     # Parallelize All at Once:
@@ -81,7 +81,7 @@ else:
         max_workers=8,
     )
 
-    # Convert list of tuples (Series(), N, k) to DataFrame with
+    # Convert list of tuples (Series(), N, k, b) to DataFrame with
     # columns=Series.index.
     lres = list(zip(*res))
     tf = pd.DataFrame(lres[0])
@@ -90,8 +90,8 @@ else:
     tf['b_sigma'] = lres[3]
 
     # Save the data
-    if not DEBUG:
-        tf.to_pickle(tf_file)
+    # if not DEBUG:
+    tf.to_pickle(tf_file)
 
 # Compute the mean and std deviance for each number of parameters
 df = tf.groupby(['b_sigma', 'N', 'params']).agg(['mean', 'std'])
@@ -158,7 +158,8 @@ for i, N in enumerate(Ns):
     ix = idx[FLAT, N]
     ax.scatter(params, pf.loc[ix, ('train', 'mean')], c='C0')
     ax.scatter(params, pf.loc[ix, ('test', 'mean')],
-               facecolors='none', edgecolors='k')
+               facecolors='none', edgecolors='k',
+               label=rf"$\mathcal{{N}}$(0, {FLAT})")
 
     # Only plot the regularized curves
     for b, ls in zip(b_sigmas[1:], ['--', ':', '-']):
@@ -190,8 +191,8 @@ def plot_ICs(N, kind, legend=False, ax=None):
         ax = plt.gca()
 
     # Plot one curve for flat priors, one for regularized
-    # for b, c in zip([FLAT, 0.5], ['C0', 'k']):
-    for b, c in zip([FLAT], ['C0']):
+    for b, c in zip([FLAT, 0.5], ['C0', 'k']):
+    # for b, c in zip([FLAT], ['C0']):
         ix = idx[b, N]
 
         # Points are mean test deviance, with different priors
@@ -204,6 +205,9 @@ def plot_ICs(N, kind, legend=False, ax=None):
         for ic, ls in zip(['WAIC', 'LOOIC'], ['-', '-.']):
             ax.plot(params, df.loc[ix, (ic, kind, 'mean')],
                     color=c, ls=ls, label=ic if c == 'C0' else None)
+            # Adjusted by 2p
+            ax.plot(params, df.loc[ix, (ic, kind, 'mean')] - 2*params,
+                    color=c, ls='--', label=ic if c == 'C0' else None)
 
     ax.set_xticks(params, labels=params)
     ax.set(title=f"{N = } ({Ne} simulations)",
@@ -231,6 +235,7 @@ gs = fig.add_gridspec(nrows=2, ncols=2)
 
 # FIXME WAIC and LOOIS are ~ 2*params > deviance? Figure 7.10 shows the two
 # numbers as almost identical to the deviance as N increases.
+# FIXME error plot is incorrect.
 for i, N in enumerate(Ns):
     plot_ICs(N, 'test', legend=True, ax=fig.add_subplot(gs[i, 0]))
     plot_ICs(N, 'err', legend=False, ax=fig.add_subplot(gs[i, 1]))
