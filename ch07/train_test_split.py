@@ -35,7 +35,7 @@ if DEBUG:
     params = np.arange(1, 6)
     b_sigmas = [FLAT]
 else:
-    Ne = 100                        # replicates
+    Ne = 1000                       # replicates
     Ns = [20, 100]                  # data points
     params = np.arange(1, 6)        # parameters in the model
     b_sigmas = [FLAT, 1, 0.5, 0.2]  # regularization via small prior variance
