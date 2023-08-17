@@ -1746,7 +1746,7 @@ def sim_train_test(
     with pm.Model():
         X = pm.MutableData('X', mm_train)
         obs = pm.MutableData('obs', y_train)
-        α = pm.Normal('α', 0, b_sigma, shape=(1,))
+        α = pm.Normal('α', 0, 100, shape=(1,))  # flat prior always
         if k == 1:
             μ = pm.Deterministic('μ', α)
         else:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # =============================================================================
-#     File: pymc_ic_test.py
+#     File: info_criteria_test.py
 #  Created: 2023-06-28 13:51
 #   Author: Bernie Roesler
 #
@@ -20,7 +20,7 @@ import stats_rethinking as sts
 
 # Function arguments
 N = 20
-k = 3
+k = 4
 rho = np.r_[0.15, -0.4]
 b_sigma = 0.5
 
@@ -67,7 +67,7 @@ if k > 1:
 with pm.Model() as model:
     X = pm.MutableData('X', mm_train)
     obs = pm.MutableData('obs', y_train)
-    α = pm.Normal('α', 0, b_sigma, shape=(1,))
+    α = pm.Normal('α', 0, 100, shape=(1,))
     if k == 1:
         μ = pm.Deterministic('μ', α)
     else:
@@ -87,7 +87,12 @@ Ns = 1000
 
 post = q.sample(Ns)
 
-da = sts.dataset_to_frame(post)  # test inverse function
+α_ymean = float(q.coef['α'] - y_train.mean())
+print(f"{α_ymean = :.2g}")
+if k == 1:
+    np.testing.assert_allclose(α_ymean, 0, atol=1e-6)
+
+# df = sts.dataset_to_frame(post)  # test inverse function
 
 # NOTE fix for k == 1 involves setting α shape=(1,) above, *or* not having
 # a defined dimension 'α_dim_0' in the Dataset `ds`. Would be better to fix the
@@ -107,27 +112,29 @@ da = sts.dataset_to_frame(post)  # test inverse function
 # `idata.posterior` with α.shape = () should have dims (chain=1, draw=Ns), as
 # opposed to dims (chain=1, draw=Ns, α_dim_0=1).
 
-# ds = sts.frame_to_dataset(post, model)
-idata = az.convert_to_inference_data(post)
+# idata = az.convert_to_inference_data(post.expand_dims('chain'))
 
-trace = pm.sample(model=q.model)
+# trace = pm.sample(model=q.model)
 
-loglik_train = pm.compute_log_likelihood(
-    idata=idata,
-    model=q.model,
-    progressbar=False,
-)
+# loglik_train = pm.compute_log_likelihood(
+#     idata=idata,
+#     model=q.model,
+#     progressbar=False,
+# )
 
 # Compute the lppd
 lppd_train = sts.lppd(q)['y']
+
+# Compute the posterior and log-likelihood
+# idata_train = sts.inference_data(q, post=post)
+# loglik_train = idata_train.log_likelihood.mean('chain')
 
 # Compute the lppd with the test data
 mm_test = np.ones((N, 1))
 if k > 1:
     mm_test = np.c_[mm_test, X_test[:, :k-1]]
 
-# Compute the posterior and log-likelihood
-idata = sts.inference_data(q, eval_at={'X': mm_test, 'obs': y_test})
+idata = sts.inference_data(q, post=post, eval_at={'X': mm_test, 'obs': y_test})
 loglik = idata.log_likelihood.mean('chain')
 
 lppd_test = sts.lppd(loglik=loglik)['y']
@@ -158,16 +165,16 @@ lx = sts.LOOIS(idata=idata)
 res[('LOOIC', 'test')] = lx['PSIS']
 res[('LOOIC', 'err')] = np.abs(lx['PSIS'] - res[('deviance', 'test')])
 
-cx = sts.LOOCV(
-    model=q,
-    ind_var='X',
-    obs_var='obs',
-    out_var='y',
-    X_data=mm_train,
-    y_data=y_train,
-)
-res[('LOOCV', 'test')] = cx['loocv']
-res[('LOOCV', 'err')] = np.abs(cx['loocv'] - res[('deviance', 'test')])
+# cx = sts.LOOCV(
+#     model=q,
+#     ind_var='X',
+#     obs_var='obs',
+#     out_var='y',
+#     X_data=mm_train,
+#     y_data=y_train,
+# )
+# res[('LOOCV', 'test')] = cx['loocv']
+# res[('LOOCV', 'err')] = np.abs(cx['loocv'] - res[('deviance', 'test')])
 
 print(res)
 
