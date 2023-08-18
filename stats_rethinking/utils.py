@@ -1095,6 +1095,8 @@ def coef_table(models, mnames=None, params=None, std=True):
         ct = (ct.T  # organize by parameter, then model
                 .melt(ignore_index=False, value_name=value_name)
                 .set_index('param', append=True)
+                .reorder_levels(['param', 'model'])
+                .sort_index()
               )
         return ct
 
@@ -1104,7 +1106,7 @@ def coef_table(models, mnames=None, params=None, std=True):
 
     cs = transform_ct(pd.concat(stds, axis=1), mnames, params,
                       value_name='std')
-    return pd.concat([ct, cs], axis=1)
+    return pd.concat([ct, cs], axis='columns')
 
 
 def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
@@ -1136,6 +1138,10 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
 
     # Leverage Seaborn for basic setup
     y, hue = ('model', 'param') if by_model else ('param', 'model')
+
+    # NOTE correct errorbars require index to be sorted.
+    ct = ct.reorder_levels([hue, y]).sort_index()
+
     sns.pointplot(data=ct.reset_index(), x='coef', y=y, hue=hue,
                   join=False, dodge=0.3, ax=ax)
 
@@ -1155,7 +1161,14 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     errs = 2 * ct['std'] * z  # ± err -> 2 * ...
     errs = errs.dropna()
     ax.errorbar(x_coords, y_coords, fmt=' ', xerr=errs, ecolor=colors)
+
+    # Plot the origin and move the legend outside the plot for clarity
     ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+
+    return fig, ax
+
+
 # TODO implement func=LOOIC, etc.
 def compare(models, mnames=None, sort=True):
     """Create a comparison table of models based on information criteria.
