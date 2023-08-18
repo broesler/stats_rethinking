@@ -126,7 +126,7 @@ cmp = sts.compare(models, mnames)
 ct = cmp['ct']
 with pd.option_context('display.precision', 2):
     print(ct)
-# sts.plot_compare(ct, fignum=2)
+sts.plot_compare(ct, fignum=2)
 
 plt.ion()
 plt.show()

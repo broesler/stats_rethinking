@@ -1239,7 +1239,68 @@ def compare(models, mnames=None, sort=True):
 
     return dict(ct=df, dSE=dSE)
 
+
+def plot_compare(ct, fignum=None):
+    """Plot the table of information criteria from `sts.compare`.
+
+    Parameters
+    ----------
+    ct : :obj:`CompareTable`
+        Compare table output from `compare`.
+    fignum : int, optional
+        Figure number in which to plot the coefficients. If the figure exists,
+        it will be cleared. If no figure exists, a new one will be created.
+
+    Returns
+    -------
+    fig, ax : Figure and Axes where the plot was made.
+    """
+    fig = plt.figure(fignum, clear=True, constrained_layout=True)
+    if not fig.axes:
+        ax = fig.add_subplot()
+    else:
+        ax = fig.axes[-1]  # take most recent
+
+    # NOTE correct errorbars require index to be sorted.
+    ct = ct.reorder_levels(['var', 'model']).sort_index()
+
+    # Leverage Seaborn for basic setup
+    sns.pointplot(data=ct.reset_index(), x='WAIC', y='model', hue='var',
+                  join=False, dodge=0.3, ax=ax)
+
+    # Find the x,y coordinates for each point
+    x_coords = []
+    y_coords = []
+    colors = []
+    for point_pair in ax.collections:
+        for x, y in point_pair.get_offsets():
+            if not np.ma.is_masked(x) and not np.ma.is_masked(y):
+                x_coords.append(x)
+                y_coords.append(y)
+                colors.append(point_pair.get_facecolor())
+
+    x_coords = np.asarray(x_coords)
+    y_coords = np.asarray(y_coords)
+    colors = np.asarray(colors)
+
+    # Manually add the errorbars since we have std values already
+    ax.errorbar(x_coords, y_coords, xerr=ct['SE'], fmt=' ', ecolor=colors)
+
+    # Plot in-sample deviance values
+    dev_in = ct['WAIC'] - ct['penalty']**2
+    ax.scatter(dev_in, y_coords, 
+               marker='o', ec=colors, fc='none',
+               label='In-Sample Deviance')
+
+    # Plot the standard error of the *difference* in WAIC values.
+    ax.errorbar(x_coords, y_coords - 0.1, xerr=ct['dSE'],
+                fmt=' ', ecolor='k', lw=1)
+    
+    ax.axvline(ct['WAIC'].min(), ls='--', c='k', lw=1, alpha=0.5)
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+
     return fig, ax
+
 
 
 # -----------------------------------------------------------------------------
