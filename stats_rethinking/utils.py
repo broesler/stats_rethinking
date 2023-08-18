@@ -449,9 +449,13 @@ def sparklines_from_array(arr, width=12):
     return sparklines
 
 
-# TODO
-# * deviance method = -2*self.loglik
-# * AIC method = self.deviance + 2*len(self.coef)
+# TODO 
+# * make all attributes read-only? quap() call populates struct.
+# * can require kwargs on __init__, then use those values to compute self._std,
+#   etc. so that the property just returns that value without doing
+#   a computation each time it is called.
+# * implement DIC, WAIC, LOOIC, etc. methods
+
 class Quap():
     """The quadratic (*i.e.* Gaussian) approximation of the posterior.
 
@@ -476,7 +480,6 @@ class Quap():
         Initial parameter values for the MAP optimization. Defaults to
         `model.initial_point`.
     """
-    # TODO make all attributes read-only? quap() call populates struct.
     def __init__(self, /, coef=None, cov=None, data=None, map_est=None,
                  loglik=None, model=None, start=None):
         self.coef = coef
@@ -509,6 +512,14 @@ class Quap():
         posterior = stats.multivariate_normal(mean=mean, cov=self.cov)
         df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
         return frame_to_dataset(df, model=self.model).mean('chain')
+
+    def deviance(self):
+        """Return the deviance of the model."""
+        return -2 * self.loglik
+
+    def AIC(self):
+        """Return the Akaike information criteria of the model."""
+        return self.deviance() + 2*sum(self.coef.sizes.values())
 
     # TODO
     # * rename the model variable itself
@@ -1248,7 +1259,7 @@ def _names_from_vec(vname, ncols):
 
 
 # -----------------------------------------------------------------------------
-#         IC Functions
+#         Information Criteria Functions
 # -----------------------------------------------------------------------------
 # TODO
 # * use constant string for inference_data and loglikelihood docs.
@@ -1402,7 +1413,39 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
     return {v: logsumexp(loglik[v], axis=0) - np.log(Ns) for v in var_names}
 
 
-# TODO define AIC and DIC for comparison. See waic_understand3.pdf, §3.2 [p 7].
+def DIC(model, post=None, Ns=1000):
+    """Compute the Deviance Information Criteria of the model.
+
+    Parameters
+    ----------
+    model : :obj:`Quap`
+        The fitted model object.
+    post : (Ns, p) DataFrame
+        Samples of the posterior distribution with model free variables as
+        column names. If ``post`` is not given, ``Ns`` samples will be drawn
+        from the ``model`` distribution.
+    Ns : int
+        The number of samples to take of the posterior.
+
+    Returns
+    -------
+    result : dict with keys {'dic', 'pD'}
+        'dic' : float
+            The Deviance Information Criteria
+        'pD' : float
+            The penalty term.
+
+    References
+    ----------
+    [1]: Gelman (2020). Bayesian Data Analysis, 3 ed. pp 172--173.
+    """
+    if post is None:
+        post = model.sample(Ns)
+    f_loglik = model.model.compile_logp()
+    dev = [-2 * f_loglik(post.iloc[i]) for i in range(Ns)]
+    dev_hat = model.deviance
+    pD = dev.mean() - dev_hat
+    return dict({'dic': dev_hat + 2*pD, 'pD': pD})
 
 
 def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
