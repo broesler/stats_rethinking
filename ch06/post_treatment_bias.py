@@ -45,7 +45,8 @@ sts.precis(pd.DataFrame(sim_p, columns=['sim_p']))
 
 # The model (R code 6.16)
 with pm.Model():
-    p = pm.Lognormal('p', 0, 0.25)
+    α = pm.Lognormal('α', 0, 0.25)
+    p = pm.Deterministic('p', α)
     μ = pm.Deterministic('μ', p * df['h0'])
     σ = pm.Exponential('σ', 1)
     h1 = pm.Normal('h1', μ, σ, observed=df['h1'])
@@ -108,6 +109,27 @@ sts.precis(m6_8)
 # "There is no path from H0 to F"
 # "There is no path from T to H0"
 # "There is a path from T to H1, but it goes through F"
+
+# ----------------------------------------------------------------------------- 
+#         §7.5.1 Model Comparison
+# -----------------------------------------------------------------------------
+print(f"{sts.WAIC(m6_7)['h1'] = }")
+
+models = [m6_6, m6_7, m6_8]
+mnames = ['m6.6', 'm6.7', 'm6.8']
+
+coeftab = sts.coef_table(models, mnames)
+print(coeftab)
+sts.plot_coef_table(coeftab, fignum=1)
+
+cmp = sts.compare(models, mnames)
+ct = cmp['ct']
+with pd.option_context('display.precision', 2):
+    print(ct)
+# sts.plot_compare(ct, fignum=2)
+
+plt.ion()
+plt.show()
 
 # =============================================================================
 # =============================================================================

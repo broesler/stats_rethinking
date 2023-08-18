@@ -1156,6 +1156,76 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     errs = errs.dropna()
     ax.errorbar(x_coords, y_coords, fmt=' ', xerr=errs, ecolor=colors)
     ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
+# TODO implement func=LOOIC, etc.
+def compare(models, mnames=None, sort=True):
+    """Create a comparison table of models based on information criteria.
+
+    Parameters
+    ----------
+    models : list of `Quap`
+        The models over which to summarize.
+    mnames : list of str, optional
+        Names of the models. If None, models will be numbered sequentially in
+        order of input.
+    sort : bool
+        If True, sort the result by the difference in WAIC values.
+
+    Returns
+    -------
+    result : dict with {'ct', 'dSE'}
+        A dictionary with keys
+        'ct' : pd.DataFrame
+            DataFrame of the information criteria and their standard deviations.
+        'dSE' : pd.DataFrame
+            A symmetric matrix of the difference in standard errors of the
+            pointwise information criteria of each model.
+    """
+    M = len(models)
+    if M < 2:
+        raise ValueError("Need more than one model to compare!")
+
+    if mnames is None:
+        mnames = [f"m{i}" for i in range(len(models))]
+
+    df = pd.concat([pd.DataFrame(WAIC(m)) for m in models],
+                   keys=mnames,
+                   axis='columns').T  # transpose for model, var as rows
+    df.index.names = ['model', 'var']
+    df = df.drop('lppd', axis='columns')
+    df = df.rename({'std': 'SE'}, axis='columns')
+
+    min_w = min(df['WAIC'])
+    df['dWAIC'] = df['WAIC'] - min_w
+
+    # Compute difference in standard error
+    var_names = [v.name for v in models[0].model.observed_RVs]
+    V = len(var_names)
+    index = pd.MultiIndex.from_product([mnames, var_names])
+    dSE = pd.DataFrame(np.zeros((M*V, M*V)), index=index, columns=index)
+    for i in range(M):
+        for j in range(i+1, M):
+            mi, mj = mnames[i], mnames[j]
+            ic_i = WAIC(models[i], pointwise=True)
+            ic_j = WAIC(models[j], pointwise=True)
+            for v in var_names:
+                diff = ic_i[v]['WAIC'] - ic_j[v]['WAIC']
+                dSE.loc[(mi, v), (mj, v)] = np.sqrt(len(diff) * np.var(diff))
+                dSE.loc[(mj, v), (mi, v)] = dSE.loc[(mi, v), (mj, v)]
+
+    # Take the column corresponding to the minimum IC model/variable.
+    df['dSE'] = dSE[df.index[df['dWAIC'] == 0]]
+
+    df['weight'] = np.exp(-0.5 * df['dWAIC'])
+    df['weight'] /= df['weight'].sum()
+
+    if sort:
+        df = df.sort_values('dWAIC')
+
+    # Reorganize for output
+    df = df[['WAIC', 'SE', 'dWAIC', 'dSE', 'penalty', 'weight']]
+
+    return dict(ct=df, dSE=dSE)
+
     return fig, ax
 
 
