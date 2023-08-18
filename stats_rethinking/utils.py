@@ -1107,8 +1107,7 @@ def coef_table(models, mnames=None, params=None, std=True):
     return pd.concat([ct, cs], axis=1)
 
 
-# TODO by_model=True param? Swap index levels.
-def plot_coef_table(ct, q=0.89, fignum=None):
+def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     """Plot the table of coefficients from `sts.coef_table`.
 
     Parameters
@@ -1117,8 +1116,13 @@ def plot_coef_table(ct, q=0.89, fignum=None):
         Coefficient table output from `coef_table`.
     q : float in [0, 1], optional
         The probability interval to plot.
-    ax : Axes, optional
-        The Axes on which to plot.
+    by_model : bool, optional
+        If True, order the coefficients by model on the y-axis, with colors to
+        denote parameters; otherwise, parameters will be the y-axis, with
+        colors to denote model.
+    fignum : int, optional
+        Figure number in which to plot the coefficients. If the figure exists,
+        it will be cleared. If no figure exists, a new one will be created.
 
     Returns
     -------
@@ -1131,7 +1135,8 @@ def plot_coef_table(ct, q=0.89, fignum=None):
         ax = fig.axes[-1]  # take most recent
 
     # Leverage Seaborn for basic setup
-    sns.pointplot(data=ct.reset_index(), x='coef', y='param', hue='model',
+    y, hue = ('model', 'param') if by_model else ('param', 'model')
+    sns.pointplot(data=ct.reset_index(), x='coef', y=y, hue=hue,
                   join=False, dodge=0.3, ax=ax)
 
     # Find the x,y coordinates for each point
