@@ -533,9 +533,11 @@ class Quap():
 
     def __str__(self):
         with pd.option_context('display.float_format', '{:.4f}'.format):
-            # remove "dtype: object" line from the Series repr
-            # meanstr = repr(self.coef).rsplit('\n', 1)[0]
-            meanstr = repr(self.coef)
+            try:
+                # remove "dtype: object" line from the Series repr
+                meanstr = repr(self.coef.to_pandas()).rsplit('\n', 1)[0]
+            except ValueError:
+                meanstr = repr(self.coef)
 
         # FIXME indentation. inspect.cleandoc() fails because the
         # model.str_repr() is not always aligned left.
