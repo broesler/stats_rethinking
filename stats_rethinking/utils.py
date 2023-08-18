@@ -1720,16 +1720,27 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
             Ns=Ns
         )
 
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', category=UserWarning)
-        loo = az.loo(idata, pointwise=pointwise)
+    if var_names is None:
+        var_names = idata.log_likelihood.data_vars
 
-    return dict(
-        PSIS=-2*loo.elpd_loo,  # == loo_list$estimates['looic', 'Estimate']
-        lppd=loo.elpd_loo,
-        penalty=loo.p_loo,     # == loo_list$p_loo
-        SE=2*loo.se,           # == loo_list$estimates['looic', 'SE']
-    )
+    out = dict()
+    for v in var_names:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=UserWarning)
+            loo = az.loo(idata, pointwise=pointwise, var_name=v)
+
+        elpd = loo.loo_i if pointwise else loo.elpd_loo
+        out[v] = dict(
+            PSIS=-2 * elpd,        # == loo_list$estimates['looic', 'Estimate']
+            lppd=elpd,
+            penalty=loo.p_loo,     # == loo_list$p_loo
+            SE=2*loo.se,           # == loo_list$estimates['looic', 'SE']
+        )
+    return out
+
+
+# Alias
+PSIS = LOOIS
 
 
 # "Globalize" nested function for parallelization.
@@ -1985,7 +1996,7 @@ def sim_train_test(
         res[('WAIC', 'test')] = WAIC(loglik=loglik_train)['y']['WAIC']
 
     if compute_LOOIC:
-        res[('LOOIC', 'test')] = LOOIS(idata=idata_train)['PSIS']
+        res[('LOOIC', 'test')] = LOOIS(idata=idata_train)['y']['PSIS']
 
     if compute_LOOCV:
         res[('LOOCV', 'test')] = LOOCV(
