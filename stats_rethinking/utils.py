@@ -1525,7 +1525,7 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
             lppd_w, w, p = the_lppd[v], waic_vec, penalty
         else:
             lppd_w, w, p = the_lppd[v].sum(), waic_vec.sum(), penalty.sum()
-        out[v] = dict(waic=w, lppd=lppd_w, penalty=p, std=std_err)
+        out[v] = dict(WAIC=w, lppd=lppd_w, penalty=p, SE=std_err)
     return out
 
 
@@ -1579,7 +1579,7 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
         PSIS=-2*loo.elpd_loo,  # == loo_list$estimates['looic', 'Estimate']
         lppd=loo.elpd_loo,
         penalty=loo.p_loo,     # == loo_list$p_loo
-        std=2*loo.se,          # == loo_list$estimates['looic', 'SE']
+        SE=2*loo.se,           # == loo_list$estimates['looic', 'SE']
     )
 
 
@@ -1832,31 +1832,21 @@ def sim_train_test(
                      ('deviance', 'test'):  -2 * np.sum(lppd_test)})
 
     # Compile Results
-    # TODO could move the 'err' calcs into the top level function.
     if compute_WAIC:
-        wx = WAIC(loglik=loglik_train)['y']
-        res[('WAIC', 'test')] = wx['waic']
-        res[('WAIC', 'err')] = np.abs(res[('WAIC', 'test')] 
-                                      - res[('deviance', 'test')])
+        res[('WAIC', 'test')] = WAIC(loglik=loglik_train)['y']['WAIC']
 
     if compute_LOOIC:
-        lx = LOOIS(idata=idata_train)
-        res[('LOOIC', 'test')] = lx['PSIS']
-        res[('LOOIC', 'err')] = np.abs(res[('LOOIC', 'test')] 
-                                       - res[('deviance', 'test')])
+        res[('LOOIC', 'test')] = LOOIS(idata=idata_train)['PSIS']
 
     if compute_LOOCV:
-        cx = LOOCV(
+        res[('LOOCV', 'test')] = LOOCV(
             model=q,
             ind_var='X',
             obs_var='obs',
             out_var='y',
             X_data=mm_train,
             y_data=y_train,
-        )
-        res[('LOOCV', 'test')] = cx['loocv']
-        res[('LOOCV', 'err')] = np.abs(res[('LOOCV', 'test')] 
-                                       - res[('deviance', 'test')])
+        )['loocv']
 
     return dict(res=res, model=q)
 

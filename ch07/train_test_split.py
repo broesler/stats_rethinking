@@ -21,8 +21,8 @@ import stats_rethinking as sts
 
 plt.style.use('seaborn-v0_8-darkgrid')
 
-DEBUG = False
-FORCE_UPDATE = False  # if True, overwrite `tf_file` regardless
+DEBUG = True
+FORCE_UPDATE = True  # if True, overwrite `tf_file` regardless
 
 FLAT = 100  # `b_sigma` value for a "flat" prior.
 
@@ -88,6 +88,12 @@ else:
     tf['N'] = lres[1]
     tf['params'] = lres[2]
     tf['b_sigma'] = lres[3]
+
+    for c in ['WAIC', 'LOOIC', 'LOOCV']:
+        if c in tf.columns:
+            tf[(c, 'err')] = np.abs(tf[(c, 'test')] - tf[('deviance', 'test')])
+
+    tf = tf.sort_index(axis='columns')
 
     # Save the data
     tf.to_pickle(tf_file)
@@ -190,8 +196,8 @@ def plot_ICs(N, kind, legend=False, ax=None):
         ax = plt.gca()
 
     # Plot one curve for flat priors, one for regularized
-    for b, c in zip([FLAT, 0.5], ['C0', 'k']):
-    # for b, c in zip([FLAT], ['C0']):
+    bs, cs = ([FLAT], ['C0']) if DEBUG else ([FLAT, 0.5], ['C0', 'k'])
+    for b, c in zip(bs, cs):
         ix = idx[b, N]
 
         # Points are mean test deviance, with different priors
