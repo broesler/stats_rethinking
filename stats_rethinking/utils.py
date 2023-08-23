@@ -449,7 +449,7 @@ def sparklines_from_array(arr, width=12):
     return sparklines
 
 
-# TODO 
+# TODO
 # * make all attributes read-only? quap() call populates struct.
 # * can require kwargs on __init__, then use those values to compute self._std,
 #   etc. so that the property just returns that value without doing
@@ -1169,8 +1169,7 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     return fig, ax
 
 
-# TODO implement func=LOOIC, etc.
-def compare(models, mnames=None, sort=True):
+def compare(models, mnames=None, ic='WAIC', sort=False):
     """Create a comparison table of models based on information criteria.
 
     Parameters
@@ -1180,6 +1179,7 @@ def compare(models, mnames=None, sort=True):
     mnames : list of str, optional
         Names of the models. If None, models will be numbered sequentially in
         order of input.
+    ic : str in {'WAIC', 'LOOIC', 'PSIS'}
     sort : bool
         If True, sort the result by the difference in WAIC values.
 
@@ -1195,20 +1195,29 @@ def compare(models, mnames=None, sort=True):
     """
     M = len(models)
     if M < 2:
-        raise ValueError("Need more than one model to compare!")
+        raise ValueError('Need more than one model to compare!')
+
+    if ic not in ['WAIC', 'LOOIC', 'PSIS']:
+        raise ValueError(f"Unrecognized {ic = }! Use 'WAIC' or 'LOOIC'.")
+
+    if ic == 'LOOIC':
+        ic = 'PSIS'
 
     if mnames is None:
         mnames = [f"m{i}" for i in range(len(models))]
 
-    df = pd.concat([pd.DataFrame(WAIC(m)) for m in models],
+    func = WAIC if ic == 'WAIC' else LOOIS
+
+    df = pd.concat([pd.DataFrame(func(m)) for m in models],
                    keys=mnames,
                    axis='columns').T  # transpose for model, var as rows
     df.index.names = ['model', 'var']
     df = df.drop('lppd', axis='columns')
     df = df.rename({'std': 'SE'}, axis='columns')
 
-    min_w = min(df['WAIC'])
-    df['dWAIC'] = df['WAIC'] - min_w
+    min_w = min(df[ic])
+    diff_ic = f"d{ic}"
+    df[diff_ic] = df[ic] - min_w
 
     # Compute difference in standard error
     var_names = [v.name for v in models[0].model.observed_RVs]
@@ -1218,26 +1227,26 @@ def compare(models, mnames=None, sort=True):
     for i in range(M):
         for j in range(i+1, M):
             mi, mj = mnames[i], mnames[j]
-            ic_i = WAIC(models[i], pointwise=True)
-            ic_j = WAIC(models[j], pointwise=True)
+            ic_i = func(models[i], pointwise=True)
+            ic_j = func(models[j], pointwise=True)
             for v in var_names:
-                diff = ic_i[v]['WAIC'] - ic_j[v]['WAIC']
+                diff = ic_i[v][ic] - ic_j[v][ic]
                 dSE.loc[(mi, v), (mj, v)] = np.sqrt(len(diff) * np.var(diff))
                 dSE.loc[(mj, v), (mi, v)] = dSE.loc[(mi, v), (mj, v)]
 
     # Take the column corresponding to the minimum IC model/variable.
-    df['dSE'] = dSE[df.index[df['dWAIC'] == 0]]
+    df['dSE'] = dSE[df.index[df[diff_ic] == 0]]
 
-    df['weight'] = np.exp(-0.5 * df['dWAIC'])
+    df['weight'] = np.exp(-0.5 * df[diff_ic])
     df['weight'] /= df['weight'].sum()
 
     if sort:
-        df = df.sort_values('dWAIC')
+        df = df.sort_values(diff_ic)
 
     # Reorganize for output
-    df = df[['WAIC', 'SE', 'dWAIC', 'dSE', 'penalty', 'weight']]
+    df = df[[ic, 'SE', diff_ic, 'dSE', 'penalty', 'weight']]
 
-    return dict(ct=df, dSE=dSE)
+    return dict(ct=df, dSE_matrix=dSE)
 
 
 def plot_compare(ct, fignum=None):
@@ -1264,8 +1273,13 @@ def plot_compare(ct, fignum=None):
     # NOTE correct errorbars require index to be sorted.
     ct = ct.reorder_levels(['var', 'model']).sort_index()
 
+    if 'WAIC' in ct.columns:
+        ic = 'WAIC'
+    elif 'PSIS' in ct.columns or 'LOOIC' in ct.columns:
+        ic = 'PSIS'
+
     # Leverage Seaborn for basic setup
-    sns.pointplot(data=ct.reset_index(), x='WAIC', y='model', hue='var',
+    sns.pointplot(data=ct.reset_index(), x=ic, y='model', hue='var',
                   join=False, dodge=0.3, ax=ax)
 
     # Find the x,y coordinates for each point
@@ -1287,16 +1301,16 @@ def plot_compare(ct, fignum=None):
     ax.errorbar(x_coords, y_coords, xerr=ct['SE'], fmt=' ', ecolor=colors)
 
     # Plot in-sample deviance values
-    dev_in = ct['WAIC'] - ct['penalty']**2
-    ax.scatter(dev_in, y_coords, 
+    dev_in = ct[ic] - ct['penalty']**2
+    ax.scatter(dev_in, y_coords,
                marker='o', ec=colors, fc='none',
                label='In-Sample Deviance')
 
     # Plot the standard error of the *difference* in WAIC values.
     ax.errorbar(x_coords, y_coords - 0.1, xerr=ct['dSE'],
                 fmt=' ', ecolor='k', lw=1)
-    
-    ax.axvline(ct['WAIC'].min(), ls='--', c='k', lw=1, alpha=0.5)
+
+    ax.axvline(ct[ic].min(), ls='--', c='k', lw=1, alpha=0.5)
     ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
     return fig, ax

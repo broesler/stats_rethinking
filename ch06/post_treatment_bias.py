@@ -64,6 +64,7 @@ with pm.Model():
     μ = pm.Deterministic('μ', p * df['h0'])
     σ = pm.Exponential('σ', 1)
     h1 = pm.Normal('h1', μ, σ, observed=df['h1'])
+    h2 = pm.Normal('h2', 2*μ, σ, observed=2*df['h1'])  # TEST MULTIPLE OBSERVED
     m6_7 = sts.quap(data=df)
 
 print('m6.7:')
@@ -81,6 +82,7 @@ with pm.Model():
     μ = pm.Deterministic('μ', p * df['h0'])
     σ = pm.Exponential('σ', 1)
     h1 = pm.Normal('h1', μ, σ, observed=df['h1'])
+    h2 = pm.Normal('h2', 2*μ, σ, observed=2*df['h1'])  # TEST MULTIPLE OBSERVED
     m6_8 = sts.quap(data=df)
 
 print('m6.8:')
@@ -122,7 +124,7 @@ coeftab = sts.coef_table(models, mnames)
 print(coeftab)
 sts.plot_coef_table(coeftab, fignum=1)
 
-cmp = sts.compare(models, mnames)
+cmp = sts.compare(models, mnames, ic='LOOIC')
 ct = cmp['ct']
 with pd.option_context('display.precision', 2):
     print(ct)
