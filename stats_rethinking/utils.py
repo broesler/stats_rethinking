@@ -1208,40 +1208,68 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
 
     func = WAIC if ic == 'WAIC' else LOOIS
 
-    df = pd.concat([pd.DataFrame(func(m)) for m in models],
-                   keys=mnames,
-                   axis='columns').T  # transpose for model, var as rows
-    df.index.names = ['model', 'var']
-    df = df.drop('lppd', axis='columns')
-    df = df.rename({'std': 'SE'}, axis='columns')
+    df = (
+        pd.concat(
+            [pd.DataFrame(func(m)) for m in models],
+            keys=mnames,
+            names=['model', 'var'],
+            axis='columns'
+        )
+        .T  # transpose for model, var as rows
+        .drop('lppd', axis='columns')
+        # .reorder_levels(['var', 'model'])
+        .sort_index()
+    )
 
-    min_w = min(df[ic])
+    # Subtract the minimium from each observed variable to get the diff
     diff_ic = f"d{ic}"
-    df[diff_ic] = df[ic] - min_w
+    df[diff_ic] = df[ic].groupby('var').transform(lambda x: x - x.min())
+
+    # Find model with the most observed RVs
+    # TODO just take intersection of all models' observed RVs. If an observed
+    # RV does not exist in a model, why bother comparing?
+    max_model = None
+    max_obs = 0
+    for m in models:
+        if len(m.model.observed_RVs) > max_obs:
+            max_obs = len(m.model.observed_RVs)
+            max_model = m
 
     # Compute difference in standard error
-    var_names = [v.name for v in models[0].model.observed_RVs]
-    V = len(var_names)
-    index = pd.MultiIndex.from_product([mnames, var_names])
-    dSE = pd.DataFrame(np.zeros((M*V, M*V)), index=index, columns=index)
-    for i in range(M):
-        for j in range(i+1, M):
-            mi, mj = mnames[i], mnames[j]
-            ic_i = func(models[i], pointwise=True)
-            ic_j = func(models[j], pointwise=True)
-            for v in var_names:
-                diff = ic_i[v][ic] - ic_j[v][ic]
-                dSE.loc[(mi, v), (mj, v)] = np.sqrt(len(diff) * np.var(diff))
-                dSE.loc[(mj, v), (mi, v)] = dSE.loc[(mi, v), (mj, v)]
+    var_names = [v.name for v in max_model.model.observed_RVs]
+    dSE = dict()
+    # For each var, get column of dSE matrix corresponding to minIC model
+    cf = df.unstack().swaplevel(axis='columns').sort_index()
+    for v in var_names:
+        tf = pd.DataFrame(np.nan * np.empty((M, M)),
+                          index=mnames, columns=mnames)
+        for i in range(M):
+            for j in range(i+1, M):
+                mi, mj = mnames[i], mnames[j]
+                ic_i = func(models[i], pointwise=True)
+                ic_j = func(models[j], pointwise=True)
+                # If variable is not in both models, skip it
+                try:
+                    diff = ic_i[v][ic] - ic_j[v][ic]
+                    tf.loc[mi, mj] = np.sqrt(len(diff) * np.var(diff))
+                    tf.loc[mj, mi] = tf.loc[mi, mj]
+                except KeyError:
+                    continue
 
-    # Take the column corresponding to the minimum IC model/variable.
-    df['dSE'] = dSE[df.index[df[diff_ic] == 0]]
+        dSE[v] = tf
+
+        # Assign df['dSE'] to the appropriate column of dSE_matrix
+        # NOTE could concatenate the dSE's with [var, model] index to
+        # potentially avoid this unstacking mess.
+        cf.loc[:, (v, 'dSE')] = dSE[v][cf.index[cf.loc[:, (v, diff_ic)] == 0]]
+
+    df = cf.stack('var').reorder_levels(['var', 'model']).sort_index()
 
     df['weight'] = np.exp(-0.5 * df[diff_ic])
-    df['weight'] /= df['weight'].sum()
+    df['weight'] /= df['weight'].groupby('var').sum()
 
     if sort:
-        df = df.sort_values(diff_ic)
+        df = df.sort_values(diff_ic).groupby('var').head(len(df))
 
     # Reorganize for output
     df = df[[ic, 'SE', diff_ic, 'dSE', 'penalty', 'weight']]
@@ -1249,6 +1277,7 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
     return dict(ct=df, dSE_matrix=dSE)
 
 
+# TODO refactor this function together with plot_coef_table.
 def plot_compare(ct, fignum=None):
     """Plot the table of information criteria from `sts.compare`.
 
@@ -1314,7 +1343,6 @@ def plot_compare(ct, fignum=None):
     ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
     return fig, ax
-
 
 
 # -----------------------------------------------------------------------------
@@ -1944,7 +1972,7 @@ def sim_train_test(
     #            [ 0.15,  1.  ,  0.  , 0. ,      0. ],
     #            [-0.4 ,  0.  ,  1.  , 0. ,      0. ],
     #            [ 0.  ,  0.  ,  0.  , 1. ,      0. ],
-    #              ...          ...       , ...  
+    #              ...          ...       , ...
     #            [ 0.  ,  0.  ,  0.  , 0. ,      1. ]])
     #
 
