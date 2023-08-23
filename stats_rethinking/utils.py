@@ -1169,6 +1169,7 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     return fig, ax
 
 
+# TODO make a CompareTable object? Include `sort` as a method.
 def compare(models, mnames=None, ic='WAIC', sort=False):
     """Create a comparison table of models based on information criteria.
 
@@ -1239,7 +1240,7 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
     var_names = [v.name for v in max_model.model.observed_RVs]
     dSE = dict()
     # For each var, get column of dSE matrix corresponding to minIC model
-    cf = df.unstack().swaplevel(axis='columns').sort_index()
+    cf = df.unstack('var').sort_index()
     for v in var_names:
         tf = pd.DataFrame(np.nan * np.empty((M, M)),
                           index=mnames, columns=mnames)
@@ -1259,9 +1260,10 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
         dSE[v] = tf
 
         # Assign df['dSE'] to the appropriate column of dSE_matrix
-        # NOTE could concatenate the dSE's with [var, model] index to
-        # potentially avoid this unstacking mess.
-        cf.loc[:, (v, 'dSE')] = dSE[v][cf.index[cf.loc[:, (v, diff_ic)] == 0]]
+        # NOTE could concatenate the dSE's with [var, model] index and then
+        # loop over vars again to assign the dSE column and (potentially) avoid
+        # this unstacking mess.
+        cf[('dSE', v)] = tf[cf.index[cf[(diff_ic, v)] == 0]]
 
     df = cf.stack('var').reorder_levels(['var', 'model']).sort_index()
 
@@ -1269,7 +1271,8 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
     df['weight'] /= df['weight'].groupby('var').sum()
 
     if sort:
-        df = df.sort_values(diff_ic).groupby('var').head(len(df))
+        # Sort within each observed variable group
+        df = df.sort_values(['var', diff_ic]).groupby('var').head(len(df))
 
     # Reorganize for output
     df = df[[ic, 'SE', diff_ic, 'dSE', 'penalty', 'weight']]
