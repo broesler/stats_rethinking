@@ -64,7 +64,7 @@ with pm.Model():
     μ = pm.Deterministic('μ', p * df['h0'])
     σ = pm.Exponential('σ', 1)
     h1 = pm.Normal('h1', μ, σ, observed=df['h1'])
-    h2 = pm.Normal('h2', 2*μ, σ, observed=2*df['h1'])  # TEST MULTIPLE OBSERVED
+    # h2 = pm.Normal('h2', 2*μ, σ, observed=2*df['h1'])  # TEST MULTIPLE OBSERVED
     m6_7 = sts.quap(data=df)
 
 print('m6.7:')
@@ -82,7 +82,7 @@ with pm.Model():
     μ = pm.Deterministic('μ', p * df['h0'])
     σ = pm.Exponential('σ', 1)
     h1 = pm.Normal('h1', μ, σ, observed=df['h1'])
-    h2 = pm.Normal('h2', 2*μ, σ, observed=2*df['h1'])  # TEST MULTIPLE OBSERVED
+    # h2 = pm.Normal('h2', 2*μ, σ, observed=2*df['h1'])  # TEST MULTIPLE OBSERVED
     m6_8 = sts.quap(data=df)
 
 print('m6.8:')
