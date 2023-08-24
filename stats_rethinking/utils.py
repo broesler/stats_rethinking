@@ -1136,31 +1136,23 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     else:
         ax = fig.axes[-1]  # take most recent
 
-    # Leverage Seaborn for basic setup
     y, hue = ('model', 'param') if by_model else ('param', 'model')
 
-    # NOTE correct errorbars require index to be sorted.
+    # Correct errorbars require index to be sorted.
     ct = ct.reorder_levels([hue, y]).sort_index()
 
+    # Leverage Seaborn for basic setup
     sns.pointplot(data=ct.reset_index(), x='coef', y=y, hue=hue,
                   join=False, dodge=0.3, ax=ax)
 
     # Find the x,y coordinates for each point
-    x_coords = []
-    y_coords = []
-    colors = []
-    for point_pair in ax.collections:
-        for x, y in point_pair.get_offsets():
-            if not np.ma.is_masked(x) and not np.ma.is_masked(y):
-                x_coords.append(x)
-                y_coords.append(y)
-                colors.append(point_pair.get_facecolor())
+    xc, yc, colors = get_coords(ax)
 
     # Manually add the errorbars since we have std values already
     z = stats.norm.ppf(1 - (1 - q)/2)
     errs = 2 * ct['std'] * z  # ± err -> 2 * ...
     errs = errs.dropna()
-    ax.errorbar(x_coords, y_coords, fmt=' ', xerr=errs, ecolor=colors)
+    ax.errorbar(xc, yc, fmt=' ', xerr=errs, ecolor=colors)
 
     # Plot the origin and move the legend outside the plot for clarity
     ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
@@ -1208,7 +1200,9 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
         mnames = [f"m{i}" for i in range(len(models))]
 
     func = WAIC if ic == 'WAIC' else LOOIS
+    diff_ic = f"d{ic}"
 
+    # Create the dataframe of information criteria, with (model, var) as index
     df = (
         pd.concat(
             [pd.DataFrame(func(m)) for m in models],
@@ -1216,14 +1210,12 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
             names=['model', 'var'],
             axis='columns'
         )
-        .T  # transpose for model, var as rows
+        .T  # transpose for (model, var) as rows
         .drop('lppd', axis='columns')
-        # .reorder_levels(['var', 'model'])
         .sort_index()
     )
 
     # Subtract the minimium from each observed variable to get the diff
-    diff_ic = f"d{ic}"
     df[diff_ic] = df[ic].groupby('var').transform(lambda x: x - x.min())
 
     # Find model with the most observed RVs
@@ -1280,7 +1272,6 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
     return dict(ct=df, dSE_matrix=dSE)
 
 
-# TODO refactor this function together with plot_coef_table.
 def plot_compare(ct, fignum=None):
     """Plot the table of information criteria from `sts.compare`.
 
@@ -1302,7 +1293,7 @@ def plot_compare(ct, fignum=None):
     else:
         ax = fig.axes[-1]  # take most recent
 
-    # NOTE correct errorbars require index to be sorted.
+    # Correct errorbars require index to be sorted.
     ct = ct.reorder_levels(['var', 'model']).sort_index()
 
     if 'WAIC' in ct.columns:
@@ -1315,37 +1306,40 @@ def plot_compare(ct, fignum=None):
                   join=False, dodge=0.3, ax=ax)
 
     # Find the x,y coordinates for each point
-    x_coords = []
-    y_coords = []
-    colors = []
-    for point_pair in ax.collections:
-        for x, y in point_pair.get_offsets():
-            if not np.ma.is_masked(x) and not np.ma.is_masked(y):
-                x_coords.append(x)
-                y_coords.append(y)
-                colors.append(point_pair.get_facecolor())
-
-    x_coords = np.asarray(x_coords)
-    y_coords = np.asarray(y_coords)
-    colors = np.asarray(colors)
+    xc, yc, colors = get_coords(ax)
 
     # Manually add the errorbars since we have std values already
-    ax.errorbar(x_coords, y_coords, xerr=ct['SE'], fmt=' ', ecolor=colors)
+    ax.errorbar(xc, yc, xerr=ct['SE'], fmt=' ', ecolor=colors)
 
     # Plot in-sample deviance values
     dev_in = ct[ic] - ct['penalty']**2
-    ax.scatter(dev_in, y_coords,
+    ax.scatter(dev_in, yc,
                marker='o', ec=colors, fc='none',
                label='In-Sample Deviance')
 
     # Plot the standard error of the *difference* in WAIC values.
-    ax.errorbar(x_coords, y_coords - 0.1, xerr=ct['dSE'],
-                fmt=' ', ecolor='k', lw=1)
+    ax.errorbar(xc, yc - 0.1, xerr=ct['dSE'],
+                fmt=' ', ecolor='k', lw=1, label='dSE')
 
     ax.axvline(ct[ic].min(), ls='--', c='k', lw=1, alpha=0.5)
     ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
     return fig, ax
+
+
+def get_coords(ax):
+    """Return the x, y, and color coordinates of the axes."""
+    pts = [
+        (x, y, point_pair.get_facecolor())
+        for point_pair in ax.collections
+        for x, y in point_pair.get_offsets()
+        if not np.ma.is_masked(x) and not np.ma.is_masked(y)
+    ]
+    xc, yc, colors = zip(*pts)
+    xc = np.asarray(xc)
+    yc = np.asarray(yc)
+    colors = np.asarray(colors)
+    return xc, yc, colors
 
 
 # -----------------------------------------------------------------------------
