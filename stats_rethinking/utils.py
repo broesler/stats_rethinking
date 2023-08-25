@@ -1293,9 +1293,6 @@ def plot_compare(ct, fignum=None):
     else:
         ax = fig.axes[-1]  # take most recent
 
-    # Correct errorbars require index to be sorted.
-    ct = ct.reorder_levels(['var', 'model']).sort_index()
-
     if 'WAIC' in ct.columns:
         ic = 'WAIC'
     elif 'PSIS' in ct.columns or 'LOOIC' in ct.columns:

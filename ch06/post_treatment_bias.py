@@ -124,7 +124,7 @@ coeftab = sts.coef_table(models, mnames)
 print(coeftab)
 sts.plot_coef_table(coeftab, fignum=1)
 
-cmp = sts.compare(models, mnames, ic='LOOIC')
+cmp = sts.compare(models, mnames, sort=True)
 ct = cmp['ct']
 with pd.option_context('display.precision', 2):
     print(ct)
