@@ -1054,7 +1054,7 @@ def bspline_basis(t, x=None, k=3, padded_knots=False):
         return B
 
 
-def coef_table(models, mnames=None, params=None, std=True):
+def coef_table(models, /, mnames=None, params=None, std=True):
     """Create a summary table of coefficients in each model.
 
     Parameters
@@ -1096,7 +1096,7 @@ def coef_table(models, mnames=None, params=None, std=True):
                 .melt(ignore_index=False, value_name=value_name)
                 .set_index('param', append=True)
                 .reorder_levels(['param', 'model'])
-                .sort_index()
+                # .sort_index()  # do not sort to keep order of input
               )
         return ct
 
@@ -1161,7 +1161,9 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     return fig, ax
 
 
-# TODO make a CompareTable object? Include `sort` as a method.
+# TODO make a CompareTable object?
+#   * Include `sort` as a method.
+#   * Plot lower precision by default.
 def compare(models, mnames=None, ic='WAIC', sort=False):
     """Create a comparison table of models based on information criteria.
 
