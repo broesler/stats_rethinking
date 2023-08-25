@@ -125,6 +125,50 @@ ax1.scatter('bM', 'bB', data=post, c='k', alpha=0.2)
 ax1.set(xlabel='bM',
         ylabel='bB')
 
+
+# ----------------------------------------------------------------------------- 
+#         Comparing pointwise WAICs
+# -----------------------------------------------------------------------------
+# (R code 7.43)
+waic_m7_8 = sts.WAIC(m7_8, pointwise=True)['log_L']
+waic_m7_9 = sts.WAIC(m7_9, pointwise=True)['log_L']
+
+# (R code 7.44)
+# Scale the points (circle sizes) by the difference of the z-scores of log
+# brain volume and log body mass, i.e. large points have large brains for their
+# body size.
+s = tf['log_B'] - tf['log_M']
+s -= min(s)
+s /= max(s)
+s = (10*(1 + s))**2  # marker area in points**2 == (1/72 in)**2
+
+# Plot it
+fig = plt.figure(4, clear=True, constrained_layout=True)
+fig.set_size_inches((8, 5), forward=True)
+ax = fig.add_subplot()
+
+ax.spines[['right', 'top']].set_visible(False)
+ax.axhline(0, c='k', ls='--', lw=1)
+ax.axvline(0, c='k', ls='--', lw=1)
+
+ax.scatter(
+    x=waic_m7_8['WAIC'] - waic_m7_9['WAIC'],
+    y=tf['log_L'],
+    s=s,
+    edgecolors='k',
+    facecolors='C0',
+    alpha=0.4,
+)
+
+min_y = tf['log_L'].min()
+ax.text( 0.02, min_y, 'm7.9 better →', va='center')
+ax.text(-0.02, min_y, '← m7.8 better', va='center', ha='right')
+
+ax.set(xlabel='pointwise difference in WAIC',
+       ylabel='log longevity (std)')
+
+
+
 plt.ion()
 plt.show()
 
