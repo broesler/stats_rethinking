@@ -98,23 +98,6 @@ with pm.Model():
     log_L = pm.Normal('log_L', μ, σ, observed=tf['log_L'])
     m7_10 = sts.quap(data=tf)
 
-# Model 7.8 prior predictive check
-with m7_8.model:
-    idata = pm.sample_prior_predictive(samples=50)
-
-fig = plt.figure(1, clear=True, constrained_layout=True)
-gs = fig.add_gridspec(nrows=1, ncols=2)
-
-ax = fig.add_subplot(gs[0])
-ax.plot(tf['log_M'], idata.prior['μ'].mean('chain').T, 'k', alpha=0.4)
-ax.set(xlabel='log(M)',
-       ylabel='log(L)')
-
-ax = fig.add_subplot(gs[1])
-ax.plot(tf['log_B'], idata.prior['μ'].mean('chain').T, 'k', alpha=0.4)
-ax.set(xlabel='log(B)',
-       ylabel='log(L)')
-
 # Compare the models (R code 7.39-7.40)
 models = [m7_8, m7_9, m7_10]
 mnames = ['m7.8 (B and M)', 'm7.9 (B only)', 'm7.10 (M only)']
