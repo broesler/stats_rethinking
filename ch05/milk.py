@@ -92,7 +92,7 @@ with pm.Model() as m5_5:
 fig = plt.figure(1, clear=True, constrained_layout=True)
 gs = fig.add_gridspec(nrows=1, ncols=2)
 ax = fig.add_subplot(gs[0])
-ax.plot(np.tile(x_s, (Nl, 1)).T, prior5_5_draft['μ'].T, 'k', alpha=0.4)
+ax.plot(x_s, prior5_5_draft['μ'].T, 'k', alpha=0.4)
 ax.set(title=(r'$\alpha \sim \mathcal{N}(0, 1)$'
               + "\n" + r'$\beta_N \sim \mathcal{N}(0, 1)$'),
        xlabel='Neocortex Percent [std]', xlim=x_s,
@@ -100,7 +100,7 @@ ax.set(title=(r'$\alpha \sim \mathcal{N}(0, 1)$'
        aspect='equal')
 
 ax = fig.add_subplot(gs[1], sharex=ax, sharey=ax)
-ax.plot(np.tile(x_s, (Nl, 1)).T, prior5_5['μ'].T, 'k', alpha=0.4)
+ax.plot(x_s, prior5_5['μ'].T, 'k', alpha=0.4)
 ax.set(title=(r'$\alpha \sim \mathcal{N}(0, 0.2)$'
               + "\n" + r'$\beta_N \sim \mathcal{N}(0, 0.5)$'),
        xlabel='Neocortex Percent [std]',

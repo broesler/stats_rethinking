@@ -87,8 +87,7 @@ ax.set(xlabel='Median Age Marriage [std]',
        aspect='equal')
 
 # Each column of data is a line
-ax.plot(np.tile(A, (N_lines, 1)).T, prior.prior['mu'].mean('chain').T,
-        'k', alpha=0.4)
+ax.plot(A, prior.prior['mu'].mean('chain').T, 'k', alpha=0.4)
 
 # -----------------------------------------------------------------------------
 #         Model the relationships between the variables
