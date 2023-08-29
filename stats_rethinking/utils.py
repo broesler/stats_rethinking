@@ -480,7 +480,7 @@ class Quap():
         Initial parameter values for the MAP optimization. Defaults to
         `model.initial_point`.
     """
-    def __init__(self, /, coef=None, cov=None, data=None, map_est=None,
+    def __init__(self, *, coef=None, cov=None, data=None, map_est=None,
                  loglik=None, model=None, start=None):
         self.coef = coef
         self.cov = cov
@@ -1054,7 +1054,7 @@ def bspline_basis(t, x=None, k=3, padded_knots=False):
         return B
 
 
-def coef_table(models, /, mnames=None, params=None, std=True):
+def coef_table(models, mnames=None, params=None, std=True):
     """Create a summary table of coefficients in each model.
 
     Parameters
@@ -1635,6 +1635,7 @@ def DIC(model, post=None, Ns=1000):
     return dict({'dic': dev_hat + 2*pD, 'pD': pD})
 
 
+# TODO return a dataframe when pointwise=True, Series otherwise?
 def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
          Ns=1000, pointwise=False):
     r"""Compute the Widely Applicable Information Criteria for the model.
@@ -1698,8 +1699,6 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
             Ns=Ns,
         )
 
-    # FIXME WAIC and LOOIS are ~ 2*params > deviance? Figure 7.10 shows the two
-    # numbers as almost identical to the deviance as N increases.
     the_lppd = lppd(loglik=loglik, var_names=var_names)
 
     out = dict()
