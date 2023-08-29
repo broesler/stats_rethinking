@@ -26,12 +26,37 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 
-from scipy import stats
-
 import stats_rethinking as sts
+
+plt.style.use('seaborn-v0_8-darkgrid')
 
 # R code 7.33
 df = pd.read_csv('../data/Primates301.csv')
+
+# >>> df.info()
+# <class 'pandas.core.frame.DataFrame'>
+# RangeIndex: 301 entries, 0 to 300
+# Data columns (total 16 columns):
+#    Column               Non-Null Count  Dtype
+# ---  ------               --------------  -----
+#  0   name                 301 non-null    object
+#  1   genus                301 non-null    object
+#  2   species              301 non-null    object
+#  3   subspecies           34 non-null     object
+#  4   spp_id               301 non-null    int64
+#  5   genus_id             301 non-null    int64
+#  6   social_learning      203 non-null    float64
+#  7   research_effort      186 non-null    float64
+#  8   brain                184 non-null    float64
+#  9   body                 238 non-null    float64
+#  10  group_size           187 non-null    float64
+#  11  gestation            140 non-null    float64
+#  12  weaning              116 non-null    float64
+#  13  longevity            120 non-null    float64
+#  14  sex_maturity         107 non-null    float64
+#  15  maternal_investment  104 non-null    float64
+# dtypes: float64(10), int64(2), object(4)
+# memory usage: 37.8+ KB
 
 # Convert desired variables to log scale (R code 7.34)
 df['log_L'] = sts.standardize(np.log(df['longevity']))
@@ -73,29 +98,46 @@ with pm.Model():
     log_L = pm.Normal('log_L', μ, σ, observed=tf['log_L'])
     m7_10 = sts.quap(data=tf)
 
+# Model 7.8 prior predictive check
+with m7_8.model:
+    idata = pm.sample_prior_predictive(samples=50)
+
+fig = plt.figure(1, clear=True, constrained_layout=True)
+gs = fig.add_gridspec(nrows=1, ncols=2)
+
+ax = fig.add_subplot(gs[0])
+ax.plot(tf['log_M'], idata.prior['μ'].mean('chain').T, 'k', alpha=0.4)
+ax.set(xlabel='log(M)',
+       ylabel='log(L)')
+
+ax = fig.add_subplot(gs[1])
+ax.plot(tf['log_B'], idata.prior['μ'].mean('chain').T, 'k', alpha=0.4)
+ax.set(xlabel='log(B)',
+       ylabel='log(L)')
+
 # Compare the models (R code 7.39-7.40)
 models = [m7_8, m7_9, m7_10]
-mnames=['m7.8 (B and M)', 'm7.9 (B only)', 'm7.10 (M only)']
+mnames = ['m7.8 (B and M)', 'm7.9 (B only)', 'm7.10 (M only)']
 cmp = sts.compare(models, mnames, sort=True)
 ct = cmp['ct']
 print(ct)
-sts.plot_compare(ct, fignum=1)
+sts.plot_compare(ct, fignum=2)
 
 # (R code 7.41)
 coeftab = sts.coef_table(models, mnames=mnames, params=['bM', 'bB'])
-sts.plot_coef_table(coeftab, fignum=2)
+sts.plot_coef_table(coeftab, fignum=3)
 
 # (R code 7.42)
 print('correlation(log_B, log_M):')
 print(tf[['log_B', 'log_M']].corr().iloc[0, 1])
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Figure 7.11
 # -----------------------------------------------------------------------------
 # Sample the posterior for plotting
 post = m7_8.sample(800)
 
-fig = plt.figure(3, clear=True, constrained_layout=True)
+fig = plt.figure(4, clear=True, constrained_layout=True)
 fig.set_size_inches((12, 5), forward=True)
 gs = fig.add_gridspec(nrows=1, ncols=2)
 ax0 = fig.add_subplot(gs[0])  # left side plot
@@ -126,7 +168,7 @@ ax1.set(xlabel='bM',
         ylabel='bB')
 
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Comparing pointwise WAICs
 # -----------------------------------------------------------------------------
 # (R code 7.43)
@@ -143,7 +185,7 @@ s /= max(s)
 s = (10*(1 + s))**2  # marker area in points**2 == (1/72 in)**2
 
 # Plot it
-fig = plt.figure(4, clear=True, constrained_layout=True)
+fig = plt.figure(5, clear=True, constrained_layout=True)
 fig.set_size_inches((8, 5), forward=True)
 ax = fig.add_subplot()
 
