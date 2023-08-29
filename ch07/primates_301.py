@@ -227,6 +227,20 @@ ax.set(xlabel='pointwise difference in WAIC',
        ylabel='log longevity (std)')
 
 
+# ----------------------------------------------------------------------------- 
+#         Model brain size as *output* (R code 7.45)
+# -----------------------------------------------------------------------------
+with pm.Model():
+    a = pm.Normal('a', 0, 0.1)
+    bM = pm.Normal('bM', 0, 0.5)
+    bL = pm.Normal('bL', 0, 0.5)
+    μ = pm.Deterministic('μ', a + bM*tf['log_M'] + bL*tf['log_L'])
+    σ = pm.Exponential('σ', 1)
+    log_B = pm.Normal('log_B', μ, σ, observed=tf['log_B'])
+    m7_11 = sts.quap(data=tf)
+
+sts.precis(m7_11, digits=2, verbose=True)
+
 
 plt.ion()
 plt.show()
