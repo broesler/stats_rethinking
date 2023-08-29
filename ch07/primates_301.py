@@ -172,8 +172,8 @@ ax1.set(xlabel='bM',
 #         Comparing pointwise WAICs
 # -----------------------------------------------------------------------------
 # (R code 7.43)
-waic_m7_8 = sts.WAIC(m7_8, pointwise=True)['log_L']
-waic_m7_9 = sts.WAIC(m7_9, pointwise=True)['log_L']
+tf['waic_m7.8'] = sts.WAIC(m7_8, pointwise=True)['log_L']['WAIC']
+tf['waic_m7.9'] = sts.WAIC(m7_9, pointwise=True)['log_L']['WAIC']
 
 # (R code 7.44)
 # Scale the points (circle sizes) by the difference of the z-scores of log
@@ -193,14 +193,31 @@ ax.spines[['right', 'top']].set_visible(False)
 ax.axhline(0, c='k', ls='--', lw=1)
 ax.axvline(0, c='k', ls='--', lw=1)
 
-ax.scatter(
-    x=waic_m7_8['WAIC'] - waic_m7_9['WAIC'],
-    y=tf['log_L'],
-    s=s,
-    edgecolors='k',
-    facecolors='C0',
-    alpha=0.4,
-)
+tf['waic_diff'] = tf['waic_m7.8'] - tf['waic_m7.9']
+ax.scatter('waic_diff', 'log_L', data=tf, s=s,
+           edgecolors='k', facecolors='C0', alpha=0.4)
+
+
+# Label the top and bottom 4 x-values.
+def annotate_topK(ascending=True, K=5, ax=None):
+    """Label the top `K` data points on `ax`."""
+    if ax is None:
+        ax = plt.gca()
+    top_idx = tf.sort_values('waic_diff', ascending=ascending)[-K:].index
+    top_names = df.loc[top_idx]['genus'] + '\n' + df.loc[top_idx]['species']
+    for i, name in zip(top_idx, top_names):
+        ax.text(
+            x=tf.loc[i, 'waic_diff'] + 0.02,
+            y=tf.loc[i, 'log_L'],
+            s=name,
+            va='center'
+        )
+
+
+# TODO try adjustText function to reduce overlap?
+K = 4
+annotate_topK()
+annotate_topK(ascending=False)
 
 min_y = tf['log_L'].min()
 ax.text( 0.02, min_y, 'm7.9 better →', va='center')
