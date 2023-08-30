@@ -104,15 +104,16 @@ mnames = ['m7.8 (B and M)', 'm7.9 (B only)', 'm7.10 (M only)']
 cmp = sts.compare(models, mnames, sort=True)
 ct = cmp['ct']
 print(ct)
-sts.plot_compare(ct, fignum=2)
+sts.plot_compare(ct, fignum=1)
 
 # (R code 7.41)
 coeftab = sts.coef_table(models, mnames=mnames, params=['bM', 'bB'])
-sts.plot_coef_table(coeftab, fignum=3)
+sts.plot_coef_table(coeftab, fignum=2)
 
 # (R code 7.42)
-print('correlation(log_B, log_M):')
+print('corr(log_B, log_M):')
 print(tf[['log_B', 'log_M']].corr().iloc[0, 1])
+
 
 # -----------------------------------------------------------------------------
 #         Figure 7.11
@@ -120,7 +121,7 @@ print(tf[['log_B', 'log_M']].corr().iloc[0, 1])
 # Sample the posterior for plotting
 post = m7_8.sample(800)
 
-fig = plt.figure(4, clear=True, constrained_layout=True)
+fig = plt.figure(3, clear=True, constrained_layout=True)
 fig.set_size_inches((12, 5), forward=True)
 gs = fig.add_gridspec(nrows=1, ncols=2)
 ax0 = fig.add_subplot(gs[0])  # left side plot
@@ -162,13 +163,14 @@ tf['waic_m7.9'] = sts.WAIC(m7_9, pointwise=True)['log_L']['WAIC']
 # Scale the points (circle sizes) by the difference of the z-scores of log
 # brain volume and log body mass, i.e. large points have large brains for their
 # body size.
-s = tf['log_B'] - tf['log_M']
-s -= min(s)
-s /= max(s)
-s = (10*(1 + s))**2  # marker area in points**2 == (1/72 in)**2
+c = tf['log_B'] - tf['log_M']
+c -= min(c)
+c /= max(c)
+# Convert to real values squared to exaggerate difference in large vs small
+s = 50*np.exp(c)**2  # marker area in points**2 == (1/72 in)**2
 
 # Plot it
-fig = plt.figure(5, clear=True, constrained_layout=True)
+fig = plt.figure(4, clear=True, constrained_layout=True)
 fig.set_size_inches((8, 5), forward=True)
 ax = fig.add_subplot()
 
@@ -177,8 +179,16 @@ ax.axhline(0, c='k', ls='--', lw=1)
 ax.axvline(0, c='k', ls='--', lw=1)
 
 tf['waic_diff'] = tf['waic_m7.8'] - tf['waic_m7.9']
-ax.scatter('waic_diff', 'log_L', data=tf, s=s,
-           edgecolors='k', facecolors='C0', alpha=0.4)
+ax.scatter(
+    x='waic_diff',
+    y='log_L',
+    data=tf,
+    s=s,
+    edgecolors='k',
+    facecolors='C0',
+    alpha=0.4,
+    label=r'size = $\left(\frac{B}{M}\right)^2$'
+)
 
 
 # Label the top and bottom 4 x-values.
@@ -203,14 +213,16 @@ annotate_topK()
 annotate_topK(ascending=False)
 
 min_y = tf['log_L'].min()
-ax.text( 0.02, min_y, 'm7.9 better →', va='center')
-ax.text(-0.02, min_y, '← m7.8 better', va='center', ha='right')
+ax.text(0.02, min_y, 'm7.9 (B only) better →', va='center')
+ax.text(-0.02, min_y, '← m7.8 (B and M) better', va='center', ha='right')
+
+ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
 ax.set(xlabel='pointwise difference in WAIC',
        ylabel='log longevity (std)')
 
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Model brain size as *output* (R code 7.45)
 # -----------------------------------------------------------------------------
 with pm.Model():
@@ -222,6 +234,7 @@ with pm.Model():
     log_B = pm.Normal('log_B', μ, σ, observed=tf['log_B'])
     m7_11 = sts.quap(data=tf)
 
+print('m7.11 (M, L) -> B:')
 sts.precis(m7_11, digits=2, verbose=True)
 
 

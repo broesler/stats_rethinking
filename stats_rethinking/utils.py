@@ -1188,6 +1188,7 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
             A symmetric matrix of the difference in standard errors of the
             pointwise information criteria of each model.
     """
+    models = list(models)
     M = len(models)
     if M < 2:
         raise ValueError('Need more than one model to compare!')
@@ -1200,6 +1201,8 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
 
     if mnames is None:
         mnames = [f"m{i}" for i in range(len(models))]
+    else:
+        mnames = list(mnames)
 
     func = WAIC if ic == 'WAIC' else LOOIS
     diff_ic = f"d{ic}"
@@ -1334,10 +1337,7 @@ def get_coords(ax):
         for x, y in point_pair.get_offsets()
         if not np.ma.is_masked(x) and not np.ma.is_masked(y)
     ]
-    xc, yc, colors = zip(*pts)
-    xc = np.asarray(xc)
-    yc = np.asarray(yc)
-    colors = np.asarray(colors)
+    xc, yc, colors = [np.asarray(x) for x in zip(*pts)]
     return xc, yc, colors
 
 

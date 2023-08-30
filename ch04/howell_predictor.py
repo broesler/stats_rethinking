@@ -93,7 +93,7 @@ def define_linear_model(x, y):
         ind = pm.MutableData('ind', x)
         obs = pm.MutableData('obs', y)
         alpha = pm.Normal('alpha', mu=178, sigma=20)  # parameter priors
-        beta = pm.Lognormal('beta', mu=0, sigma=1)    # new prior!
+        beta = pm.LogNormal('beta', mu=0, sigma=1)    # new prior!
         sigma = pm.Uniform('sigma', 0, 50)            # std prior
         # NOTE the mean-shift must be a function of the data on which the model
         # is trained, *not* the data on which it makes predictions!!
