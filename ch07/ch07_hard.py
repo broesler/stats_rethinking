@@ -55,7 +55,7 @@ def poly_model(poly_order, x='A', y='height', data=train):
     with pm.Model():
         ind = pm.MutableData('ind', data[x])
         X = sts.design_matrix(ind, poly_order)  # [1 x x² x³ ...]
-        α = pm.Normal('α', data[y].mean(), data[y].std(), shape=(1,))
+        α = pm.Normal('α', data[y].mean(), 2*data[y].std(), shape=(1,))
         βn = pm.Normal('βn', 0, 100, shape=(poly_order,))
         β = pm.math.concatenate([α, βn])
         μ = pm.Deterministic('μ', pm.math.dot(X, β))
@@ -67,9 +67,11 @@ def poly_model(poly_order, x='A', y='height', data=train):
 
 
 # Create polynomial models of height ~ age.
-models = {i: poly_model(i, data=train) for i in range(1, 3)}
+models = {i: poly_model(i, data=train) for i in range(1, 7)}
 
-# Prior predictive checks with the linear model
+# -----------------------------------------------------------------------------
+#         Prior predictive checks with the linear model
+# -----------------------------------------------------------------------------
 N = 20
 with models[1].model:
     # pm.set_data({'ind': 
@@ -83,11 +85,11 @@ ax.set(xlabel='age [std]',
        ylabel='height [cm]')
 
 
-# # 6H1: Compare the models using WAIC
-# cmp = sts.compare(models.values(), mnames=models.keys())
-# ct = cmp['ct']
-# print(ct)
-# sts.plot_compare(ct, fignum=3)
+# 6H1: Compare the models using WAIC
+cmp = sts.compare(models.values(), mnames=models.keys())
+ct = cmp['ct']
+print(ct)
+fig, ax = sts.plot_compare(ct, fignum=3)
 
 plt.ion()
 plt.show()

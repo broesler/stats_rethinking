@@ -1202,7 +1202,8 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
     if mnames is None:
         mnames = [f"m{i}" for i in range(len(models))]
     else:
-        mnames = list(mnames)
+        # Model names must be strings for sns.pointplot to work properly!
+        mnames = [str(x) for x in list(mnames)]
 
     func = WAIC if ic == 'WAIC' else LOOIS
     diff_ic = f"d{ic}"
