@@ -90,6 +90,7 @@ cmp = sts.compare(models.values(), mnames=models.keys())
 ct = cmp['ct']
 print(ct)
 fig, ax = sts.plot_compare(ct, fignum=3)
+ax.set_xlabel('Polynomial order')
 
 plt.ion()
 plt.show()

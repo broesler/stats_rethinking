@@ -1293,6 +1293,7 @@ def plot_compare(ct, fignum=None):
     -------
     fig, ax : Figure and Axes where the plot was made.
     """
+    # TODO transpose flag (swap [xy] args and [xy]err)
     fig = plt.figure(fignum, clear=True, constrained_layout=True)
     if not fig.axes:
         ax = fig.add_subplot()
@@ -1305,26 +1306,26 @@ def plot_compare(ct, fignum=None):
         ic = 'PSIS'
 
     # Leverage Seaborn for basic setup
-    sns.pointplot(data=ct.reset_index(), x=ic, y='model', hue='var',
+    sns.pointplot(data=ct.reset_index(), y=ic, x='model', hue='var',
                   join=False, dodge=0.3, ax=ax)
 
     # Find the x,y coordinates for each point
     xc, yc, colors = get_coords(ax)
 
     # Manually add the errorbars since we have std values already
-    ax.errorbar(xc, yc, xerr=ct['SE'], fmt=' ', ecolor=colors)
+    ax.errorbar(xc, yc, yerr=ct['SE'], fmt=' ', ecolor=colors)
 
     # Plot in-sample deviance values
     dev_in = ct[ic] - ct['penalty']**2
-    ax.scatter(dev_in, yc,
+    ax.scatter(xc, dev_in,
                marker='o', ec=colors, fc='none',
                label='In-Sample Deviance')
 
     # Plot the standard error of the *difference* in WAIC values.
-    ax.errorbar(xc, yc - 0.1, xerr=ct['dSE'],
+    ax.errorbar(xc - 0.1, yc, yerr=ct['dSE'],
                 fmt=' ', ecolor='k', lw=1, label='dSE')
 
-    ax.axvline(ct[ic].min(), ls='--', c='k', lw=1, alpha=0.5)
+    ax.axhline(ct[ic].min(), ls='--', c='k', lw=1, alpha=0.5)
     ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
     return fig, ax
