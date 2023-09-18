@@ -1553,6 +1553,20 @@ def loglikelihood(model, post=None, var_names=None, eval_at=None, Ns=1000):
     )
 
 
+def deviance(model=None, loglik=None, post=None, var_names=None, eval_at=None,
+        Ns=1000):
+    """Compute the deviance as -2 * lppd."""
+    the_lppd = lppd(
+        model=model,
+        loglik=loglik,
+        post=post,
+        var_names=var_names,
+        eval_at=eval_at,
+        Ns=Ns,
+    )
+    return {k: -2 * v.sum() for k, v in the_lppd.items()}
+
+
 # TODO combine identical documentation from lppd, WAIC, LOOIS functions.
 def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
          Ns=1000):

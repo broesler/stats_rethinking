@@ -91,8 +91,13 @@ def poly_model(poly_order, x='A', y='height', data=train, priors='weak'):
                 α_mean = data[y].mean()
                 α_std = data[y].std()
                 β_std = 100
+            case 'strong':
+                # Select "stronger" informative priors
+                α_mean = data[y].mean()
+                α_std = data[y].std()
+                β_std = 5
             case _:
-                raise ValueError(f"priors={priors} is unsupported.")
+                raise ValueError(f"priors='{priors}' is unsupported.")
         # Define the model parameters
         α = pm.Normal('α', α_mean, α_std, shape=(1,))
         βn = pm.Normal('βn', 0, β_std, shape=(poly_order,))
@@ -162,7 +167,7 @@ for poly_order in range(1, Np+1):
     quap = models[poly_order]
 
     # Store and print the models and R² values
-    print(f"Model {poly_order}:")
+    print(f"\nModel {poly_order}:")
     sts.precis(quap)
 
     # Plot the fit
@@ -198,25 +203,25 @@ for poly_order in range(1, Np+1):
 mean_samples = mean_samples.to_array(dim='poly_order')  # [Np, len(xe), Ns)
 weights = np.reshape(ct['weight'], (-1, 1, 1))  # (Np, 1, 1)
 
-wm = (mean_samples * weights).sum('poly_order')  # weights are normalized to 1
+weighted_model = (mean_samples * weights).sum('poly_order')  # weights are normalized to 1
 
 fig, ax = plt.subplots(num=5, clear=True, constrained_layout=True)
 
 # Plot the minimum WAIC model (model 4)
-poly_order = ct['WAIC'].idxmin()
-quap = models[int(poly_order)]
-mu_samp = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
+p_best = ct['WAIC'].idxmin()
+quap = models[int(p_best)]
+mu_samp_best = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
                      params=[quap.model.α, quap.model.βn])
 
-sts.lmplot(fit_x=xe, fit_y=mu_samp,
+sts.lmplot(fit_x=xe, fit_y=mu_samp_best,
            q=0.97,
            line_kws=dict(c='k'),
            fill_kws=dict(facecolor='k'),
-           label=rf"$\mathcal{{M}}_{poly_order}$",
+           label=rf"$\mathcal{{M}}_{p_best}$",
            ax=ax)
 
 # Plot the weighted means vs the data
-sts.lmplot(fit_x=xe, fit_y=wm,
+sts.lmplot(fit_x=xe, fit_y=weighted_model,
            x='age', y='height', data=df,
            q=0.97,  # 97% confidence intervals
            line_kws=dict(c='C1'),
@@ -238,16 +243,14 @@ ax.legend()
 #         7H4: Compute the test-sample deviance
 # -----------------------------------------------------------------------------
 dev_test = pd.Series({
-    str(p): (
-        -2 *
-        sts.lppd(
-            models[p],
-            eval_at={
-                'ind': test['A'],
-                'obs': test['height']
+    str(p): sts.deviance(
+        models[p],
+        eval_at={
+            'ind': test['A'],
+            'obs': test['height']
             }
-        )['h'].sum()
-    )
+    )['h']
+
     for p in range(1, Np+1)
 })
 
@@ -262,7 +265,7 @@ cmp_test['dev - WAIC'] = cmp_test['deviance'] - cmp_test['WAIC']
 cmp_test['dWAIC'] = cmp_test['WAIC'] - cmp_test['WAIC'].min()
 cmp_test['ddev'] = cmp_test['deviance'] - cmp_test['deviance'].min()
 
-print('Compare deviance to WAIC:')
+print('\nCompare deviance to WAIC:')
 print(cmp_test)
 #           deviance         WAIC  dev - WAIC       dWAIC        ddev
 # model
@@ -279,6 +282,53 @@ print(cmp_test)
 # number of parameters, as expected, although the models with {4, 5, 6}
 # parameters are quite similar.
 
+# ----------------------------------------------------------------------------- 
+#         7H6: Stronger regularizing priors
+# -----------------------------------------------------------------------------
+model_strong = poly_model(6, data=train, priors='strong')
+print('\nStrongly regularizing priors:')
+sts.precis(model_strong)
+
+fig, ax = plt.subplots(num=6, clear=True, constrained_layout=True)
+
+# Plot the minimum WAIC model (model 4)
+sts.lmplot(fit_x=xe, fit_y=mu_samp_best,
+           x='age', y='height', data=df,
+           q=0.97,
+           line_kws=dict(c='k'),
+           fill_kws=dict(facecolor='k'),
+           label=rf"$\mathcal{{M}}_{p_best}$",
+           ax=ax)
+
+# Plot the strongly regularized model
+quap = model_strong
+mu_samp = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
+                     params=[quap.model.α, quap.model.βn])
+sts.lmplot(fit_x=xe, fit_y=mu_samp,
+           q=0.97,
+           line_kws=dict(c='C2'),
+           fill_kws=dict(facecolor='C2'),
+           label='strongly regularized',
+           ax=ax)
+
+ax.set(title='Strongly Regularizing Priors',
+       xlabel='age [yrs]',
+       ylabel='height [cm]')
+ax.legend()
+
+# Compute the actual test deviance of the strongly regularized model
+dev_strong = sts.deviance(
+    model_strong,
+    eval_at={
+        'ind': test['A'],
+        'obs': test['height']
+    }
+)['h']
+
+print(f"\n{dev_strong - dev_test[p_best] = :.2f}")  # ≈ 7.00
+
+# NOTE The regularized deviance is only a bit worse than the best WAIC model
+# from before. It is enough to differentiate the model from the 
 
 
 plt.ion()
