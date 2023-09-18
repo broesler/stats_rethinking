@@ -656,6 +656,11 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
 
 
 # TODO
+# * Idea: could create a similar API to pymc.sample_prior_predictive, etc. that
+#   is a wrapper on this function to sample the Deterministics or Observed
+#   variables as appropriate, and returns an inference data object instead of
+#   a basic numpy array.
+#
 # * `rethinking::sim` equivalent:
 #   - For each Observed variable,
 #       - get its inputvars
@@ -703,8 +708,8 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         An array of values of the linear model evaluated at each of M `eval_at`
         points and `N` parameter samples.
     """
-    # if out not in fit.model.deterministics:
-    #     raise ValueError(f"Variable '{out}' does not exist in the model!")
+    if out.name not in fit.model:
+        raise ValueError(f"Variable '{out}' does not exist in the model!")
 
     if params is None:
         params = inputvars(out)
@@ -730,7 +735,15 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         param_vals = {v.name: dist[v.name].isel(draw=i) for v in params}
         cols.append(out_func(param_vals))
 
-    return np.array(cols).T  # params as columns
+    # Return a DataArray for named dimensions.
+    out_samp = np.array(cols).T  # params as columns
+    return xr.DataArray(
+        out_samp,
+        coords={
+            f"{out.name}_dim_0": range(out_samp.shape[0]),
+            'draw': range(out_samp.shape[1])
+        }
+    )
 
 
 # TODO
