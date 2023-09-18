@@ -1261,7 +1261,7 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
         # NOTE could concatenate the dSE's with [var, model] index and then
         # loop over vars again to assign the dSE column and (potentially) avoid
         # this unstacking mess.
-        cf[('dSE', v)] = tf[cf.index[cf[(diff_ic, v)] == 0]]
+        cf[('dSE', v)] = tf[cf[(diff_ic, v)].idxmin()]
 
     df = cf.stack('var').reorder_levels(['var', 'model']).sort_index()
 
