@@ -125,7 +125,7 @@ ax.set(xlabel='age [std]',
 
 
 # -----------------------------------------------------------------------------
-#         6H1: Compare the models using WAIC
+#         7H1: Compare the models using WAIC
 # -----------------------------------------------------------------------------
 cmp = sts.compare(models.values(), mnames=models.keys())
 ct = cmp['ct']
@@ -145,7 +145,7 @@ ax.set_xlabel('Polynomial order')
 ct = ct.xs('h')  # only one variable anyway
 
 # -----------------------------------------------------------------------------
-#         6H2: Plot each model mean and CI
+#         7H2: Plot each model mean and CI
 # -----------------------------------------------------------------------------
 fig = plt.figure(4, clear=True, constrained_layout=True)
 fig.set_size_inches((8, 10), forward=True)
@@ -192,7 +192,7 @@ for poly_order in range(1, Np+1):
 
 
 # -----------------------------------------------------------------------------
-#         6H3: Plot the model averaged predictions
+#         7H3: Plot the model averaged predictions
 # -----------------------------------------------------------------------------
 # Take mu_samp from above and weight it by ct['weight']
 mean_samples = mean_samples.to_array(dim='poly_order')  # [Np, len(xe), Ns)
@@ -235,7 +235,7 @@ ax.legend()
 
 
 # -----------------------------------------------------------------------------
-#         6H4: Compute the test-sample deviance
+#         7H4: Compute the test-sample deviance
 # -----------------------------------------------------------------------------
 dev_test = pd.Series({
     str(p): (
@@ -255,7 +255,7 @@ dev_test.name = 'deviance'
 dev_test.index.name = 'model'
 
 # ----------------------------------------------------------------------------- 
-#         6H5: Compare the deviances to the WAIC values
+#         7H5: Compare the deviances to the WAIC values
 # -----------------------------------------------------------------------------
 cmp_test = pd.concat([dev_test, ct['WAIC']], axis='columns')
 cmp_test['dev - WAIC'] = cmp_test['deviance'] - cmp_test['WAIC']
@@ -278,6 +278,8 @@ print(cmp_test)
 # model that actually makes the best predictions is that with the highest
 # number of parameters, as expected, although the models with {4, 5, 6}
 # parameters are quite similar.
+
+
 
 plt.ion()
 plt.show()
