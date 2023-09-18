@@ -747,12 +747,14 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 
 
 # TODO
+# * options for `unstd` in {'x', 'y', 'both'}
 # * add "ci" = {'hpdi', 'pi', None} option
 # * add option for observed variable and plots its PI too.
 def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
            x=None, y=None, data=None,
            eval_at=None, unstd=False, q=0.89, ax=None,
-           line_kws=None, fill_kws=None):
+           line_kws=None, fill_kws=None,
+           label='MAP Prediction'):
     """Plot the linear model defined by `quap`.
 
     Parameters
@@ -859,13 +861,13 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     # Make the plot
     if data is not None:
         ax.scatter(x, y, data=data, alpha=0.4)
-    ax.plot(xe, mu_mean, label='MAP Prediction',
+    ax.plot(xe, mu_mean, label=label,
             c=line_kws.pop('color', line_kws.pop('c', 'C0')), **line_kws)
     ax.fill_between(xe, mu_pi[0], mu_pi[1],
                     facecolor=fill_kws.pop('facecolor', 'C0'),
                     alpha=fill_kws.pop('alpha', 0.3),
                     interpolate=True,
-                    label=rf"{100*q:g}% Percentile Interval of $\mu$",
+                    label=rf"{100*q:g}% Percentile Interval",
                     **fill_kws)
     ax.set(xlabel=x, ylabel=y)
     return ax
