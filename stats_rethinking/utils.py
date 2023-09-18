@@ -1178,7 +1178,7 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
 
 # TODO make a CompareTable object?
 #   * Include `sort` as a method.
-#   * Plot lower precision by default.
+#   * Print lower precision by default.
 def compare(models, mnames=None, ic='WAIC', sort=False):
     """Create a comparison table of models based on information criteria.
 
@@ -1553,6 +1553,7 @@ def loglikelihood(model, post=None, var_names=None, eval_at=None, Ns=1000):
     )
 
 
+# TODO combine identical documentation from lppd, WAIC, LOOIS functions.
 def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
          Ns=1000):
     r"""Compute the log pointwise predictive density for a model.
@@ -1785,10 +1786,10 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
 
         elpd = loo.loo_i if pointwise else loo.elpd_loo
         out[v] = dict(
-            PSIS=-2 * elpd,        # == loo_list$estimates['looic', 'Estimate']
+            PSIS=-2*elpd,       # == loo_list$estimates['looic', 'Estimate']
             lppd=elpd,
-            penalty=loo.p_loo,     # == loo_list$p_loo
-            SE=2*loo.se,           # == loo_list$estimates['looic', 'SE']
+            penalty=loo.p_loo,  # == loo_list$p_loo
+            SE=2*loo.se,        # == loo_list$estimates['looic', 'SE']
         )
     return out
 
