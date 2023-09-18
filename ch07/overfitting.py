@@ -67,7 +67,7 @@ ax = fig.add_subplot()
 ax.scatter('mass', 'brain', data=df)
 for label, x, y in zip(df['species'], df['mass'], df['brain']):
     ax.text(x+0.5, y+2, label)
-idx = np.argsort(df['mass'])
+idx = np.argsort(df['mass']).values
 ax.plot(df.loc[idx, 'mass'], h_mean[idx] * df['brain'].max(), c='k', marker='x')
 ax.set(xlabel='body mass [kg]',
        ylabel='brain volume [cc]')
@@ -297,7 +297,7 @@ the_waics = pd.DataFrame({k: sts.WAIC(v)['brain_std'] for k, v in models.items()
 
 R_waics = pd.DataFrame(
     data={
-        'waic':    [6.821, 10   , 11.25, 15.56, -0.04896, -71.38, 5.376],
+        'WAIC':    [6.821, 10   , 11.25, 15.56, -0.04896, -71.38, 5.376],
         'lppd':    [2.49 , 2.566, 3.707, 5.334, 14.11   , 39.45 , 0.3619],
         'penalty': [5.901, 7.568, 9.331, 13.11, 14.08   , 3.756 , 3.05],
         'std':     [9.67 , 8.092, 9.046, 6.493, 3.616   , 0.1714, 6.685],
@@ -306,7 +306,9 @@ R_waics = pd.DataFrame(
 ).T
 
 np.random.seed(SEED)
-the_loos = pd.DataFrame({k: sts.LOOIS(v) for k, v in models.items()})
+the_loos = pd.DataFrame(
+    {k: sts.LOOIS(v)['brain_std'] for k, v in models.items()}
+)
 
 R_loos = pd.DataFrame(
     data={
@@ -346,8 +348,8 @@ ax = axes[0]
 ax.plot(params, deviance, c='C0', label='py deviance')
 ax.plot(params, R_dev, 'k--', label='R deviance')
 
-ax.scatter(params, the_waics.loc['waic'], c='C0', label='py WAIC')
-ax.scatter(params, R_waics.loc['waic'], edgecolor='C0', facecolor='none', label='R WAIC')
+ax.scatter(params, the_waics.loc['WAIC'], c='C0', label='py WAIC')
+ax.scatter(params, R_waics.loc['WAIC'], edgecolor='C0', facecolor='none', label='R WAIC')
 
 ax.scatter(params, the_loos.loc['PSIS'], c='k', label='py LOOIS')
 ax.scatter(params, R_loos.loc['PSIS'], edgecolor='k', facecolor='none', label='R LOOIS')
@@ -357,7 +359,7 @@ ax.legend()
 
 ax = axes[1]
 ax.scatter(params, (deviance - R_dev) / deviance, edgecolor='k', facecolor='none', label='deviance')
-ax.scatter(params, (the_waics.loc['waic'] - R_waics.loc['waic']) / the_waics.loc['waic'], c='C0', label='WAIC')
+ax.scatter(params, (the_waics.loc['WAIC'] - R_waics.loc['WAIC']) / the_waics.loc['WAIC'], c='C0', label='WAIC')
 ax.scatter(params, (the_loos.loc['PSIS'] - R_loos.loc['PSIS']) / the_loos.loc['PSIS'], c='k', label='LOOIS')
 
 ax.set(xlabel='# of parameters',
