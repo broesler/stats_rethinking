@@ -301,6 +301,101 @@ ax.set(title='m8.4 - only intercept varies',
        ylabel='log GDP (prop. of mean)')
 
 
+# -----------------------------------------------------------------------------
+#         Model the interaction between R and C (R code 8.13)
+# -----------------------------------------------------------------------------
+with pm.Model():
+    x, y = 'rugged_std', 'log_GDP_std'
+    a_std, b_std = 0.1, 0.3
+    ind = pm.MutableData('ind', df[x])
+    obs = pm.MutableData('obs', df[y])
+    cid = pm.MutableData('cid', df['cid'])
+    α = pm.Normal('α', 1, a_std, shape=(2,))
+    β = pm.Normal('β', 0, b_std, shape=(2,))
+    μ = pm.Deterministic('μ', α[cid] + β[cid] * (ind - df[x].mean()))
+    σ = pm.Exponential('σ', 1)
+    y = pm.Normal('y', μ, σ, observed=obs, shape=ind.shape)
+    m8_5 = sts.quap(data=df)
+
+
+# (R code 8.14)
+print('m8.5:')
+sts.precis(m8_5)
+#         mean    std    5.5%   94.5%
+# α__0  1.0506 0.0099  1.0347  1.0665
+# α__1  0.8866 0.0157  0.8615  0.9116
+# β__0 -0.1426 0.0547 -0.2301 -0.0551
+# β__1  0.1325 0.0742  0.0139  0.2511  # slope reversed in Africa!
+# σ     0.1095 0.0059  0.1000  0.1190
+
+# Reset the data in model 8.4 for comparison
+with m8_4.model:
+    pm.set_data({'ind': df[x], 'cid': df['cid']})
+
+# (R code 8.15)
+ct = sts.compare(
+    models=[m8_3, m8_4, m8_5],
+    mnames=['m8.3 (combined)', 'm8.4 (intercept)', 'm8.5 (both)']
+)['ct']
+print('m8.3 vs m8.4 vs m8.5:')
+with pd.option_context('display.precision', 2):
+    print(ct.xs('y').sort_values('dWAIC'))
+
+# (R code 8.16)
+waic_list = sts.WAIC(m8_5, pointwise=True)['y']
+waic_list.index = m8_5.data.index  # match index to actual data points
+
+# Plot the interaction (R code 8.17)
+fig = plt.figure(3, clear=True, constrained_layout=True)
+fig.set_size_inches((10, 5), forward=True)
+fig.suptitle('m8.5 - intercept and slope varies')
+
+gs = fig.add_gridspec(nrows=1, ncols=2)
+
+for is_Africa in [1, 0]:
+    ax = fig.add_subplot(gs[is_Africa])
+    plot_linear_model(m8_5, is_Africa, ax=ax)
+
+    title = 'African Nations'
+    if not is_Africa:
+        title = 'Non-' + title
+    ax.set(title=title,
+           xlabel='ruggedness [std]',
+           ylabel='log GDP (prop. of mean)')
+
+    # TODO label individual points with country names
+    if is_Africa:
+        countries = [
+            'Equatorial Guinea',
+            'Seychelles',
+            'South Africa',
+            'Swaziland',
+            'Lesotho',
+            'Rwanda',
+            'Burundi',
+        ]
+    else:
+        countries = [
+            'Luxembourg',
+            'Switzerland',
+            'Greece',
+            'Lebanon',
+            'Nepal',
+            'Tajikistan',
+            'Yemen',
+        ]
+
+    for c in countries:
+        tf = df.loc[df['country'] == c]
+        ax.text(
+            x=float(tf['rugged_std'].iloc[0]) + 0.02,
+            y=float(tf['log_GDP_std'].iloc[0]),
+            s=c,
+            ha='left',
+            va='bottom',
+        )
+
+
 plt.ion()
 plt.show()
 # =============================================================================
