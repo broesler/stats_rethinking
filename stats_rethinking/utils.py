@@ -753,7 +753,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
            x=None, y=None, data=None,
            eval_at=None, unstd=False, q=0.89, ax=None,
-           line_kws=None, fill_kws=None,
+           line_kws=None, fill_kws=None, marker_kws=None,
            label='MAP Prediction'):
     """Plot the linear model defined by `quap`.
 
@@ -849,6 +849,7 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
         xe = fit_x
         mu_samp = fit_y
 
+    # TODO expect xarray with dimension 'draw'
     # Compute mean and error
     mu_mean = mu_samp.mean(axis=1)
     mu_pi = percentiles(mu_samp, q=q, axis=1)  # 0.89 default
@@ -858,9 +859,14 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
         mu_mean = unstandardize(mu_mean, data[y])
         mu_pi = unstandardize(mu_pi, data[y])
 
+    # TODO update "pop" calls by defining default dicts, then d.update(kwargs)?
     # Make the plot
     if data is not None:
-        ax.scatter(x, y, data=data, alpha=0.4)
+        ax.scatter(
+            x, y, data=data, 
+            alpha=marker_kws.pop('alpha', 0.4),
+            **marker_kws
+        )
     ax.plot(xe, mu_mean, label=label,
             c=line_kws.pop('color', line_kws.pop('c', 'C0')), **line_kws)
     ax.fill_between(xe, mu_pi[0], mu_pi[1],
