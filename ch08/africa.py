@@ -146,10 +146,8 @@ ax.set(title=(r'$\alpha \sim \mathcal{N}(1, 1)$'
        ylim=(0.5, 1.5))
 
 # Print proportion of slopes > 0.6 (maximum reasonable) (R code 8.4)
-print(
-    "Slopes > 0.6: "
-    f"{float(np.sum(np.abs(idata_w.prior['β']) > 0.6) / idata_w.prior['β'].size)}"
-)
+props = np.sum(np.abs(idata_w.prior['β']) > 0.6) / idata_w.prior['β'].size
+print(f"Slopes > 0.6: {props:.2f}")
 
 # Plot better priors (R code 8.5)
 m8_1 = gdp_model(data=dA1, α_std=0.1, β_std=0.3)
@@ -352,8 +350,10 @@ fig.suptitle('m8.5 - intercept and slope varies')
 
 gs = fig.add_gridspec(nrows=1, ncols=2)
 
-for is_Africa in [1, 0]:
-    ax = fig.add_subplot(gs[is_Africa])
+sharey = None
+for is_Africa in [0, 1]:
+    ax = fig.add_subplot(gs[~is_Africa], sharey=sharey)
+    sharey = ax
     plot_linear_model(m8_5, is_Africa, ax=ax)
 
     title = 'African Nations'
@@ -363,7 +363,8 @@ for is_Africa in [1, 0]:
            xlabel='ruggedness [std]',
            ylabel='log GDP (prop. of mean)')
 
-    # TODO label individual points with country names
+    # Label countries manually since there does not seem to be a clear method
+    # to the madness.
     if is_Africa:
         countries = [
             'Equatorial Guinea',
@@ -395,6 +396,40 @@ for is_Africa in [1, 0]:
             va='bottom',
         )
 
+# Plot ruggedness vs expected difference in log GDP (R code 8.18)
+μ_A = sts.lmeval(
+    m8_5,
+    out=m8_5.model.μ,
+    eval_at={
+        'ind': rugged_seq,
+        'cid': np.ones_like(rugged_seq).astype(int)
+    }
+)
+
+μ_N = sts.lmeval(
+    m8_5,
+    out=m8_5.model.μ,
+    eval_at={
+        'ind': rugged_seq,
+        'cid': np.zeros_like(rugged_seq).astype(int)
+    }
+)
+
+# Difference in the means
+Δ_μ = μ_A - μ_N
+Δ_pi = sts.percentiles(Δ_μ, q=0.97, axis=1)
+
+fig, ax = plt.subplots(num=4, clear=True, constrained_layout=True)
+ax.axhline(0, c='k', ls='--', lw=1)
+ax.plot(rugged_seq, Δ_μ.mean('draw'), 'k-')
+ax.fill_between(rugged_seq, Δ_pi[0], Δ_pi[1],
+                alpha=0.2, facecolor='k', interpolate=True)
+ax.text(0, +0.01, 'Africa higher GDP', ha='left', va='bottom')
+ax.text(0, -0.01, 'Africa higher GDP', ha='left', va='top')
+ax.set(xlabel='ruggedness [std]',
+       ylabel='expected difference in log GDP',
+       xlim=(-0.05, 1.05))
+ax.spines[['right', 'top']].set_visible(False)
 
 plt.ion()
 plt.show()
