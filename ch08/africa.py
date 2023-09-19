@@ -102,14 +102,14 @@ dA0 = df.loc[df['cont_africa'] == 0]
 #         Model African and non-African countries separately
 # -----------------------------------------------------------------------------
 # (R code 8.2)
-def gdp_model(x='rugged_std', y='log_GDP_std', data=df, a_std=1, b_std=1):
+def gdp_model(x='rugged_std', y='log_GDP_std', data=df, α_std=1, β_std=1):
     """Create a model of log GDP vs ruggedness of terrain."""
     with pm.Model():
         ind = pm.MutableData('ind', data[x])
         obs = pm.MutableData('obs', data[y])
-        a = pm.Normal('a', 1, a_std)
-        b = pm.Normal('b', 0, b_std)
-        μ = pm.Deterministic('μ', a + b * (ind - data[x].mean()))
+        α = pm.Normal('α', 1, α_std)
+        β = pm.Normal('β', 0, β_std)
+        μ = pm.Deterministic('μ', α + β * (ind - data[x].mean()))
         σ = pm.Exponential('σ', 1)
         y = pm.Normal('y', μ, σ, observed=obs, shape=ind.shape)
         return sts.quap(data=data)
@@ -125,6 +125,7 @@ with m8_1_weak.model:
     pm.set_data({'ind': rs})
     idata_w = pm.sample_prior_predictive(N_lines)
 
+# Figure 8.3
 fig = plt.figure(1, clear=True, constrained_layout=True)
 fig.set_size_inches((10, 5), forward=True)
 gs = fig.add_gridspec(ncols=2)
@@ -136,9 +137,9 @@ ax.axhline(df['log_GDP_std'].max(), c='k', ls='--', lw=1)
 
 ax.plot(rs, idata_w.prior['μ'].mean('chain').T, c='k', alpha=0.3)
 
-ax.set(title=(r'$a \sim \mathcal{N}(1, 1)$'
+ax.set(title=(r'$\alpha \sim \mathcal{N}(1, 1)$'
               '\n'
-              r'$b \sim \mathcal{N}(0, 1)$'),
+              r'$\beta \sim \mathcal{N}(0, 1)$'),
        xlabel='ruggedness',
        ylabel='log GDP (prop. of mean)',
        xlim=(0, 1),
@@ -147,11 +148,11 @@ ax.set(title=(r'$a \sim \mathcal{N}(1, 1)$'
 # Print proportion of slopes > 0.6 (maximum reasonable) (R code 8.4)
 print(
     "Slopes > 0.6: "
-    f"{float(np.sum(np.abs(idata_w.prior['b']) > 0.6) / idata_w.prior['b'].size)}"
+    f"{float(np.sum(np.abs(idata_w.prior['β']) > 0.6) / idata_w.prior['β'].size)}"
 )
 
 # Plot better priors (R code 8.5)
-m8_1 = gdp_model(data=dA1, a_std=0.1, b_std=0.3)
+m8_1 = gdp_model(data=dA1, α_std=0.1, β_std=0.3)
 with m8_1.model:
     pm.set_data({'ind': rs})
     idata = pm.sample_prior_predictive(N_lines)
@@ -163,41 +164,41 @@ ax.axhline(df['log_GDP_std'].max(), c='k', ls='--', lw=1)
 
 ax.plot(rs, idata.prior['μ'].mean('chain').T, c='k', alpha=0.3)
 
-ax.set(title=(r'$a \sim \mathcal{N}(1, 0.1)$'
+ax.set(title=(r'$\alpha \sim \mathcal{N}(1, 0.1)$'
               '\n'
-              r'$b \sim \mathcal{N}(0, 0.3)$'),
+              r'$\beta \sim \mathcal{N}(0, 0.3)$'),
        xlabel='ruggedness')
 ax.tick_params(axis='y', left=False, labelleft=False)
 
 # Non-African nations (R code 8.6)
-m8_2 = gdp_model(data=dA0, a_std=0.1, b_std=0.25)
+m8_2 = gdp_model(data=dA0, α_std=0.1, β_std=0.25)
 
 # See difference
 print('m8.1:')
 sts.precis(m8_1)
 #     mean    std   5.5%  94.5%
-# a 0.8817 0.0148 0.8580 0.9053
-# b 0.1309 0.0713 0.0170 0.2448     ** positive slope
+# α 0.8817 0.0148 0.8580 0.9053
+# β 0.1309 0.0713 0.0170 0.2448     ** positive slope
 # σ 0.1048 0.0106 0.0879 0.1217
 
 print('m8.2:')
 sts.precis(m8_2)
 #      mean    std    5.5%   94.5%
-# a  1.0485 0.0101  1.0324  1.0646
-# b -0.1405 0.0552 -0.2287 -0.0523  ** negative slope
+# α  1.0485 0.0101  1.0324  1.0646
+# β -0.1405 0.0552 -0.2287 -0.0523  ** negative slope
 # σ  0.1113 0.0071  0.0999  0.1227
 
 # -----------------------------------------------------------------------------
 #         Model the entire dataset (R code 8.7)
 # -----------------------------------------------------------------------------
-m8_3 = gdp_model(data=df, a_std=0.1, b_std=0.3)
+m8_3 = gdp_model(data=df, α_std=0.1, β_std=0.3)
 
 print('m8.3:')
 sts.precis(m8_3)
 
 #     mean    std    5.5%  94.5%
-# a 1.0000 0.0104  0.9834 1.0166
-# b 0.0020 0.0548 -0.0856 0.0896
+# α 1.0000 0.0104  0.9834 1.0166
+# β 0.0020 0.0548 -0.0856 0.0896
 # σ 0.1365 0.0074  0.1247 0.1483
 
 # Make another model with an indicator variable for the intercept (R code 8.8)
@@ -209,9 +210,9 @@ with pm.Model():
     ind = pm.MutableData('ind', df[x])
     obs = pm.MutableData('obs', df[y])
     cid = pm.MutableData('cid', df['cid'])
-    a = pm.Normal('a', 1, a_std, shape=(2,))
-    b = pm.Normal('b', 0, b_std)
-    μ = pm.Deterministic('μ', a[cid] + b * (ind - df[x].mean()))
+    α = pm.Normal('α', 1, a_std, shape=(2,))
+    β = pm.Normal('β', 0, b_std)
+    μ = pm.Deterministic('μ', α[cid] + β * (ind - df[x].mean()))
     σ = pm.Exponential('σ', 1)
     y = pm.Normal('y', μ, σ, observed=obs, shape=ind.shape)
     m8_4 = sts.quap(data=df)
@@ -230,9 +231,9 @@ print('m8.4:')
 sts.precis(m8_4)
 
 #         mean    std    5.5%  94.5%
-# a__0  1.0492 0.0102  1.0329 1.0654  # not Africa
-# a__1  0.8804 0.0159  0.8549 0.9059  # Africa
-# b    -0.0465 0.0457 -0.1195 0.0265
+# α__0  1.0492 0.0102  1.0329 1.0654  # not Africa
+# α__1  0.8804 0.0159  0.8549 0.9059  # Africa
+# β    -0.0465 0.0457 -0.1195 0.0265
 # σ     0.1124 0.0061  0.1027 0.1221
 
 # Plot posterior predictions (R code 8.12)
