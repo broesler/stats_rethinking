@@ -13,14 +13,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import xarray as xr
 
 from pathlib import Path
-from scipy import stats
 
 import stats_rethinking as sts
 
-# R code 8.1
+# plt.style.use('seaborn-v0_8-darkgrid')
+
+# Get the data (R code 8.1)
 df = pd.read_csv(Path('../data/rugged.csv'))
 
 # >>> df.info()
@@ -98,20 +98,189 @@ dA1 = df.loc[df['cont_africa'] == 1]
 dA0 = df.loc[df['cont_africa'] == 0]
 
 
-def gdp_model(x='rugged_std', y='log_GDP_std', data=df):
+# -----------------------------------------------------------------------------
+#         Model African and non-African countries separately
+# -----------------------------------------------------------------------------
+# (R code 8.2)
+def gdp_model(x='rugged_std', y='log_GDP_std', data=df, a_std=1, b_std=1):
     """Create a model of log GDP vs ruggedness of terrain."""
     with pm.Model():
         ind = pm.MutableData('ind', data[x])
         obs = pm.MutableData('obs', data[y])
-        a = pm.Normal('a', 1, 1)
-        b = pm.Normal('b', 0, 1)
+        a = pm.Normal('a', 1, a_std)
+        b = pm.Normal('b', 0, b_std)
         μ = pm.Deterministic('μ', a + b * (ind - data[x].mean()))
         σ = pm.Exponential('σ', 1)
-        y = pm.Normal('y', μ, σ, observed=obs)
+        y = pm.Normal('y', μ, σ, observed=obs, shape=ind.shape)
         return sts.quap(data=data)
 
+
 # Model of African countries
-m8_1 = gdp_model(data=dA1)
+m8_1_weak = gdp_model(data=dA1)
+
+# Plot the prior predictive (R code 8.3)
+N_lines = 50
+rs = np.r_[-0.1, 1.1]
+with m8_1_weak.model:
+    pm.set_data({'ind': rs})
+    idata_w = pm.sample_prior_predictive(N_lines)
+
+fig = plt.figure(1, clear=True, constrained_layout=True)
+fig.set_size_inches((10, 5), forward=True)
+gs = fig.add_gridspec(ncols=2)
+ax = fig.add_subplot(gs[0])
+
+# Plot poor priors
+ax.axhline(df['log_GDP_std'].min(), c='k', ls='--', lw=1)
+ax.axhline(df['log_GDP_std'].max(), c='k', ls='--', lw=1)
+
+ax.plot(rs, idata_w.prior['μ'].mean('chain').T, c='k', alpha=0.3)
+
+ax.set(title=(r'$a \sim \mathcal{N}(1, 1)$'
+              '\n'
+              r'$b \sim \mathcal{N}(0, 1)$'),
+       xlabel='ruggedness',
+       ylabel='log GDP (prop. of mean)',
+       xlim=(0, 1),
+       ylim=(0.5, 1.5))
+
+# Print proportion of slopes > 0.6 (maximum reasonable) (R code 8.4)
+print(
+    "Slopes > 0.6: "
+    f"{float(np.sum(np.abs(idata_w.prior['b']) > 0.6) / idata_w.prior['b'].size)}"
+)
+
+# Plot better priors (R code 8.5)
+m8_1 = gdp_model(data=dA1, a_std=0.1, b_std=0.3)
+with m8_1.model:
+    pm.set_data({'ind': rs})
+    idata = pm.sample_prior_predictive(N_lines)
+
+ax = fig.add_subplot(gs[1], sharex=ax, sharey=ax)
+
+ax.axhline(df['log_GDP_std'].min(), c='k', ls='--', lw=1)
+ax.axhline(df['log_GDP_std'].max(), c='k', ls='--', lw=1)
+
+ax.plot(rs, idata.prior['μ'].mean('chain').T, c='k', alpha=0.3)
+
+ax.set(title=(r'$a \sim \mathcal{N}(1, 0.1)$'
+              '\n'
+              r'$b \sim \mathcal{N}(0, 0.3)$'),
+       xlabel='ruggedness')
+ax.tick_params(axis='y', left=False, labelleft=False)
+
+# Non-African nations (R code 8.6)
+m8_2 = gdp_model(data=dA0, a_std=0.1, b_std=0.25)
+
+# See difference
+print('m8.1:')
+sts.precis(m8_1)
+#     mean    std   5.5%  94.5%
+# a 0.8817 0.0148 0.8580 0.9053
+# b 0.1309 0.0713 0.0170 0.2448     ** positive slope
+# σ 0.1048 0.0106 0.0879 0.1217
+
+print('m8.2:')
+sts.precis(m8_2)
+#      mean    std    5.5%   94.5%
+# a  1.0485 0.0101  1.0324  1.0646
+# b -0.1405 0.0552 -0.2287 -0.0523  ** negative slope
+# σ  0.1113 0.0071  0.0999  0.1227
+
+# -----------------------------------------------------------------------------
+#         Model the entire dataset (R code 8.7)
+# -----------------------------------------------------------------------------
+m8_3 = gdp_model(data=df, a_std=0.1, b_std=0.3)
+
+print('m8.3:')
+sts.precis(m8_3)
+
+#     mean    std    5.5%  94.5%
+# a 1.0000 0.0104  0.9834 1.0166
+# b 0.0020 0.0548 -0.0856 0.0896
+# σ 0.1365 0.0074  0.1247 0.1483
+
+# Make another model with an indicator variable for the intercept (R code 8.8)
+df['cid'] = (df['cont_africa'] == 1).astype(int)
+
+with pm.Model():
+    x, y = 'rugged_std', 'log_GDP_std'
+    a_std, b_std = 0.1, 0.3
+    ind = pm.MutableData('ind', df[x])
+    obs = pm.MutableData('obs', df[y])
+    cid = pm.MutableData('cid', df['cid'])
+    a = pm.Normal('a', 1, a_std, shape=(2,))
+    b = pm.Normal('b', 0, b_std)
+    μ = pm.Deterministic('μ', a[cid] + b * (ind - df[x].mean()))
+    σ = pm.Exponential('σ', 1)
+    y = pm.Normal('y', μ, σ, observed=obs, shape=ind.shape)
+    m8_4 = sts.quap(data=df)
+
+# (R code 8.10)
+ct = sts.compare(models=[m8_3, m8_4], mnames=['m8.3', 'm8.4'])['ct']
+print('m8.3 vs m8.4:')
+print(ct.xs('y'))
+#          WAIC     SE  dWAIC    dSE  penalty    weight
+# model
+# m8.3  -188.93  13.24  62.77  14.99     2.60  2.34e-14
+# m8.4  -251.70  15.48   0.00    NaN     4.56  1.00e+00
+
+# (R code 8.11)
+print('m8.4:')
+sts.precis(m8_4)
+
+#         mean    std    5.5%  94.5%
+# a__0  1.0492 0.0102  1.0329 1.0654  # not Africa
+# a__1  0.8804 0.0159  0.8549 0.9059  # Africa
+# b    -0.0465 0.0457 -0.1195 0.0265
+# σ     0.1124 0.0061  0.1027 0.1221
+
+# Plot posterior predictions (R code 8.12)
+rugged_seq = np.linspace(-0.1, 1.1, 30)
+
+fig, ax = plt.subplots(num=2, clear=True, constrained_layout=True)
+
+# Plot *not* Africa
+for is_Africa in [0, 1]:
+    if is_Africa:
+        cid = np.ones_like(rugged_seq).astype(int)
+        c = fc = 'C0'
+        label = 'Africa'
+    else:
+        cid = np.zeros_like(rugged_seq).astype(int)
+        c = 'k'
+        fc = 'none'
+        label = 'Not Africa'
+    # NOTE explicitly evaluate the model, because lmplot expects the `x` kwarg
+    # to be the same as the name of the independent variable in the model. In
+    # this case, 'ind' ≠ 'rugged_std', so we get an error.
+    mu_samp = sts.lmeval(
+        m8_4,
+        out=m8_4.model.μ,
+        eval_at={'ind': rugged_seq, 'cid': cid},
+    )
+    sts.lmplot(
+        fit_x=rugged_seq, fit_y=mu_samp,
+        x='rugged_std', y='log_GDP_std', data=df.loc[df['cid'] == is_Africa],
+        q=0.97,
+        line_kws=dict(c=c),
+        fill_kws=dict(facecolor=c),
+        marker_kws=dict(edgecolor=c, facecolor=fc, lw=2),
+        label=label,
+        ax=ax,
+    )
+    ax.text(
+        x=0.8, 
+        y=1.02*mu_samp.mean('draw')[int(0.8*len(mu_samp))],
+        s=label,
+        c=c
+    )
+
+ax.spines[['right', 'top']].set_visible(False)
+ax.set(title='m8.4',
+       xlabel='ruggedness',
+       ylabel='log GDP (prop. of mean)')
+
 
 plt.ion()
 plt.show()
