@@ -239,10 +239,12 @@ sts.precis(m8_4)
 # Plot posterior predictions (R code 8.12)
 rugged_seq = np.linspace(-0.1, 1.1, 30)
 
-fig, ax = plt.subplots(num=2, clear=True, constrained_layout=True)
 
-# Plot *not* Africa
-for is_Africa in [0, 1]:
+def plot_linear_model(quap, is_Africa=True, annotate_lines=False, ax=None):
+    """Plot the data and associated model."""
+    if ax is None:
+        ax = plt.gca()
+
     if is_Africa:
         cid = np.ones_like(rugged_seq).astype(int)
         c = fc = 'C0'
@@ -252,14 +254,16 @@ for is_Africa in [0, 1]:
         c = 'k'
         fc = 'none'
         label = 'Not Africa'
+
     # NOTE explicitly evaluate the model, because lmplot expects the `x` kwarg
     # to be the same as the name of the independent variable in the model. In
     # this case, 'ind' ≠ 'rugged_std', so we get an error.
     mu_samp = sts.lmeval(
-        m8_4,
-        out=m8_4.model.μ,
+        quap,
+        out=quap.model.μ,
         eval_at={'ind': rugged_seq, 'cid': cid},
     )
+
     sts.lmplot(
         fit_x=rugged_seq, fit_y=mu_samp,
         x='rugged_std', y='log_GDP_std', data=df.loc[df['cid'] == is_Africa],
@@ -270,15 +274,29 @@ for is_Africa in [0, 1]:
         label=label,
         ax=ax,
     )
-    ax.text(
-        x=0.8, 
-        y=1.02*mu_samp.mean('draw')[int(0.8*len(mu_samp))],
-        s=label,
-        c=c
-    )
 
-ax.spines[['right', 'top']].set_visible(False)
-ax.set(title='m8.4',
+    # Annotate lines
+    if annotate_lines:
+        ax.text(
+            x=0.8,
+            y=1.02*mu_samp.mean('draw')[int(0.8*len(mu_samp))],
+            s=label,
+            c=c
+        )
+
+    ax.spines[['right', 'top']].set_visible(False)
+
+    return ax
+
+
+# Figure 8.4
+fig, ax = plt.subplots(num=2, clear=True, constrained_layout=True)
+
+# Plot Africa vs not Africa
+for is_Africa in [0, 1]:
+    plot_linear_model(m8_4, is_Africa, annotate_lines=True, ax=ax)
+
+ax.set(title='m8.4 - only intercept varies',
        xlabel='ruggedness',
        ylabel='log GDP (prop. of mean)')
 
