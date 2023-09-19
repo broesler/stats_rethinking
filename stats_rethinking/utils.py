@@ -1673,7 +1673,6 @@ def DIC(model, post=None, Ns=1000):
     return dict({'dic': dev_hat + 2*pD, 'pD': pD})
 
 
-# TODO return a dataframe when pointwise=True, Series otherwise?
 def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
          Ns=1000, pointwise=False):
     r"""Compute the Widely Applicable Information Criteria for the model.
@@ -1745,11 +1744,15 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
         waic_vec = -2 * (the_lppd[v] - penalty)
         n_cases = loglik[v].shape[1]
         std_err = (n_cases * np.var(waic_vec))**0.5
+
         if pointwise:
             lppd_w, w, p = the_lppd[v], waic_vec, penalty
         else:
             lppd_w, w, p = the_lppd[v].sum(), waic_vec.sum(), penalty.sum()
-        out[v] = dict(WAIC=w, lppd=lppd_w, penalty=p, SE=std_err)
+
+        d = dict(WAIC=w, lppd=lppd_w, penalty=p, SE=std_err)
+        out[v] = pd.DataFrame(d) if pointwise else pd.Series(d)
+
     return out
 
 
@@ -1805,12 +1808,14 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
             loo = az.loo(idata, pointwise=pointwise, var_name=v)
 
         elpd = loo.loo_i if pointwise else loo.elpd_loo
-        out[v] = dict(
+        d = dict(
             PSIS=-2*elpd,       # == loo_list$estimates['looic', 'Estimate']
             lppd=elpd,
             penalty=loo.p_loo,  # == loo_list$p_loo
             SE=2*loo.se,        # == loo_list$estimates['looic', 'SE']
         )
+        out[v] = pd.DataFrame(d) if pointwise else pd.Series(d)
+
     return out
 
 
