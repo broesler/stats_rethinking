@@ -1417,7 +1417,8 @@ def frame_to_dataset(df, model=None):
     the_dict = dict()
     for v in var_names:
         # Add 'chain' dimension to match expected shape
-        the_dict[v] = np.expand_dims(df.filter(like=v).values, 0)
+        cols = df.filter(regex=f"^{v}(__\d+)?$")
+        the_dict[v] = np.expand_dims(cols.values, 0)
     ds = az.convert_to_dataset(the_dict)
     # Remove dims for scalar variables with shape ()
     shapes = model.eval_rv_shapes()
