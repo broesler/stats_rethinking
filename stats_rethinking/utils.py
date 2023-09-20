@@ -729,11 +729,11 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     )
 
     # Manual loop since params are 0-D variables in the model.
-    cols = []
-    for i in range(dist.sizes['draw']):
-        # Ensure shape of given values matches that of the model variable
-        param_vals = {v.name: dist[v.name].isel(draw=i) for v in params}
-        cols.append(out_func(param_vals))
+    # TODO directly allocate/store in an array (draw, out.shape)
+    cols = [
+        out_func({v.name: dist[v.name].isel(draw=i) for v in params})
+        for i in range(dist.sizes['draw'])
+    ]
 
     # Return a DataArray for named dimensions.
     out_samp = np.array(cols).T  # params as columns
