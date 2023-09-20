@@ -513,6 +513,14 @@ class Quap():
         df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
         return frame_to_dataset(df, model=self.model).mean('chain')
 
+    def sample_prior(self, N=10_000):
+        """Sample the prior distribution.
+
+        Analagous to `rethinking::extract.prior`.
+        """
+        idata = pm.sample_prior_predictive(samples=N, model=self.model)
+        return idata.prior.mean('chain')
+
     def deviance(self):
         """Return the deviance of the model."""
         return -2 * self.loglik
