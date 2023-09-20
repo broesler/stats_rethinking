@@ -454,7 +454,6 @@ def sparklines_from_array(arr, width=12):
 # * can require kwargs on __init__, then use those values to compute self._std,
 #   etc. so that the property just returns that value without doing
 #   a computation each time it is called.
-# * implement DIC, WAIC, LOOIC, etc. methods
 
 class Quap():
     """The quadratic (*i.e.* Gaussian) approximation of the posterior.
@@ -704,11 +703,12 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         model. Keys must be strings of variable names, and values must be
         array-like, with dimension equivalent to the corresponding variable
         definition in the model.
-    dist : dict or DataFrame
+    dist : dict or DataFrame, default None.
         A dict or DataFrame containing samples of the distribution of the
-        `params` as values/columns.
+        `params` as values/columns. If `dist` is None, the posterior
+        distribution will be used.
     N : int
-        If `dist` is None, number of samples to take from `dist`
+        If `dist` is None, number of samples to take from `dist`.
 
     Returns
     -------
@@ -744,7 +744,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         ),
         dtype=np.dtype((float, out.shape.eval())),
         count=dist.sizes['draw'],
-    ).T  # params as columns
+    ).T  # (out.shape, draw)
 
     # Return a DataArray for named dimensions.
     return xr.DataArray(
@@ -873,7 +873,7 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     # Make the plot
     if data is not None:
         ax.scatter(
-            x, y, data=data, 
+            x, y, data=data,
             alpha=marker_kws.pop('alpha', 0.4),
             **marker_kws
         )
@@ -1682,7 +1682,6 @@ def DIC(model, post=None, Ns=1000):
     dev_hat = model.deviance
     pD = dev.mean() - dev_hat
     return dict({'dic': dev_hat + 2*pD, 'pD': pD})
-
 
 def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
          Ns=1000, pointwise=False):
