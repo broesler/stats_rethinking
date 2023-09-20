@@ -133,8 +133,8 @@ fig = plt.figure(1, clear=True, constrained_layout=True)
 fig.set_size_inches((10, 3*len(models)), forward=True)
 subfigs = fig.subfigures(len(models), 1)
 
-for subfig, model, mname in zip(subfigs, models, mnames):
-    plot_triptych(model, subfig)
+for subfig, quap, mname in zip(subfigs, models, mnames):
+    plot_triptych(quap, subfig)
     subfig.suptitle(mname)
 
 # Plot prior predictive simulations as well (R code 8.26)
@@ -142,17 +142,13 @@ fig = plt.figure(2, clear=True, constrained_layout=True)
 fig.set_size_inches((10, 3*len(models)), forward=True)
 subfigs = fig.subfigures(len(models), 1)
 
-for subfig, model, mname in zip(subfigs, models, mnames):
-    # Reset the data to the training data
-    with model.model:
-        pm.set_data({'shade': model.data['shade_cent'],
-                     'water': model.data['water_cent']})
-    prior = (
-        pm.sample_prior_predictive(samples=20, model=model.model)
-        .prior
-        .mean('chain')
-    )
-    plot_triptych(model, subfig, dist=prior, plot_bounds=True)
+for subfig, quap, mname in zip(subfigs, models, mnames):
+    # Reset the data to the training data before sampling the prior
+    with quap.model:
+        pm.set_data({'shade': quap.data['shade_cent'],
+                     'water': quap.data['water_cent']})
+    prior = quap.sample_prior(20)
+    plot_triptych(quap, subfig, dist=prior, plot_bounds=True)
     subfig.suptitle(mname)
 
 
