@@ -79,39 +79,64 @@ with pm.Model():
 print('m8.7:')
 sts.precis(m8_7)
 
-# Plot a triptych of shade values (R code 8.25)
-N_lines = 20
 
-# TODO refactor to plot m8.7 in the same figure
+# -----------------------------------------------------------------------------
+#         Plot a triptych of shade values for the posterior (R code 8.25)
+# -----------------------------------------------------------------------------
+def plot_triptych(model, fig, N_lines=20):
+    """Plot a triptych over model parameters."""
+    gs = fig.add_gridspec(ncols=3)
+    sharex = sharey = None
+    vals = np.arange(-1, 2)
+
+    for i, s in enumerate(vals):
+        ax = fig.add_subplot(gs[i], sharex=sharex, sharey=sharey)
+        sharex = sharey = ax
+
+        ax.scatter(
+            x='water_cent',
+            y='blooms_std',
+            data=df[df['shade_cent'] == s],
+            c='C0',
+            alpha=0.4
+        )
+
+        mu_samp = sts.lmeval(
+            model,
+            out=model.model.μ,
+            eval_at={'shade': s * np.ones(3), 'water': vals},
+            N=N_lines,
+        )
+
+        ax.plot(vals, mu_samp, c='k', alpha=0.3)
+
+        ax.set(title=f"shade = {s}",
+               xlabel='water')
+        ax.set_xticks(vals)
+        ax.set_yticks([0, 0.5, 1])
+
+        if i == 0:
+            ax.set_ylabel('blooms')
+        else:
+            ax.tick_params(axis='y', left=False, labelleft=False)
+
+        ax.spines[['right', 'top']].set_visible(False)
+
+    return ax
+
+
+# Figure 8.7
 fig = plt.figure(1, clear=True, constrained_layout=True)
-gs = fig.add_gridspec(nrows=1, ncols=3)
 
-model = m8_6
-sharex = sharey = None
-vals = np.arange(-1, 2)
-for i, s in enumerate(range(-1, 2)):
-    ax = fig.add_subplot(gs[i], sharex=sharex, sharey=sharey)
-    sharex = sharey = ax
-    ax.scatter('water_cent', 'blooms_std', data=df[df['shade_cent'] == s],
-               c='C0', alpha=0.4)
-    mu_samp = sts.lmeval(
-        model,
-        out=model.model.μ,
-        eval_at={'shade': s * np.ones(3), 'water': vals},
-        N=N_lines,
-    )
-    ax.plot(vals, mu_samp, c='k', alpha=0.3)
-    ax.set(title=f"shade = {s}",
-           xlabel='water')
-    ax.set_xticks(vals)
-    ax.set_yticks([0, 0.5, 1])
-    if i == 0:
-        ax.set_ylabel('blooms')
-    else:
-        ax.tick_params(axis='y', left=False, labelleft=False)
-    ax.spines[['right', 'top']].set_visible(False)
-    fig.suptitle('m8.6')
+models = [m8_6, m8_7]
+mnames = ['m8.6 - no interaction', 'm8.7 - water + shade interaction']
 
+fig.set_size_inches((10, 3*len(models)), forward=True)
+subfigs = fig.subfigures(len(models), 1)
+
+for subfig, model, mname in zip(subfigs, models, mnames):
+    plot_triptych(model, subfig)
+    subfig.suptitle(mname)
 
 # =============================================================================
 # =============================================================================
