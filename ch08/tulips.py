@@ -83,16 +83,12 @@ sts.precis(m8_7)
 # -----------------------------------------------------------------------------
 #         Plot a triptych of shade values for the posterior (R code 8.25)
 # -----------------------------------------------------------------------------
-def plot_triptych(model, fig, N_lines=20):
+def plot_triptych(model, fig, /, dist=None, N_lines=20, plot_bounds=False):
     """Plot a triptych over model parameters."""
-    gs = fig.add_gridspec(ncols=3)
-    sharex = sharey = None
+    axs = fig.subplots(ncols=3, sharex=True, sharey=True)
     vals = np.arange(-1, 2)
 
-    for i, s in enumerate(vals):
-        ax = fig.add_subplot(gs[i], sharex=sharex, sharey=sharey)
-        sharex = sharey = ax
-
+    for ax, s in zip(axs, vals):
         ax.scatter(
             x='water_cent',
             y='blooms_std',
@@ -104,21 +100,25 @@ def plot_triptych(model, fig, N_lines=20):
         mu_samp = sts.lmeval(
             model,
             out=model.model.μ,
-            eval_at={'shade': s * np.ones(3), 'water': vals},
+            eval_at={'shade': s * np.ones_like(vals), 'water': vals},
+            dist=dist,
             N=N_lines,
         )
+
+        if plot_bounds:
+            ax.axhline(0, c='k', ls='--', lw=1)
+            ax.axhline(1, c='k', ls='--', lw=1)
 
         ax.plot(vals, mu_samp, c='k', alpha=0.3)
 
         ax.set(title=f"shade = {s}",
-               xlabel='water')
-        ax.set_xticks(vals)
-        ax.set_yticks([0, 0.5, 1])
+               xlabel='water',
+               xticks=vals,
+               yticks=[0, 0.5, 1])
 
-        if i == 0:
+        ss = ax.get_subplotspec()
+        if ss.is_first_col():
             ax.set_ylabel('blooms')
-        else:
-            ax.tick_params(axis='y', left=False, labelleft=False)
 
         ax.spines[['right', 'top']].set_visible(False)
 
@@ -126,17 +126,35 @@ def plot_triptych(model, fig, N_lines=20):
 
 
 # Figure 8.7
-fig = plt.figure(1, clear=True, constrained_layout=True)
-
 models = [m8_6, m8_7]
 mnames = ['m8.6 - no interaction', 'm8.7 - water + shade interaction']
 
+fig = plt.figure(1, clear=True, constrained_layout=True)
 fig.set_size_inches((10, 3*len(models)), forward=True)
 subfigs = fig.subfigures(len(models), 1)
 
 for subfig, model, mname in zip(subfigs, models, mnames):
     plot_triptych(model, subfig)
     subfig.suptitle(mname)
+
+# Plot prior predictive simulations as well (R code 8.26)
+fig = plt.figure(2, clear=True, constrained_layout=True)
+fig.set_size_inches((10, 3*len(models)), forward=True)
+subfigs = fig.subfigures(len(models), 1)
+
+for subfig, model, mname in zip(subfigs, models, mnames):
+    # Reset the data to the training data
+    with model.model:
+        pm.set_data({'shade': model.data['shade_cent'],
+                     'water': model.data['water_cent']})
+    prior = (
+        pm.sample_prior_predictive(samples=20, model=model.model)
+        .prior
+        .mean('chain')
+    )
+    plot_triptych(model, subfig, dist=prior, plot_bounds=True)
+    subfig.suptitle(mname)
+
 
 # =============================================================================
 # =============================================================================
