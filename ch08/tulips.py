@@ -20,7 +20,6 @@ from scipy import stats
 import stats_rethinking as sts
 
 df = pd.read_csv(Path('../data/tulips.csv'))
-df['bed'] = df['bed'].astype('category')
 
 # >>> df.info()
 # <class 'pandas.core.frame.DataFrame'>
