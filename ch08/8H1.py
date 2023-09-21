@@ -9,14 +9,10 @@ Chapter 8, Exercises 8H1 and 8H2.
 """
 # =============================================================================
 
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import pymc as pm
-import xarray as xr
 
 from pathlib import Path
-from scipy import stats
 
 import stats_rethinking as sts
 
@@ -27,7 +23,7 @@ df['blooms_std'] = df['blooms'] / df['blooms'].max()
 df['water_cent'] = df['water'] - df['water'].mean()
 df['shade_cent'] = df['shade'] - df['shade'].mean()
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         8H1. Include `bed` as a predictor
 # -----------------------------------------------------------------------------
 df['bed_cat'] = df['bed'].astype('category')
@@ -44,12 +40,12 @@ with pm.Model():
     βs = pm.Normal('βs', 0, 0.25, shape=(Ncat,))
     βws = pm.Normal('βws', 0, 0.25, shape=(Ncat,))
     μ = pm.Deterministic(
-        'μ', 
+        'μ',
         α[bed] + βw[bed]*water + βs[bed]*shade + βws[bed]*water*shade
     )
     σ = pm.Exponential('σ', 1)
     blooms_std = pm.Normal('blooms_std', μ, σ,
-                           observed=df['blooms_std'], 
+                           observed=df['blooms_std'],
                            shape=water.shape)
     m8_8 = sts.quap(data=df)
 
