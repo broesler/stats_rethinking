@@ -144,13 +144,47 @@ def plot_linear_model(
             c=c
         )
 
+    # Label countries manually since there does not seem to be a clear method
+    # to the madness.
+    if is_Africa:
+        countries = [
+            'Equatorial Guinea',
+            'Seychelles',
+            'South Africa',
+            'Swaziland',
+            'Lesotho',
+            'Rwanda',
+            'Burundi',
+        ]
+    else:
+        countries = [
+            'Luxembourg',
+            'Switzerland',
+            'Greece',
+            'Lebanon',
+            'Nepal',
+            'Tajikistan',
+            'Yemen',
+        ]
+
+    if has_Seychelles:
+        for c in countries:
+            tf = df.loc[df['country'] == c]
+            ax.text(
+                x=float(tf['rugged_std'].iloc[0]) + 0.02,
+                y=float(tf['log_GDP_std'].iloc[0]),
+                s=c,
+                ha='left',
+                va='bottom',
+            )
+
     ax.spines[['right', 'top']].set_visible(False)
 
     return ax
 
 
 # Plot the interaction
-fig = plt.figure(3, clear=True, constrained_layout=True)
+fig = plt.figure(2, clear=True, constrained_layout=True)
 fig.set_size_inches((10, 5), forward=True)
 fig.suptitle('Model with and without Seychelles')
 
@@ -175,39 +209,56 @@ for is_Africa in [False, True]:
            xlabel='ruggedness [std]',
            ylabel='log GDP (prop. of mean)')
 
-    # Label countries manually since there does not seem to be a clear method
-    # to the madness.
-    if is_Africa:
-        countries = [
-            'Equatorial Guinea',
-            'Seychelles',
-            'South Africa',
-            'Swaziland',
-            'Lesotho',
-            'Rwanda',
-            'Burundi',
-        ]
-    else:
-        countries = [
-            'Luxembourg',
-            'Switzerland',
-            'Greece',
-            'Lebanon',
-            'Nepal',
-            'Tajikistan',
-            'Yemen',
-        ]
 
-    for c in countries:
-        tf = df.loc[df['country'] == c]
-        ax.text(
-            x=float(tf['rugged_std'].iloc[0]) + 0.02,
-            y=float(tf['log_GDP_std'].iloc[0]),
-            s=c,
-            ha='left',
-            va='bottom',
-        )
+# ----------------------------------------------------------------------------- 
+#         8H3(c) Model comparison without Seychelles
+# -----------------------------------------------------------------------------
+# TODO justify priors?
+def seychelles_model(opt='rugged'):
+    """Build a model of GDP vs ruggedness without Seychelles.
 
+    Parameters
+    ----------
+    opt : str in 'rugged', 'both', 'interaction'
+        Type of model to build.
+        'rugged' : μ = α + β_R R
+        'both' : μ = α + β_A A + β_R R
+        'interaction' : μ = α + β_A A + β_R R + β_AR A R.
+
+    Returns
+    -------
+    quap : :obj:`Quap`
+        The quadratic approximation to the posterior.
+    """
+    data = df_ns
+    with pm.Model():
+        R = pm.MutableData('R', data['rugged_std'])
+        obs = pm.MutableData('obs', data['log_GDP_std'])
+        α = pm.Normal('α', 1, 0.1)
+        β_R = pm.Normal('β_R', 0, 0.3)
+        if opt in ['both', 'interaction']:
+            A = pm.MutableData('A', data['cont_africa'])
+            β_A = pm.Normal('β_A', 0, 0.3)
+        match opt:
+            case 'rugged':
+                μ = pm.Deterministic('μ', α + β_R*R)
+            case 'both':
+                μ = pm.Deterministic('μ', α + β_A*A + β_R*R)
+            case 'interaction':
+                β_AR = pm.Normal('β_AR', 0, 0.3)
+                μ = pm.Deterministic('μ', α + β_A*A + β_R*R + β_AR*A*R)
+        σ = pm.Exponential('σ', 1)
+        y = pm.Normal('y', μ, σ, observed=obs, shape=R.shape)
+        return sts.quap(data=data)
+
+
+mnames = ['rugged', 'both', 'interaction']
+m1, m2, m3 = (seychelles_model(x) for x in mnames)
+
+cmp = sts.compare([m1, m2, m3], mnames)
+sts.plot_compare(cmp['ct'], fignum=3)
+
+# TODO plot each of the models using plot_linear_model. Need kwargs for color.
 
 plt.ion()
 plt.show()
