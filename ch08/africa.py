@@ -199,18 +199,19 @@ sts.precis(m8_3)
 # β 0.0020 0.0548 -0.0856 0.0896
 # σ 0.1365 0.0074  0.1247 0.1483
 
+# NOTE Q: how is splitting the data in 2 sets different from using an index
+# variable that effectively splits the data in 2 sets?
+
 # Make another model with an indicator variable for the intercept (R code 8.8)
 df['cid'] = (df['cont_africa'] == 1).astype(int)
 
 with pm.Model():
-    x, y = 'rugged_std', 'log_GDP_std'
-    a_std, b_std = 0.1, 0.3
-    ind = pm.MutableData('ind', df[x])
-    obs = pm.MutableData('obs', df[y])
+    ind = pm.MutableData('ind', df['rugged_std'])
+    obs = pm.MutableData('obs', df['log_GDP_std'])
     cid = pm.MutableData('cid', df['cid'])
-    α = pm.Normal('α', 1, a_std, shape=(2,))
-    β = pm.Normal('β', 0, b_std)
-    μ = pm.Deterministic('μ', α[cid] + β * (ind - df[x].mean()))
+    α = pm.Normal('α', 1, 0.1, shape=(2,))
+    β = pm.Normal('β', 0, 0.3)
+    μ = pm.Deterministic('μ', α[cid] + β * (ind - df['rugged_std'].mean()))
     σ = pm.Exponential('σ', 1)
     y = pm.Normal('y', μ, σ, observed=obs, shape=ind.shape)
     m8_4 = sts.quap(data=df)
@@ -303,14 +304,12 @@ ax.set(title='m8.4 - only intercept varies',
 #         Model the interaction between R and C (R code 8.13)
 # -----------------------------------------------------------------------------
 with pm.Model():
-    x, y = 'rugged_std', 'log_GDP_std'
-    a_std, b_std = 0.1, 0.3
-    ind = pm.MutableData('ind', df[x])
-    obs = pm.MutableData('obs', df[y])
+    ind = pm.MutableData('ind', df['rugged_std'])
+    obs = pm.MutableData('obs', df['log_GDP_std'])
     cid = pm.MutableData('cid', df['cid'])
-    α = pm.Normal('α', 1, a_std, shape=(2,))
-    β = pm.Normal('β', 0, b_std, shape=(2,))
-    μ = pm.Deterministic('μ', α[cid] + β[cid] * (ind - df[x].mean()))
+    α = pm.Normal('α', 1, 0.1, shape=(2,))
+    β = pm.Normal('β', 0, 0.3, shape=(2,))
+    μ = pm.Deterministic('μ', α[cid] + β[cid]*(ind - df['rugged_std'].mean()))
     σ = pm.Exponential('σ', 1)
     y = pm.Normal('y', μ, σ, observed=obs, shape=ind.shape)
     m8_5 = sts.quap(data=df)
@@ -328,7 +327,7 @@ sts.precis(m8_5)
 
 # Reset the data in model 8.4 for comparison
 with m8_4.model:
-    pm.set_data({'ind': df[x], 'cid': df['cid']})
+    pm.set_data({'ind': df['rugged_std'], 'cid': df['cid']})
 
 # (R code 8.15)
 ct = sts.compare(
@@ -424,8 +423,8 @@ ax.axhline(0, c='k', ls='--', lw=1)
 ax.plot(rugged_seq, Δ_μ.mean('draw'), 'k-')
 ax.fill_between(rugged_seq, Δ_pi[0], Δ_pi[1],
                 alpha=0.2, facecolor='k', interpolate=True)
-ax.text(0, +0.01, 'Africa higher GDP', ha='left', va='bottom')
-ax.text(0, -0.01, 'Africa higher GDP', ha='left', va='top')
+ax.text(0,  0.01, 'Africa higher GDP', ha='left', va='bottom')
+ax.text(0, -0.01, 'Africa lower GDP', ha='left', va='top')
 ax.set(xlabel='ruggedness [std]',
        ylabel='expected difference in log GDP',
        xlim=(-0.05, 1.05))
