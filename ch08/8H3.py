@@ -77,13 +77,7 @@ sts.plot_coef_table(ct, fignum=1)
 rugged_seq = np.linspace(-0.1, 1.1, 30)
 
 
-def plot_linear_model(
-    quap,
-    is_Africa=True,
-    has_Seychelles=True,
-    annotate_lines=False,
-    ax=None
-):
+def plot_linear_model(quap, is_Africa=True, has_Seychelles=True, ax=None):
     """Plot the data and associated model."""
     if ax is None:
         ax = plt.gca()
@@ -92,8 +86,13 @@ def plot_linear_model(
 
     if is_Africa:
         cid = np.ones_like(rugged_seq).astype(int)
-        c = fc = 'C0'
-        label = 'Africa'
+        if has_Seychelles:
+            label = 'Africa'
+            c = fc = 'C0'
+        else:
+            label = 'Africa without Seychelles'
+            c = 'C3'
+            fc = 'none'
     else:
         cid = np.zeros_like(rugged_seq).astype(int)
         c = 'k'
@@ -109,41 +108,16 @@ def plot_linear_model(
         eval_at={'R': rugged_seq, 'A': cid},
     )
 
-    if not has_Seychelles:
-        # Do not re-plot the data?
-        c = fc = 'C3'
-        sts.lmplot(
-            fit_x=rugged_seq, fit_y=mu_samp,
-            x='rugged_std', y='log_GDP_std',
-            data=df.loc[df['cid'] == is_Africa],
-            q=0.97,
-            line_kws=dict(c=c),
-            fill_kws=dict(facecolor=c),
-            marker_kws=dict(edgecolor=c, facecolor='none', lw=2, s=50),
-            label=label,
-            ax=ax,
-        )
-    else:
-        sts.lmplot(
-            fit_x=rugged_seq, fit_y=mu_samp,
-            x='rugged_std', y='log_GDP_std',
-            data=df.loc[df['cid'] == is_Africa],
-            q=0.97,
-            line_kws=dict(c=c),
-            fill_kws=dict(facecolor=c),
-            marker_kws=dict(edgecolor=c, facecolor=fc, lw=2),
-            label=label,
-            ax=ax,
-        )
-
-    # Annotate lines
-    if annotate_lines:
-        ax.text(
-            x=0.8,
-            y=1.02*mu_samp.mean('draw')[int(0.8*len(mu_samp))],
-            s=label,
-            c=c
-        )
+    sts.lmplot(
+        fit_x=rugged_seq, fit_y=mu_samp,
+        x='rugged_std', y='log_GDP_std', data=df.loc[df['cid'] == is_Africa],
+        q=0.97,
+        line_kws=dict(c=c),
+        fill_kws=dict(facecolor=c),
+        marker_kws=dict(edgecolor=c, facecolor=fc, lw=2),
+        label=label,
+        ax=ax,
+    )
 
     # Label countries manually since there does not seem to be a clear method
     # to the madness.
