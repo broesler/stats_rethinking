@@ -812,8 +812,12 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
 
     if line_kws is None:
         line_kws = dict()
+
     if fill_kws is None:
         fill_kws = dict()
+
+    if marker_kws is None:
+        marker_kws = dict()
 
     if quap is not None and mean_var is not None:
         # TODO? remove ALL of this nonsense and just require mu_samp as input.
