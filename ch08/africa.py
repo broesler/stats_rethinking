@@ -342,7 +342,7 @@ with pd.option_context('display.precision', 2):
 waic_list = sts.WAIC(m8_5, pointwise=True)['y']
 waic_list.index = m8_5.data.index  # match index to actual data points
 
-# Plot the interaction (R code 8.17)
+# Plot the interaction (Figure 8.5, R code 8.17)
 fig = plt.figure(3, clear=True, constrained_layout=True)
 fig.set_size_inches((10, 5), forward=True)
 fig.suptitle('m8.5 - intercept and slope varies')
