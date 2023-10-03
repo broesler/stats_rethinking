@@ -1449,7 +1449,7 @@ def frame_to_dataset(df, model=None):
     the_dict = dict()
     for v in var_names:
         # Add 'chain' dimension to match expected shape
-        cols = df.filter(regex=f"^{v}(__\d+)?$")
+        cols = df.filter(regex=fr"^{v}(__\d+)?$")
         the_dict[v] = np.expand_dims(cols.values, 0)
     ds = az.convert_to_dataset(the_dict)
     # Remove dims for scalar variables with shape ()
@@ -1593,7 +1593,7 @@ def loglikelihood(model, post=None, var_names=None, eval_at=None, Ns=1000):
 
 
 def deviance(model=None, loglik=None, post=None, var_names=None, eval_at=None,
-        Ns=1000):
+             Ns=1000):
     """Compute the deviance as -2 * lppd."""
     the_lppd = lppd(
         model=model,
@@ -1704,6 +1704,7 @@ def DIC(model, post=None, Ns=1000):
     dev_hat = model.deviance
     pD = dev.mean() - dev_hat
     return dict({'dic': dev_hat + 2*pD, 'pD': pD})
+
 
 def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
          Ns=1000, pointwise=False):
@@ -1964,6 +1965,7 @@ def LOOCV(model, ind_var, obs_var, out_var, X_data, y_data,
     var = lppd_cv.var() if lno == 1 else lppd_cv.mean(axis=0).var()
     std_err = (N * var)**0.5
 
+    # TODO return DataFrame if pointwise, else Series
     return dict(
         loocv=-2*c,
         lppd=c,
@@ -2101,7 +2103,7 @@ def sim_train_test(
 
     # Compute the deviance
     res = pd.Series({('deviance', 'train'): -2 * np.sum(lppd_train),
-                     ('deviance', 'test'):  -2 * np.sum(lppd_test)})
+                     ('deviance',  'test'): -2 * np.sum(lppd_test)})
 
     # Compile Results
     if compute_WAIC:
