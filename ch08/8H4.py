@@ -54,7 +54,7 @@ df['log_area'] = np.log(df['area'])
 df['L'] = df['log_lang'] / df['log_lang'].mean()  # proportion of mean
 df['A'] = df['log_area'] / df['log_area'].mean()
 df['M'] = df['mean_growing_season'] / df['mean_growing_season'].max()  # [0, 1]
-df['S'] = sts.standardize(df['sd_growing_season'])
+df['S'] = df['sd_growing_season'] / df['sd_growing_season'].max()      # [0, 1]
 
 # Plot the raw data
 fig, ax = plt.subplots(num=1, clear=True, constrained_layout=True)
@@ -134,6 +134,9 @@ sts.precis(quapMA)
 # β_M -0.3360 0.1075 -0.5078 -0.1643  *** negative association!!
 # σ    0.2547 0.0209  0.2213  0.2882
 
+# NOTE there is a negative association between mean growing season length and
+# log languages per capita, which holds when controlling for area.
+
 # Plot counterfactual posterior predictive results
 Ms = np.linspace(-0.1, 1.1)
 fig = plt.figure(3, clear=True, constrained_layout=True)
@@ -165,6 +168,59 @@ axs[1].set(title='Counterfactual at M = 0.5 (mean)', ylabel=None)
 
 # Compare the two models
 sts.plot_coef_table(sts.coef_table([quapM, quapMA], ['M', 'M + A']), fignum=4)
+
+
+# ----------------------------------------------------------------------------- 
+#         8H4(b) Effects of uncertainty
+# -----------------------------------------------------------------------------
+# Build a model L ~ A + S to observe priors
+with pm.Model():
+    A, S, L = (pm.MutableData(x, df[x]) for x in list('ASL'))
+    α = pm.Normal('α', 1.0, 0.25)
+    β_S = pm.Normal('β_S', 0, 0.5)
+    β_A = pm.Normal('β_A', 0, 1)
+    μ = pm.Deterministic('μ', α + β_S*S + β_A*A)
+    σ = pm.Exponential('σ', 1)
+    y = pm.Normal('y', μ, σ, observed=L, shape=S.shape)
+    quapSA = sts.quap(data=df)
+
+sts.precis(quapSA)
+#       mean    std    5.5%  94.5%
+# α   0.7789 0.1989  0.4610 1.0969
+# β_A 0.1421 0.2167 -0.2042 0.4884
+# β_S 0.2845 0.1777  0.0005 0.5684  *** positive effect!!
+# σ   0.2658 0.0219  0.2307 0.3008
+
+# NOTE there is a positive association between std growing season length and
+# log languages per capita.
+
+# Plot counterfactual posterior predictive results
+fig = plt.figure(5, clear=True, constrained_layout=True)
+axs = fig.subplots(ncols=2, sharey=True)
+
+# Plot counterfactual across mean growing season
+sts.lmplot(
+    quap=quapSA, mean_var=quapSA.model.μ,
+    x='S', y='L', data=df,
+    eval_at={'S': Ms, 'A': np.ones_like(Ms)},
+    ax=axs[0],
+)
+
+axs[0].set(title='Counterfactual at A = 1 (mean)',
+           xlim=(0, 1))
+
+# Plot counterfactual across area
+As = np.linspace(df['A'].min() - 0.05, df['A'].max() + 0.05)
+
+sts.lmplot(
+    quap=quapSA, mean_var=quapSA.model.μ,
+    x='A', y='L', data=df,
+    eval_at={'S': 0.5*np.ones_like(As), 'A': As},
+    ax=axs[1],
+)
+
+axs[1].tick_params(left=False)
+axs[1].set(title='Counterfactual at S = 0.5 (mean)', ylabel=None)
 
 plt.ion()
 plt.show()
