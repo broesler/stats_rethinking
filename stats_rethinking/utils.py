@@ -1177,9 +1177,15 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     ct = ct.reorder_levels([hue, y]).sort_index()
 
     # Leverage Seaborn for basic setup
-    sns.pointplot(data=ct.reset_index(), x='coef', y=y, hue=hue,
-                  join=False, dodge=0.3, ax=ax)
+    # FIXME in seaborn 0.13.0, `dodge` ≠ False fails when there is only one
+    # model to plot. "float division by zero".
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', 'is_categorical_dtype')
+        sns.pointplot(data=ct.reset_index(), x='coef', y=y, hue=hue,
+                      join=False, dodge=0.3, ax=ax)
 
+    # FIXME get coords is broken
+    # warnings.warn('get_coords broken in Seaborn 0.13.0. No errorbars shown.')
     # Find the x,y coordinates for each point
     xc, yc, colors = get_coords(ax)
 
@@ -1313,6 +1319,7 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
     return dict(ct=df, dSE_matrix=dSE)
 
 
+# TODO transpose flag to match book figures with WAIC on x-axis.
 def plot_compare(ct, fignum=None):
     """Plot the table of information criteria from `sts.compare`.
 
@@ -1341,9 +1348,15 @@ def plot_compare(ct, fignum=None):
         ic = 'PSIS'
 
     # Leverage Seaborn for basic setup
-    sns.pointplot(data=ct.reset_index(), y=ic, x='model', hue='var',
-                  join=False, dodge=0.3, ax=ax)
+    # FIXME in seaborn 0.13.0, `dodge` ≠ False fails when there is only one
+    # model to plot. "float division by zero".
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', 'is_categorical_dtype')
+        sns.pointplot(data=ct.reset_index(), y=ic, x='model', hue='var',
+                      join=False, dodge=0.3, ax=ax)
 
+    # FIXME get_coords is broken
+    # warnings.warn('get_coords broken in Seaborn 0.13.0. No errorbars shown.')
     # Find the x,y coordinates for each point
     xc, yc, colors = get_coords(ax)
 
@@ -1366,6 +1379,11 @@ def plot_compare(ct, fignum=None):
     return fig, ax
 
 
+# FIXME seaborn 0.13.0 breaks this code.
+# ax.collection is now empty, and ax.lines has the data we want as Line2D
+# objects. See:
+# <https://matplotlib.org/stable/api/_as_gen/matplotlib.lines.Line2D.html>
+# and get_data, get_[xy]data, get_markerfacecolor, etc. methods.
 def get_coords(ax):
     """Return the x, y, and color coordinates of the axes."""
     pts = [
