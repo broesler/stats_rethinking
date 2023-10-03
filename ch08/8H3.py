@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
+import xarray as xr
 
 from pathlib import Path
 
@@ -253,12 +254,46 @@ def seychelles_model(opt='rugged'):
 
 
 mnames = ['rugged', 'both', 'interaction']
-m1, m2, m3 = (seychelles_model(x) for x in mnames)
+models = [seychelles_model(x) for x in mnames]
 
-cmp = sts.compare([m1, m2, m3], mnames)
+cmp = sts.compare(models, mnames)
 sts.plot_compare(cmp['ct'], fignum=3)
 
-# TODO plot each of the models using plot_linear_model. Need kwargs for color.
+# Plot the model-averaged predictions and compare to just the interaction.
+mean_samples = xr.Dataset()
+for quap, name in zip(models, mnames):
+    eval_at = {'R': rugged_seq}
+    if name in ['both', 'interaction']:
+        eval_at.update({'A': np.ones_like(rugged_seq).astype(int)})
+    mean_samples[name] = sts.lmeval(quap, out=quap.model.μ, eval_at=eval_at)
+
+weighted_μ = (
+    (mean_samples * cmp['ct']['weight']['y'])
+    .to_array(dim='model')
+    .sum('model')  # weights already normalized, so just sum
+)
+
+fig, ax = plt.subplots(num=4, clear=True, constrained_layout=True)
+
+# Plot model from part (b)
+plot_linear_model(q_ns, is_Africa=True, has_Seychelles=False, ax=ax)
+
+# Plot the weighted model predictions
+c = fc = 'C0'
+sts.lmplot(
+    fit_x=rugged_seq, fit_y=weighted_μ,
+    q=0.97,
+    line_kws=dict(c=c),
+    fill_kws=dict(facecolor=c),
+    marker_kws=dict(edgecolor=c, facecolor=fc, lw=2),
+    label='Model-Averaged',
+    ax=ax,
+)
+
+ax.set(title='Model-averaged Predictions',
+       xlabel='ruggedness [std]',
+       ylabel='log GDP (proportion of mean)')
+ax.legend()
 
 plt.ion()
 plt.show()
