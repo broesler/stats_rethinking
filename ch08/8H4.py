@@ -59,7 +59,7 @@ df['S'] = df['sd_growing_season'] / df['sd_growing_season'].mean()
 
 # Plot the raw data
 fig, ax = plt.subplots(num=1, clear=True, constrained_layout=True)
-ax.scatter('M', 'L', data=df, alpha=0.4)
+ax.scatter('M', 'L', s=df['area']*1e-4, data=df, alpha=0.4)
 ax.set(xlabel='Mean Growing Season [std]',
        ylabel='log Languages per Capita (prop. of mean)')
 
