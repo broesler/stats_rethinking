@@ -58,7 +58,7 @@ df['M'] = df['mean_growing_season'] / df['mean_growing_season'].mean()
 df['S'] = df['sd_growing_season'] / df['sd_growing_season'].mean()
 
 # Plot the raw data
-fig, ax = plt.subplots(num=1, clear=True, constrained_layout=True)
+fig, ax = plt.subplots(num=1, clear=True)
 ax.scatter('M', 'L', s=df['area']*1e-4, data=df, alpha=0.4)
 ax.set(xlabel='Mean Growing Season [std]',
        ylabel='log Languages per Capita (prop. of mean)')
@@ -94,7 +94,7 @@ with quapM.model:
     idata = pm.sample_prior_predictive(N_lines)
 
 # Plot priors
-fig, ax = plt.subplots(num=2, clear=True, constrained_layout=True)
+fig, ax = plt.subplots(num=2, clear=True)
 
 ax.axhline(df['L'].min(), c='k', ls='--', lw=1)
 ax.axhline(df['L'].max(), c='k', ls='--', lw=1)
@@ -140,7 +140,7 @@ sts.precis(quapMA)
 
 # Plot counterfactual posterior predictive results
 Ms = np.linspace(-0.1, 1.1)
-fig = plt.figure(3, clear=True, constrained_layout=True)
+fig = plt.figure(3, clear=True)
 axs = fig.subplots(ncols=2, sharey=True)
 
 # Plot counterfactual across mean growing season
@@ -196,7 +196,7 @@ sts.precis(quapSA)
 # log languages per capita.
 
 # Plot counterfactual posterior predictive results
-fig = plt.figure(5, clear=True, constrained_layout=True)
+fig = plt.figure(5, clear=True)
 axs = fig.subplots(ncols=2, sharey=True)
 
 # Plot counterfactual across mean growing season
