@@ -50,11 +50,12 @@ df['log_lang'] = np.log(df['lang_per_cap'])
 
 df['log_area'] = np.log(df['area'])
 
+# TODO re-copy `precis` outputs below to match update to `mean` normalization.
 # Standardize variables of interest
 df['L'] = df['log_lang'] / df['log_lang'].mean()  # proportion of mean
 df['A'] = df['log_area'] / df['log_area'].mean()
-df['M'] = df['mean_growing_season'] / df['mean_growing_season'].max()  # [0, 1]
-df['S'] = df['sd_growing_season'] / df['sd_growing_season'].max()      # [0, 1]
+df['M'] = df['mean_growing_season'] / df['mean_growing_season'].mean()
+df['S'] = df['sd_growing_season'] / df['sd_growing_season'].mean()
 
 # Plot the raw data
 fig, ax = plt.subplots(num=1, clear=True, constrained_layout=True)
@@ -150,7 +151,7 @@ sts.lmplot(
     ax=axs[0],
 )
 
-axs[0].set(title='Counterfactual at A = 1 (mean)',
+axs[0].set(title='Counterfactual at A = 1.0 (mean)',
        xlim=(0, 1))
 
 # Plot counterfactual across area
@@ -159,12 +160,12 @@ As = np.linspace(df['A'].min() - 0.05, df['A'].max() + 0.05)
 sts.lmplot(
     quap=quapMA, mean_var=quapMA.model.μ,
     x='A', y='L', data=df,
-    eval_at={'M': 0.5*np.ones_like(As), 'A': As},
+    eval_at={'M': np.ones_like(As), 'A': As},
     ax=axs[1],
 )
 
 axs[1].tick_params(left=False)
-axs[1].set(title='Counterfactual at M = 0.5 (mean)', ylabel=None)
+axs[1].set(title='Counterfactual at M = 1.0 (mean)', ylabel=None)
 
 # Compare the two models
 sts.plot_coef_table(sts.coef_table([quapM, quapMA], ['M', 'M + A']), fignum=4)
@@ -206,7 +207,7 @@ sts.lmplot(
     ax=axs[0],
 )
 
-axs[0].set(title='Counterfactual at A = 1 (mean)',
+axs[0].set(title='Counterfactual at A = 1.0 (mean)',
            xlim=(0, 1))
 
 # Plot counterfactual across area
@@ -215,12 +216,12 @@ As = np.linspace(df['A'].min() - 0.05, df['A'].max() + 0.05)
 sts.lmplot(
     quap=quapSA, mean_var=quapSA.model.μ,
     x='A', y='L', data=df,
-    eval_at={'S': 0.5*np.ones_like(As), 'A': As},
+    eval_at={'S': np.ones_like(As), 'A': As},
     ax=axs[1],
 )
 
 axs[1].tick_params(left=False)
-axs[1].set(title='Counterfactual at S = 0.5 (mean)', ylabel=None)
+axs[1].set(title='Counterfactual at S = 1.0 (mean)', ylabel=None)
 
 plt.ion()
 plt.show()
