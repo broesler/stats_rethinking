@@ -111,6 +111,7 @@ ax.set(
     ylim=(0.0, 2.0),
 )
 
+print('L ~ M')
 sts.precis(quapM)
 #          mean       std      5.5%     94.5%
 # α    1.196650  0.069688  1.085274  1.308025
@@ -128,6 +129,7 @@ with pm.Model():
     y = pm.Normal('y', μ, σ, observed=L, shape=M.shape)
     quapMA = sts.quap(data=df)
 
+print('L ~ M + A')
 sts.precis(quapMA)
 #        mean    std    5.5%   94.5%
 # α    0.9055 0.2018  0.5830  1.2279
@@ -185,6 +187,7 @@ with pm.Model():
     y = pm.Normal('y', μ, σ, observed=L, shape=S.shape)
     quapSA = sts.quap(data=df)
 
+print('L ~ S + A')
 sts.precis(quapSA)
 #       mean    std    5.5%  94.5%
 # α   0.7789 0.1989  0.4610 1.0969
@@ -222,6 +225,48 @@ sts.lmplot(
 
 axs[1].tick_params(left=False)
 axs[1].set(title='Counterfactual at S = 1.0 (mean)', ylabel=None)
+
+
+# ----------------------------------------------------------------------------- 
+#         8H4(c) Effect of interaction between M and S
+# -----------------------------------------------------------------------------
+# TODO move this model to part (b) analysis to show lack of confounding.
+# Build 2 models: one without the interaction, and the other with 
+with pm.Model():
+    M, A, S, L = (pm.MutableData(x, df[x]) for x in list('MASL'))
+    α = pm.Normal('α', 1.0, 0.25)
+    β_M = pm.Normal('β_M', 0, 0.5)
+    β_S = pm.Normal('β_S', 0, 0.5)
+    β_A = pm.Normal('β_A', 0, 1)
+    μ = pm.Deterministic('μ', α + β_M*M + β_S*S + β_A*A)
+    σ = pm.Exponential('σ', 1)
+    y = pm.Normal('y', μ, σ, observed=L, shape=S.shape)
+    quapMS = sts.quap(data=df)
+
+print('L ~ M + S + A')
+sts.precis(quapMS)
+
+# Build a model with an interaction term
+with pm.Model():
+    M, A, S, L = (pm.MutableData(x, df[x]) for x in list('MASL'))
+    α = pm.Normal('α', 1.0, 0.25)
+    β_M = pm.Normal('β_M', 0, 0.5)
+    β_S = pm.Normal('β_S', 0, 0.5)
+    β_A = pm.Normal('β_A', 0, 1)
+    β_MS = pm.Normal('β_MS', 0, 0.25)
+    μ = pm.Deterministic('μ', α + β_M*M + β_S*S + β_MS*M*S + β_A*A)
+    σ = pm.Exponential('σ', 1)
+    y = pm.Normal('y', μ, σ, observed=L, shape=S.shape)
+    quapMSi = sts.quap(data=df)
+
+print('L ~ M + S + M*S + A')
+sts.precis(quapMSi)
+
+# Compare the four models
+models = [quapMA, quapSA, quapMS, quapMSi]
+mnames = ['M + A', 'S + A', 'M + S + A', 'M + S + M*S + A']
+
+sts.plot_coef_table(sts.coef_table(models, mnames), fignum=6)
 
 plt.ion()
 plt.show()
