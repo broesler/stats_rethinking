@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import xarray as xr
 
 from pathlib import Path
 
@@ -141,8 +140,10 @@ sts.precis(quapMA)
 # log languages per capita, which holds when controlling for area.
 
 # Plot counterfactual posterior predictive results
-Ms = np.linspace(-0.1, 1.1)
+Ms = np.linspace(df['M'].min() - 0.1, df['M'].max() + 0.1)
+
 fig = plt.figure(3, clear=True)
+fig.suptitle('L ~ M + A')
 axs = fig.subplots(ncols=2, sharey=True)
 
 # Plot counterfactual across mean growing season
@@ -154,7 +155,7 @@ sts.lmplot(
 )
 
 axs[0].set(title='Counterfactual at A = 1.0 (mean)',
-       xlim=(0, 1))
+           xlim=(0, 1))
 
 # Plot counterfactual across area
 As = np.linspace(df['A'].min() - 0.05, df['A'].max() + 0.05)
@@ -173,7 +174,7 @@ axs[1].set(title='Counterfactual at M = 1.0 (mean)', ylabel=None)
 sts.plot_coef_table(sts.coef_table([quapM, quapMA], ['M', 'M + A']), fignum=4)
 
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         8H4(b) Effects of uncertainty
 # -----------------------------------------------------------------------------
 # Build a model L ~ A + S to observe priors
@@ -200,6 +201,7 @@ sts.precis(quapSA)
 
 # Plot counterfactual posterior predictive results
 fig = plt.figure(5, clear=True)
+fig.suptitle('L ~ S + A')
 axs = fig.subplots(ncols=2, sharey=True)
 
 # Plot counterfactual across mean growing season
@@ -227,11 +229,11 @@ axs[1].tick_params(left=False)
 axs[1].set(title='Counterfactual at S = 1.0 (mean)', ylabel=None)
 
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         8H4(c) Effect of interaction between M and S
 # -----------------------------------------------------------------------------
 # TODO move this model to part (b) analysis to show lack of confounding.
-# Build 2 models: one without the interaction, and the other with 
+# Build 2 models: one without the interaction, and the other with
 with pm.Model():
     M, A, S, L = (pm.MutableData(x, df[x]) for x in list('MASL'))
     α = pm.Normal('α', 1.0, 0.25)
@@ -267,6 +269,59 @@ models = [quapMA, quapSA, quapMS, quapMSi]
 mnames = ['M + A', 'S + A', 'M + S + A', 'M + S + M*S + A']
 
 sts.plot_coef_table(sts.coef_table(models, mnames), fignum=6)
+
+
+# Make triptych plots of L ~ M for varying S with and without an interaction.
+def plot_triptych(model, fig, /, vals, N_lines=20):
+    """Plot a triptych over model parameters."""
+    axs = fig.subplots(ncols=3, sharex=True, sharey=True)
+
+    for ax, s in zip(axs, vals):
+        ax.scatter(
+            x='M',
+            y='L',
+            data=df,
+            c='C0',
+            alpha=0.4
+        )
+
+        mu_samp = sts.lmeval(
+            model,
+            out=model.model.μ,
+            eval_at={
+                'M': Ms,
+                'S': s * np.ones_like(Ms),
+                'A': np.ones_like(Ms),
+            },
+            N=N_lines,
+        )
+
+        ax.plot(Ms, mu_samp, c='k', alpha=0.3)
+
+        ax.set(title=f"S = {s:.2g}",
+               xlabel='M')
+
+        ss = ax.get_subplotspec()
+        if ss.is_first_col():
+            ax.set_ylabel('blooms')
+
+        ax.spines[['right', 'top']].set_visible(False)
+
+    return ax
+
+
+models = [quapMS, quapMSi]
+mnames = ['M + S + A', 'M + S + M*S + A']
+
+fig = plt.figure(7, clear=True, constrained_layout=True)
+fig.set_size_inches((10, 3*len(models)), forward=True)
+subfigs = fig.subfigures(len(models), 1)
+
+vals = sts.quantile(df['S'], [0.055, 0.5, 0.955])
+for subfig, quap, mname in zip(subfigs, models, mnames):
+    plot_triptych(quap, subfig, vals=vals)
+    subfig.suptitle(mname)
+
 
 plt.ion()
 plt.show()
