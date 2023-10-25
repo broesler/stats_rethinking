@@ -272,38 +272,28 @@ sts.plot_coef_table(sts.coef_table(models, mnames), fignum=6)
 
 
 # Make triptych plots of L ~ M for varying S with and without an interaction.
-def plot_triptych(model, fig, /, vals, N_lines=20):
+def plot_triptych(model, fig, /, vals):
     """Plot a triptych over model parameters."""
-    axs = fig.subplots(ncols=3, sharex=True, sharey=True)
+    axs = fig.subplots(ncols=len(vals), sharex=True, sharey=True)
 
     for ax, s in zip(axs, vals):
-        ax.scatter(
-            x='M',
-            y='L',
-            data=df,
-            c='C0',
-            alpha=0.4
-        )
-
-        mu_samp = sts.lmeval(
+        mu_samp = sts.lmplot(
             model,
-            out=model.model.μ,
+            mean_var=model.model.μ,
+            x='M', y='L', data=df,
             eval_at={
                 'M': Ms,
                 'S': s * np.ones_like(Ms),
                 'A': np.ones_like(Ms),
             },
-            N=N_lines,
+            ax=ax,
         )
 
-        ax.plot(Ms, mu_samp, c='k', alpha=0.3)
-
-        ax.set(title=f"S = {s:.2g}",
-               xlabel='M')
+        ax.set(title=f"S = {s:.2g}", ylabel='')
 
         ss = ax.get_subplotspec()
         if ss.is_first_col():
-            ax.set_ylabel('blooms')
+            ax.set_ylabel('L')
 
         ax.spines[['right', 'top']].set_visible(False)
 
@@ -317,10 +307,13 @@ fig = plt.figure(7, clear=True, constrained_layout=True)
 fig.set_size_inches((10, 3*len(models)), forward=True)
 subfigs = fig.subfigures(len(models), 1)
 
-vals = sts.quantile(df['S'], [0.055, 0.5, 0.955])
+vals = sts.quantile(df['S'], [0.055, 0.25, 0.5, 0.75, 0.955])
 for subfig, quap, mname in zip(subfigs, models, mnames):
     plot_triptych(quap, subfig, vals=vals)
-    subfig.suptitle(mname)
+    subfig.suptitle(mname)  # TODO move titles to left side?
+
+# NOTE slope β_M is negative when S is small, but becomes increasingly positive
+# until S is near the maximum, when it is close to 0 and often positive.
 
 
 plt.ion()
