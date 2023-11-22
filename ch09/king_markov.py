@@ -11,14 +11,6 @@ A simple Markov chain simulation (R code 9.1).
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import pymc as pm
-import xarray as xr
-
-from pathlib import Path
-from scipy import stats
-
-import stats_rethinking as sts
 
 rng = np.random.default_rng(seed=56)
 
@@ -43,12 +35,18 @@ for i in range(num_weeks):
     current = proposal if rng.uniform() < prob_move else current
 
 
-# Plot results
+# Plot results (Figure 9.2)
 fig, axs = plt.subplots(num=1, ncols=2, clear=True)
 fig.set_size_inches((8, 4), forward=True)
 ax0, ax1 = axs
 
-ax0.scatter(range(100), positions[:100], marker='o', edgecolor='C0', facecolor='none')
+ax0.scatter(
+    range(100),
+    positions[:100],
+    marker='o',
+    edgecolor='C0',
+    facecolor='none'
+)
 ax0.set(xlabel='week', ylabel='island')
 
 ax1.hist(positions, bins=0.5 + np.arange(11), rwidth=0.1)
