@@ -15,12 +15,12 @@ import numpy as np
 from scipy import stats
 
 
-def metropolis(p, step=1, S=200, ax=None):
+def metropolis(target, step=1, S=200, ax=None):
     r"""Sample from the distribution using the Metropolis algorithm.
 
     Parameters
     ----------
-    p : :obj:`stats.*_frozen`
+    target : :obj:`stats.*_frozen`
         The target distribution from which to sample. A frozen probability
         distribution from ``scipy.stats``.
     step : float
@@ -43,6 +43,7 @@ def metropolis(p, step=1, S=200, ax=None):
     """
     rng = np.random.default_rng(seed=565656)
     I = np.eye(2)
+    # I[0, 1] = I[1, 0] = -0.2  # TODO try correlated jumping distribution?
 
     θ_0 = (-1., 0.75)  # manual initial point
     if ax is not None:
@@ -59,7 +60,7 @@ def metropolis(p, step=1, S=200, ax=None):
         θ_p = rng.multivariate_normal(θ_tm1, step**2 * I)
 
         # Compute the ratio of the densities
-        r = np.exp(np.log(p.pdf(θ_p)) - np.log(p.pdf(θ_tm1)))
+        r = np.exp(np.log(target.pdf(θ_p)) - np.log(target.pdf(θ_tm1)))
 
         # Select the next sample with probability min(r, 1)
         if rng.random() < np.min((r, 1)):
@@ -87,13 +88,14 @@ def metropolis(p, step=1, S=200, ax=None):
 
 # Generate distribution with high correlation
 ρ = -0.9
-rv = stats.multivariate_normal(cov=[[1, ρ], [ρ, 1]])
+rv = stats.multivariate_normal(mean=[0, 0], cov=[[1, ρ], [ρ, 1]])
 
 # Plot contours of the pdf on a uniform grid
 xr = 1.5
 x0, x1 = np.mgrid[-xr:xr:0.01, -xr:xr:0.01]
 pos = np.dstack((x0, x1))
 
+# Figure 9.3
 fig, axs = plt.subplots(num=1, ncols=2, clear=True, sharey=True)
 
 # (a) step size = 0.1 -> accept rate = 0.62
