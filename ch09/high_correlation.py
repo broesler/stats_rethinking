@@ -15,7 +15,7 @@ import numpy as np
 from scipy import stats
 
 
-def metropolis(target, step=1, S=200, ax=None):
+def metropolis(target, S=200, step=1, ax=None):
     r"""Sample from the distribution using the Metropolis algorithm.
 
     Parameters
@@ -23,6 +23,8 @@ def metropolis(target, step=1, S=200, ax=None):
     target : :obj:`stats.*_frozen`
         The target distribution from which to sample. A frozen probability
         distribution from ``scipy.stats``.
+    S : int, optional
+        Number of samples to keep.
     step : float
         The standard deviation of the jumping distribution. For this simple
         example, the jumping distribution is assumed to be:
@@ -30,9 +32,6 @@ def metropolis(target, step=1, S=200, ax=None):
         .. math:
             J_t(\theta^\ast | θ^{t-1}) \sim
                 \mathcal{N}(\theta^\ast | \theta^{t-1}, \mathtt{step}^2 I).
-
-    S : int, optional
-        Number of samples.
     ax : plt.Axes
         Axes on which to plot the points.
 
@@ -76,7 +75,7 @@ def metropolis(target, step=1, S=200, ax=None):
             fc = 'k' if accept else 'none'
             ax.scatter(*θ_p, edgecolors='k', facecolors=fc, s=30)
             # Plot random walk path
-            # ax.plot(*np.c_[θ_tm1, θ_t], lw=1, c='k')
+            ax.plot(*np.c_[θ_tm1, θ_t], lw=1, c='k')
 
         # Prepare for next step
         samples.append(θ_t)
@@ -85,6 +84,9 @@ def metropolis(target, step=1, S=200, ax=None):
     ax.set_title(f"step size = {step:.2f}, accept rate = {accepts/S:.2f}")
     return np.array(samples)
 
+
+# TODO Replicate Gelman Figure 11.1 with 5 starting locations of centered
+# Gaussian.
 
 # Generate distribution with high correlation
 ρ = -0.9
@@ -100,8 +102,9 @@ fig, axs = plt.subplots(num=1, ncols=2, clear=True, sharey=True)
 
 # (a) step size = 0.1 -> accept rate = 0.62
 # (b) step size = 0.25 -> accept rate = 0.34
-samples_a = metropolis(rv, step=0.10, S=50, ax=axs[0])
-samples_b = metropolis(rv, step=0.25, S=50, ax=axs[1])
+S = 200
+samples_a = metropolis(rv, S, step=0.10, ax=axs[0])
+samples_b = metropolis(rv, S, step=0.25, ax=axs[1])
 
 for ax in axs:
     ax.contour(x0, x1, rv.pdf(pos), zorder=0)
