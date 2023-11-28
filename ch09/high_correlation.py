@@ -15,7 +15,8 @@ import numpy as np
 from scipy import stats
 
 
-def metropolis(target, S=200, step=1, ax=None):
+
+def metropolis(target, S=200, init=None, step=1):
     r"""Sample from the distribution using the Metropolis algorithm.
 
     Parameters
@@ -32,8 +33,6 @@ def metropolis(target, S=200, step=1, ax=None):
         .. math:
             J_t(\theta^\ast | θ^{t-1}) \sim
                 \mathcal{N}(\theta^\ast | \theta^{t-1}, \mathtt{step}^2 I).
-    ax : plt.Axes
-        Axes on which to plot the points.
 
     Returns
     -------
@@ -44,14 +43,12 @@ def metropolis(target, S=200, step=1, ax=None):
     I = np.eye(2)
     # I[0, 1] = I[1, 0] = -0.2  # TODO try correlated jumping distribution?
 
-    θ_0 = (-1., 0.75)  # manual initial point
-    if ax is not None:
-        ax.scatter(*θ_0, marker='x', c='C3')
+    if init is None:
+        init = (-1., 0.75)  # manual initial point
 
-    samples = [θ_0]
-    θ_tm1 = θ_0
-    accepts = 0
-    accept = True
+    θ_tm1 = init
+    samples = []
+    rejects = [θ_tm1]
 
     while len(samples) < S:
         # Define the jumping distribution centered about the last guess, and
@@ -63,54 +60,78 @@ def metropolis(target, S=200, step=1, ax=None):
 
         # Select the next sample with probability min(r, 1)
         if rng.random() < np.min((r, 1)):
-            accept = True
-            θ_t = θ_p
-            accepts += 1
+            θ_tm1 = θ_p
+            samples.append(θ_p)
         else:
-            accept = False
-            θ_t = θ_tm1
+            rejects.append(θ_p)
 
-        # Plot the proposed point as accepted or rejected
-        if ax is not None:
-            fc = 'k' if accept else 'none'
-            ax.scatter(*θ_p, edgecolors='k', facecolors=fc, s=30)
-            # Plot random walk path
-            ax.plot(*np.c_[θ_tm1, θ_t], lw=1, c='k')
-
-        # Prepare for next step
-        samples.append(θ_t)
-        θ_tm1 = θ_t
-
-    ax.set_title(f"step size = {step:.2f}, accept rate = {accepts/S:.2f}")
-    return np.array(samples)
+    return (np.array(samples), np.array(rejects))
 
 
-# TODO Replicate Gelman Figure 11.1 with 5 starting locations of centered
-# Gaussian.
+# Plot contours of the pdf on a uniform grid
+xr = 2.5
+x0, x1 = np.mgrid[-xr:xr:0.01, -xr:xr:0.01]
+pos = np.dstack((x0, x1))
 
+# Replicate Gelman Figure 11.1 with 5 starting locations of centered Gaussian.
+norm_2d = stats.multivariate_normal(mean=[0, 0], cov=np.eye(2))
+
+inits = np.array([
+    [2.5, 2.5],
+    [-2.5, 2.5],
+    [0., 0.],
+    [-2.5, -2.5],
+    [2.5, -2.5],
+])
+
+# fig, axs = plt.subplots(num=1, ncols=3, sharex=True, sharey=True, clear=True)
+
+# Line plot of 50 iterations showing random walk effect
+# axs[0].plot()
+
+# Line plot of 1000 iterations
+# axs[1].plot()
+
+# Scatter plot of the iterates of the second halves of the sequences
+# TODO jitter points so steps in which random walks stood still are not hidden.
+# axs[2].scatter()
+
+# -----------------------------------------------------------------------------
+#         Figure 9.3
+# -----------------------------------------------------------------------------
 # Generate distribution with high correlation
 ρ = -0.9
 rv = stats.multivariate_normal(mean=[0, 0], cov=[[1, ρ], [ρ, 1]])
 
-# Plot contours of the pdf on a uniform grid
-xr = 1.5
-x0, x1 = np.mgrid[-xr:xr:0.01, -xr:xr:0.01]
-pos = np.dstack((x0, x1))
-
-# Figure 9.3
-fig, axs = plt.subplots(num=1, ncols=2, clear=True, sharey=True)
+fig, axs = plt.subplots(num=2, ncols=2, sharey=True, clear=True)
+fig.set_size_inches((10, 5), forward=True)
 
 # (a) step size = 0.1 -> accept rate = 0.62
 # (b) step size = 0.25 -> accept rate = 0.34
-S = 200
-samples_a = metropolis(rv, S, step=0.10, ax=axs[0])
-samples_b = metropolis(rv, S, step=0.25, ax=axs[1])
+S = 50
 
-for ax in axs:
+for ax, step in zip(axs, [0.1, 0.25]):
+    # Extract the samples
+    init = (-1., 0.75)
+    samples, rejects = metropolis(rv, S, init=init, step=step)
+
+    # Plot the initial point
+    ax.scatter(*init, marker='x', c='C3')
+
+    # Plot the contours of the target pdf
     ax.contour(x0, x1, rv.pdf(pos), zorder=0)
-    ax.set(xlabel=r'$x_0$',
-           ylabel=r'$x_1$',
-           aspect='equal')
+
+    # Plot the accepted/rejected points
+    ax.scatter(samples[:, 0], samples[:, 1], c='k', s=20)
+    ax.scatter(rejects[:, 0], rejects[:, 1], ec='k', fc='none', s=20)
+
+    ax.set(
+        title=(f"step size = {step:.2f},"
+               f"accept rate = {S/(len(rejects) + S):.2f}"),
+        xlabel=r'$x_0$',
+        ylabel=r'$x_1$',
+        aspect='equal'
+    )
 
 plt.ion()
 plt.show()
