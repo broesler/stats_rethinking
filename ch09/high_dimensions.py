@@ -11,11 +11,12 @@ Plot Figure 9.4 with simulations of distance from mode.
 
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 
 from scipy import stats
 
 
-def sample_dimensions(D=10, T=1000, N_bins=50):
+def sample_dimensions(D=10, T=1000, N_bins=50, sort=True):
     """Sample a D-dimensional multivariate normal.
 
     Parameters
@@ -26,37 +27,39 @@ def sample_dimensions(D=10, T=1000, N_bins=50):
         Number of samples.
     N_bins : int, optional
         Number of bins to create the histogram.
+    sort : bool, optional
+        If True, sort the output array.
 
     Returns
     -------
-    dens : (N_bins,) ndarray of float
-        The probability density of the data.
-    bin_centers : (N_bins,) ndarray of float
-        The locations of the bin centers.
+    Rd : (T,) ndarray of float
+        The sampled values.
     """
     Y = stats.multivariate_normal(np.zeros(D), np.eye(D)).rvs(T)  # (T, D)
-    if D > 1:
-        Rd = np.sqrt(np.sum(Y**2, axis=1))  # (T,)
-    else:
-        Rd = np.sqrt(Y**2)
+    Rd = np.sqrt(np.sum(Y**2, axis=1)) if D > 1 else np.abs(Y)
 
-    dens, bin_edges = np.histogram(Rd, bins=50, density=True)
-    bin_centers = (bin_edges[1:] + bin_edges[:-1]) / 2
+    if sort:
+        Rd = np.sort(Rd)
 
-    return dens, bin_centers
+    return Rd
 
 
 fig = plt.figure(1, clear=True)
+fig.set_size_inches((10, 3), forward=True)
 ax = fig.add_subplot()
 
 for D in [1, 10, 100, 1000]:
-    dens, bin_centers = sample_dimensions(D)
-    ax.plot(bin_centers, dens, c='k')
+    Rd = sample_dimensions(D)
+    kde = stats.gaussian_kde(Rd, bw_method=0.1)
+    dens = kde.pdf(Rd)
+    ax.plot(Rd, dens, c='k')
     idx = np.argmax(dens)
-    ax.text(s=f"{D}", x=bin_centers[idx], y=dens[idx] + 0.02, ha='center')
+    ax.text(s=f"{D}", x=Rd[idx], y=dens[idx] + 0.02, ha='center')
 
 ax.set(xlabel='Radial distance from mode',
-       ylabel='Density')
+       ylabel='Density',
+       ylim=(0, 1))
+ax.spines[['right', 'top']].set_visible(False)
 
 # =============================================================================
 # =============================================================================
