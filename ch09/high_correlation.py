@@ -105,28 +105,13 @@ for chain, init in enumerate(inits):
 
     # Line plot of N iterations showing random walk effect
     for ax, N in zip(axs[:2], [50, 1000]):
-        ax.scatter(
-            init[0],
-            init[1],
-            c='k',
-            marker='s',
-        )
-        ax.plot(
-            samp.sel(dict(chain=chain, draw=range(N), x_dim_0=0)),
-            samp.sel(dict(chain=chain, draw=range(N), x_dim_0=1)),
-            c='k',
-            lw=1,
-        )
+        ax.scatter(*init, c='k', marker='s')
+        ax.plot(*samp.sel(dict(chain=chain, draw=range(N))).T, c='k', lw=1)
 
     # Scatter plot of the iterates of the second halves of the sequences
-    # TODO jitter points so steps in which random walks stood still are not hidden.
-    axs[2].scatter(
-        samp.sel(dict(chain=chain, draw=range(1000, 2000), x_dim_0=0)),
-        samp.sel(dict(chain=chain, draw=range(1000, 2000), x_dim_0=1)),
-        c='k',
-        s=1,
-        alpha=0.5,
-    )
+    # TODO jitter points so steps where random walks stood still are visible.
+    axs[2].scatter(*samp.sel(dict(chain=chain, draw=range(1000, 2000))).T,
+                   c='k', s=1, alpha=0.5)
 
 # Format plots
 fig.suptitle('Gelman BDA3, Figure 11.1', fontweight='bold')
@@ -136,6 +121,7 @@ axs[1].set_title('First 1000 iterations')
 axs[2].set_title('Last 1000 draws')
 for ax in axs:
     ax.set(aspect='equal')
+
 
 # -----------------------------------------------------------------------------
 #         Figure 9.3
