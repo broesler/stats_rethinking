@@ -9,13 +9,14 @@
 """
 # =============================================================================
 
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
 from scipy import stats
 
-rng = np.random.default_rng(seed=5656)
+rng = np.random.default_rng(seed=565656)
 
 
 def metropolis(target, S=200, init=None, step=1):
@@ -46,13 +47,12 @@ def metropolis(target, S=200, init=None, step=1):
     rejects : single item or (M,) ndarray
         The rejected proposed sample points.
     """
-    I = np.eye(target.dim)
-
     if init is None:
         init = np.zeros(target.dim)
     else:
         assert len(init) == target.dim
 
+    I = np.eye(target.dim)
     θ_tm1 = init
     samples = [θ_tm1]
     rejects = []
@@ -75,19 +75,21 @@ def metropolis(target, S=200, init=None, step=1):
     return (np.array(samples), np.array(rejects))
 
 
-# Replicate Gelman Figure 11.1 with 5 starting locations of centered Gaussian.
-norm_2d = stats.multivariate_normal(mean=[0, 0], cov=np.eye(2))
+# -----------------------------------------------------------------------------
+#         Gelman Figure 11.1 with 5 starting locations of centered Gaussian
+# -----------------------------------------------------------------------------
+target = stats.multivariate_normal(mean=[0, 0], cov=np.eye(2))
 
 inits = np.array([
     [2.5, 2.5],
     [-2.5, 2.5],
-    [0., 0.],
     [-2.5, -2.5],
     [2.5, -2.5],
+    [0., 0.],
 ])
 
 S = 2000
-samp = xr.DataArray(
+trace = xr.DataArray(
     dims=('chain', 'draw', 'x_dim_0'),
     coords=dict(
         chain=np.arange(inits.shape[0]),
@@ -98,23 +100,23 @@ samp = xr.DataArray(
 
 fig, axs = plt.subplots(num=1, ncols=3, sharex=True, sharey=True, clear=True)
 fig.set_size_inches((12, 4), forward=True)
+fig.suptitle('Gelman [BDA3], Figure 11.1', fontweight='bold')
 
 for chain, init in enumerate(inits):
-    samples, rejects = metropolis(norm_2d, S=2000, init=init, step=0.2)
-    samp.loc[dict(chain=chain)] = samples
+    samples, rejects = metropolis(target, S=2000, init=init, step=0.2)
+    trace.loc[dict(chain=chain)] = samples
 
     # Line plot of N iterations showing random walk effect
     for ax, N in zip(axs[:2], [50, 1000]):
         ax.scatter(*init, c='k', marker='s')
-        ax.plot(*samp.sel(dict(chain=chain, draw=range(N))).T, c='k', lw=1)
+        ax.plot(*trace.sel(dict(chain=chain, draw=range(N))).T, c='k', lw=1)
 
     # Scatter plot of the iterates of the second halves of the sequences
     # TODO jitter points so steps where random walks stood still are visible.
-    axs[2].scatter(*samp.sel(dict(chain=chain, draw=range(1000, 2000))).T,
+    axs[2].scatter(*trace.sel(dict(chain=chain, draw=range(1000, 2000))).T,
                    c='k', s=1, alpha=0.5)
 
 # Format plots
-fig.suptitle('Gelman BDA3, Figure 11.1', fontweight='bold')
 axs[0].set(xlim=(-4, 4), ylim=(-4, 4))
 axs[0].set_title('First 50 iterations')
 axs[1].set_title('First 1000 iterations')
@@ -122,43 +124,47 @@ axs[2].set_title('Last 1000 draws')
 for ax in axs:
     ax.set(aspect='equal')
 
+# Plot the chains of x0 and x1 samples to ensure convergence
+# az.plot_trace(trace)
 
 # -----------------------------------------------------------------------------
 #         Figure 9.3
 # -----------------------------------------------------------------------------
 # Generate distribution with high correlation
 ρ = -0.9
-rv = stats.multivariate_normal(mean=[0, 0], cov=[[1, ρ], [ρ, 1]])
+target = stats.multivariate_normal(mean=[0, 0], cov=[[1, ρ], [ρ, 1]])
 
 # Plot contours of the pdf on a uniform grid
 xm = 2.5
 x0, x1 = np.mgrid[-xm:xm:0.01, -xm:xm:0.01]
 pos = np.dstack((x0, x1))
 
-fig, axs = plt.subplots(num=2, ncols=2, sharey=True, clear=True)
+fig, axs = plt.subplots(num=3, ncols=2, sharey=True, clear=True)
 fig.set_size_inches((10, 5), forward=True)
+fig.suptitle('McElreath, Figure 9.3', fontweight='bold')
 
 # (a) step size = 0.1 -> accept rate = 0.62
 # (b) step size = 0.25 -> accept rate = 0.34
 S = 50
+init = (-1., 0.75)
 
 for ax, step in zip(axs, [0.1, 0.25]):
     # Extract the samples
-    init = (-1., 0.75)
-    samples, rejects = metropolis(rv, S, init=init, step=step)
+    samples, rejects = metropolis(target, S, init=init, step=step)  # (S, 2)
 
     # Plot the contours of the target pdf
-    ax.contour(x0, x1, rv.pdf(pos), zorder=0)
+    ax.contour(x0, x1, target.pdf(pos), zorder=0)
 
     # Plot the accepted/rejected points
-    ax.scatter(samples[:, 0], samples[:, 1], c='k', s=20)
-    ax.scatter(rejects[:, 0], rejects[:, 1], ec='k', fc='none', s=20)
+    ax.scatter(*samples.T, c='k', s=20)
+    # ax.plot(*samples.T, c='k', lw=1)
+    ax.scatter(*rejects.T, ec='k', fc='none', s=20)
 
     # Plot the initial point
     ax.scatter(*init, marker='x', c='C3')
 
     ax.set(
-        title=(f"step size = {step:.2f},"
+        title=(f"step size = {step:.2f}, "
                f"accept rate = {S/(len(rejects) + S):.2f}"),
         xlabel=r'$x_0$',
         ylabel=r'$x_1$',
