@@ -16,10 +16,10 @@ import xarray as xr
 
 from scipy import stats
 
-rng = np.random.default_rng(seed=565656)
+rng = np.random.default_rng(seed=56565)
 
 
-def metropolis(target, S=200, init=None, step=1):
+def metropolis(target, S=200, init=None, step=None):
     r"""Sample from the distribution using the Metropolis algorithm.
 
     Parameters
@@ -48,9 +48,12 @@ def metropolis(target, S=200, init=None, step=1):
         The rejected proposed sample points.
     """
     if init is None:
-        init = np.zeros(target.dim)
+        init = target.rvs()  # take one sample from the target
     else:
         assert len(init) == target.dim
+
+    if step is None:
+        step = 2.4 / target.dim**0.5  # optimal step size
 
     I = np.eye(target.dim)
     θ_tm1 = init
@@ -103,7 +106,9 @@ fig.set_size_inches((12, 4), forward=True)
 fig.suptitle('Gelman [BDA3], Figure 11.1', fontweight='bold')
 
 for chain, init in enumerate(inits):
-    samples, rejects = metropolis(target, S=2000, init=init, step=0.2)
+    # Sample the distribution using a known "too small" step size to see walk
+    samples, rejects = metropolis(target, S=S, init=init, step=0.2)
+    print(f"Chain {chain}: acceptance = {S / (S + len(rejects)):.4f}")
     trace.loc[dict(chain=chain)] = samples
 
     # Line plot of N iterations showing random walk effect
@@ -161,7 +166,7 @@ for ax, step in zip(axs, [0.1, 0.25]):
     ax.scatter(*rejects.T, ec='k', fc='none', s=20)
 
     # Plot the initial point
-    ax.scatter(*init, marker='x', c='C3')
+    ax.scatter(*samples[0], marker='x', c='C3')
 
     ax.set(
         title=(f"step size = {step:.2f}, "
