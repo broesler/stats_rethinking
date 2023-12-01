@@ -162,8 +162,8 @@ def hamiltonian_sample(q0, x, y, U, grad_U, step=0.1, L=10, **kwargs):
     # TODO convert this dictionary into a class for easier documentation/use
     return dict(
         q=new_q,
-        qtraj=qt,
-        ptraj=pt,
+        qt=qt,
+        pt=pt,
         accept=accept,
         dH=Hp - H0,
     )
@@ -222,26 +222,26 @@ for i in range(N):
 
     if N < 11:
         # Plot the trajectory with varying linewidth
-        KE = np.sum(Q['ptraj']**2 / 2, axis=1)
+        KE = np.sum(Q['pt']**2 / 2, axis=1)
         lws = 1 + KE
-        pts = Q['qtraj'][:, np.newaxis, :]  # (L, 1, 2)
+        pts = Q['qt'][:, np.newaxis, :]  # (L, 1, 2)
         segs = np.concatenate([pts[:-1], pts[1:]], axis=1)  # (L-1, 2, 2)
         lc = LineCollection(segs, linewidths=lws, color='k', alpha=0.4)
         ax.add_collection(lc)
         # Plot the trajectory points
-        ax.scatter(*Q['qtraj'].T, c='k', s=2, alpha=0.4)
+        ax.scatter(*Q['qt'].T, c='k', s=2, alpha=0.4)
 
         # Label the sample points
         ax.annotate(
             text=f"{i}",
-            xy=Q['qtraj'][-1],
+            xy=Q['qt'][-1],
             xytext=(5, 5),
             textcoords='offset points',
         )
 
     # Plot the sample point (last leapfrog iteration)
     ax.scatter(
-        *Q['qtraj'][-1],
+        *Q['qt'][-1],
         ec='k',
         fc='r' if Q['dH'] > 0.1 else ('k' if Q['accept'] else 'none'),
     )
