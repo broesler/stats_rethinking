@@ -229,6 +229,9 @@ for i in range(N):
             textcoords='offset points',
         )
 
+        ax.annotate("", xy=Q['qt'][-1], xytext=Q['qt'][-2],
+                    arrowprops=dict(arrowstyle="->"))
+
     # Plot the sample point (last leapfrog iteration)
     ax.scatter(
         *Q['qt'][-1],
