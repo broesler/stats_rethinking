@@ -84,7 +84,7 @@ def myU_grad4(q, x, y, m_x=0, s_x=0.5, m_y=0, s_y=0.5):
 # TODO
 # * clean up this code, many useless lines (i.e. p = -p)
 # * make a wrapper loop to generate S samples in C chains?
-def hamiltonian_sample(q0, x, y, U, grad_U, step=0.1, L=10, **kwargs):
+def hamiltonian_sample(q0, x, y, U, grad_U, eps=0.1, L=10, **kwargs):
     """Compute a Hamiltonian Monte Carlo simulation to generate one sample.
 
     Parameters
@@ -106,7 +106,7 @@ def hamiltonian_sample(q0, x, y, U, grad_U, step=0.1, L=10, **kwargs):
         Dictionary with fields:
             q : float
                 The sample value.
-            traj, ptraj : (L, N) ndarrays
+            qt, pt : (L, N) ndarrays
                 The position (parameter values) and momentum arrays for the
                 intermediate leapfrog steps.
             accept : bool
@@ -115,47 +115,35 @@ def hamiltonian_sample(q0, x, y, U, grad_U, step=0.1, L=10, **kwargs):
                 The difference in the proposed and current sums of position and
                 momentum.
     """
+    # TODO implement non-identity mass matrix for covariance?
+    p0 = rng.normal(size=len(q0))
+
     # Initial position and momentum
-    q = q0
-    p = rng.normal(size=q.shape)
-    p0 = p
-
-    # Make a half-step for momentum at the beginning
-    p -= step * grad_U(q, x, y, **kwargs) / 2
-
-    # Initialize the trajectory
-    qt = np.empty((L+1, len(q)))
-    pt = np.empty((L+1, len(q)))
+    qt = np.empty((L+1, len(q0)))
+    pt = np.empty((L+1, len(q0)))
     qt[:] = np.nan
     pt[:] = np.nan
-    qt[0] = q
-    pt[0] = p
+    qt[0] = q0
+
+    # Make a half-step for momentum at the beginning
+    pt[0] = p0 - eps * grad_U(q0, x, y, **kwargs) / 2
 
     # Alternate full steps for position and momentum
     for i in range(1, L+1):
-        q += step * p  # full step for position
-        if i != L:
-            p -= step * grad_U(q, x, y, **kwargs)
-            pt[i] = p
-        qt[i] = q
+        qt[i] = qt[i-1] + eps * pt[i-1]
+        if i < L:
+            pt[i] = pt[i-1] - eps * grad_U(qt[i], x, y, **kwargs)
 
     # Make a half step for momentum at the end
-    p -= step * grad_U(q, x, y, **kwargs) / 2
-    pt[L] = p
+    pt[-1] = pt[-2] - eps * grad_U(qt[-1], x, y, **kwargs) / 2
 
-    # Negate momentum at end of trajectory to make the proposal symmetric
-    p = -p
+    # Compute the log Hamiltonians (U + K) at the start and end
+    # Note that this computation is the log-equivalent of Gelman [BDA3] (12.3)
+    q, p = qt[-1], pt[-1]
+    H0 = U(q0, x, y, **kwargs) + np.sum(p0**2) / 2
+    Hp = U(q, x, y, **kwargs) + np.sum(p**2) / 2
 
-    # Evaluate potential and kinetic energies at start and end of trajectory
-    U0 = U(q0, x, y, **kwargs)
-    K0 = np.sum(p0**2) / 2
-    Up = U(q, x, y, **kwargs)
-    Kp = np.sum(p**2) / 2
-    # Compute the log Hamiltonians
-    H0 = U0 + K0
-    Hp = Up + Kp
-
-    # Accept or reject the state at the end
+    # Accept or reject the proposed state
     accept = rng.random() < np.exp(H0 - Hp)
     new_q = q if accept else q0
 
@@ -172,7 +160,7 @@ def hamiltonian_sample(q0, x, y, U, grad_U, step=0.1, L=10, **kwargs):
 # -----------------------------------------------------------------------------
 #         Test Data
 # -----------------------------------------------------------------------------
-rng = np.random.default_rng(seed=5656)
+rng = np.random.default_rng(seed=7)
 
 # Generate data
 x = rng.normal(size=50)
@@ -197,6 +185,7 @@ q0 = np.r_[-0.1, 0.2]
 
 N = 4  # number of samples
 L = 11
+eps = 0.03
 
 # Plot contours of the pdf on a uniform grid
 xm = 0.5
@@ -204,7 +193,7 @@ x0, x1 = np.mgrid[-xm:xm:0.01, -xm:xm:0.01]
 pos = np.dstack((x0, x1))
 
 # TODO how to fix U, grad_U to use this correlation??
-ρ = -0.9
+ρ = 0
 target = stats.multivariate_normal(mean=[0, 0], cov=np.c_[[1, ρ], [ρ, 1]])
 
 fig = plt.figure(1, clear=True)
@@ -216,9 +205,10 @@ ax.contour(x0, x1, target.pdf(pos), levels=6, zorder=0)
 # Plot the starting point
 ax.scatter(*q0, c='r', marker='x')
 
+Q = dict(q=q0)
 for i in range(N):
     # Get a single sample
-    Q = hamiltonian_sample(q0, x, y, myU4, myU_grad4, step=0.03, L=L)
+    Q = hamiltonian_sample(Q['q'], x, y, myU4, myU_grad4, eps=eps, L=L)
 
     if N < 11:
         # Plot the trajectory with varying linewidth
@@ -235,7 +225,7 @@ for i in range(N):
         ax.annotate(
             text=f"{i}",
             xy=Q['qt'][-1],
-            xytext=(5, 5),
+            xytext=(3, 3),
             textcoords='offset points',
         )
 
