@@ -45,13 +45,13 @@ def myU4(q, x, y, m_x=0, s_x=0.5, m_y=0, s_y=0.5):
         The negative log probabilities of the parameters ``q``.
     """
     μ_x, μ_y = q
-    U = (
+    log_U = (
           np.sum(np.log(stats.norm(μ_x, 1).pdf(x)))
         + np.sum(np.log(stats.norm(μ_y, 1).pdf(y)))
-        + stats.norm(m_x, s_x).pdf(μ_x)
-        + stats.norm(m_y, s_y).pdf(μ_y)
+        + np.log(stats.norm(m_x, s_x).pdf(μ_x))
+        + np.log(stats.norm(m_y, s_y).pdf(μ_y))
     )
-    return -U
+    return -log_U
 
 
 # (R code 9.4) gradient function
@@ -92,7 +92,7 @@ def hamiltonian_sample(q0, x, y, U, grad_U, step=0.1, L=10, **kwargs):
     q0 : (N,) array_like
         The vector of parameters from which to generate a sample.
     U, grad_U : callable
-        The target distribution function and its gradient.
+        The negative log of the target distribution function and its gradient.
     step : float, optional
         The step size.
     L : int, optional
