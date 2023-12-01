@@ -1478,21 +1478,26 @@ def dataset_to_frame(ds):
     if 'chain' in ds.dims:
         ds = ds.mean('chain')
 
-    df = pd.DataFrame()
+    dfs = list()
     for vname, da in ds.items():
         if da.ndim == 1:
-            df[vname] = da.values
+            data = da.values
+            columns = [vname]
         elif da.ndim > 1:
             if da.shape[1] == 1:
-                df[vname] = da.values.squeeze()
+                data = da.values.squeeze()
+                columns = [vname]
             else:
-                df[_names_from_vec(vname, da.shape[1])] = da.values
+                data = da.values
+                columns = _names_from_vec(vname, da.shape[1])
         else:
             raise ValueError(f"{vname} has invalid dimension {da.ndim}.")
-    return df
+
+        dfs.append(pd.DataFrame(data=data, columns=columns))
+
+    return pd.concat(dfs, axis=1)
 
 
-# TODO NOT USED other than one test. Remove.
 def _names_from_vec(vname, ncols):
     """Create a list of strings ['x__0', 'x__1', ..., 'x__``ncols``'],
     where 'x' is ``vname``."""
