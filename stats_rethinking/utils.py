@@ -458,7 +458,7 @@ def sparklines_from_array(arr, width=12):
 # * can require kwargs on __init__, then use those values to compute self._std,
 #   etc. so that the property just returns that value without doing
 #   a computation each time it is called.
-# * move `map_est` and `start` to Quap only.
+# * move `map_est` to Quap only.
 
 class PostModel(ABC):
     """
@@ -623,13 +623,14 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
         List of `str` of variables names specified by `model`. If `vars` is
         given, `var_names` will be ignored.
     model : pymc.Model (optional if in `with` context)
+    data : pd.DataFrame, optional
+        The data to which this model was fit.
     start : `dict` of parameter values, optional, default=`model.initial_point`
 
     Returns
     -------
     result : Quap
-        Quap object of `scipy.stats.rv_frozen` distributions corresponding to
-        the MAP estimates of `vars`.
+        Object containing information about the posterior parameter values.
     """
     model = pm.modelcontext(model)
 
@@ -702,18 +703,21 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
 
 
 # TODO
-# * get correct number of samples from chains? We should flatten the DataSets
-# along the chain dimension instead of taking the mean.
+# * remove mean('chain') calls. These should be converted to:
+#       ds = ds.stack(sample=('chain', 'draw')).transpose('sample', ...)
+# * get desired number of samples from chains?
 def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs):
     """Compute the quadratic approximation for the MAP estimate.
 
     Parameters
     ----------
-    vars : list of TensorVariables, optional, default=model.unobserved_RVs
+    vars : list of TensorVariables, optional, default=model.free_RVs
         List of variables to optimize and set to optimum.
     var_names : list of str, optional
         List of `str` of variables names specified by `model`.
     model : pymc.Model (optional if in `with` context)
+    data : pd.DataFrame, optional
+        The data to which this model was fit.
     start : dict[str] -> ndarray, optional, default=`model.initial_point`
         Dictionary of initial parameter values. Keys should be names of random
         variables in the model.
@@ -1584,7 +1588,7 @@ def frame_to_dataset(df, model=None):
     return ds
 
 
-# Filter variable names? include/exclude?
+# TODO Filter variable names? include/exclude?
 def dataset_to_frame(ds):
     """Convert ArviZ Dataset to DataFrame by separating columns with
     multi-dimensional parameters, e.g. β (N,) into β__0, β__1, ..., β__N.
