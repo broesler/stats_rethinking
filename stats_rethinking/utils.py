@@ -1595,7 +1595,9 @@ def dataset_to_frame(ds):
 
         dfs.append(pd.DataFrame(data=data, columns=columns))
 
-    return pd.concat(dfs, axis=1)
+    df = pd.concat(dfs, axis=1)
+    df.index.name = da.dims[0]
+    return df
 
 
 def _names_from_vec(vname, ncols):
