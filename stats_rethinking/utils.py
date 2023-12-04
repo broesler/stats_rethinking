@@ -612,6 +612,19 @@ class Ulam(PostModel):
         # TODO currently ignoring `N` argument.
         return self.samples
 
+    # NOTE unlike rethinking::traceplot, pymc discards the warmup samples by
+    # default, and only returns the valid samples. We could write a function
+    # that mimics rethinking::traceplot, using:
+    # >>> idata = pm.sample(..., discard_tuned_samples=False)
+    # >>> all_post = xr.concat([idata.warmup_posterior, idata.posterior],
+    #                          dim='concat_dim')
+    # >>> az.plot_trace(all_post) 
+    # or something to that effect.
+    #
+    def plot_trace(self):
+        return az.plot_trace(self.samples)
+
+
 def quap(vars=None, var_names=None, model=None, data=None, start=None):
     """Compute the quadratic approximation for the MAP estimate.
 
