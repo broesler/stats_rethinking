@@ -758,7 +758,13 @@ def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs)
     ).cov()
 
     # Get the minus log likelihood of the data
-    loglik = -idata.log_likelihood.mean(sample_dims).sum()
+    loglik = float(
+        -idata
+        .log_likelihood
+        .mean(sample_dims)
+        .sum()
+        .to_dataarray()  # convert to be able to extract singleton value
+    )
 
     # Coefficients are just the basic RVs, without the observed RVs
     return Ulam(
