@@ -506,15 +506,15 @@ class PostModel(ABC):
         )
         return D @ self.cov @ D
 
-    def sample(self, N=10_000):
-        """Sample the posterior approximation.
+    def get_samples(self):
+        """Get samples from the posterior distribution.
 
-        Analagous to `rethinking::extract.samples`.
+        .. note::
+            For quadratic approximations, these samples will be drawn with this
+            function call. For MCMC models, the samples will already be stored
+            in the object, so this function just returns them.
         """
-        mean = flatten_dataset(self.coef).values
-        posterior = stats.multivariate_normal(mean=mean, cov=self.cov)
-        df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
-        return frame_to_dataset(df, model=self.model).mean('chain')
+        pass
 
     def sample_prior(self, N=10_000):
         """Sample the prior distribution.
@@ -584,11 +584,31 @@ class Quap(PostModel):
     _descrip = "The quadratic (Gaussian) approximation of the posterior."
     __doc__ = _descrip + "\n" + PostModel.__doc__
 
+    def sample(self, N=10_000):
+        """Sample the posterior approximation.
+
+        Analagous to `rethinking::extract.samples`.
+        """
+        mean = flatten_dataset(self.coef).values
+        posterior = stats.multivariate_normal(mean=mean, cov=self.cov)
+        df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
+        return frame_to_dataset(df, model=self.model).mean('chain')
+
+    def get_samples(self, N=1000):
+        return self.sample(N)
+
 
 class Ulam(PostModel):
     _descrip = "Hamiltonian MCMC samples of the posterior."
     __doc__ = _descrip + "\n" + PostModel.__doc__
 
+    def __init__(self, samples=None, **kwargs):
+        super().__init__(**kwargs)
+        self.samples = samples
+
+    def get_samples(self, N=1000):
+        # TODO currently ignoring `N` argument.
+        return self.samples
 
 def quap(vars=None, var_names=None, model=None, data=None, start=None):
     """Compute the quadratic approximation for the MAP estimate.
@@ -746,6 +766,7 @@ def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs)
         loglik=loglik,
         model=deepcopy(model),
         start=model.initial_point() if start is None else start,
+        samples=post,
     )
 
 
