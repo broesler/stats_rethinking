@@ -21,6 +21,7 @@ import uuid
 import warnings
 import xarray as xr
 
+from abc import ABC
 from arviz.data.base import generate_dims_coords
 from contextlib import contextmanager
 from copy import deepcopy
@@ -333,13 +334,13 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
         A DataFrame with a row for each variable, and columns for mean,
         standard deviation, and low/high percentiles of the variable.
     """
-    if not isinstance(obj, (Quap, xr.Dataset, pd.DataFrame, np.ndarray)):
-        raise TypeError(f"quap of type '{type(quap)}' is unsupported!")
+    if not isinstance(obj, (PostModel, xr.Dataset, pd.DataFrame, np.ndarray)):
+        raise TypeError(f"`obj` of type '{type(quap)}' is unsupported!")
 
     a = (1-p)/2
     pp = 100*np.array([a, 1-a])  # percentages for printing
 
-    if isinstance(obj, Quap):
+    if isinstance(obj, PostModel):
         title = None
         # Compute density intervals
         coef = dataset_to_series(obj.coef)
@@ -449,15 +450,18 @@ def sparklines_from_array(arr, width=12):
     return sparklines
 
 
+# -----------------------------------------------------------------------------
+#         Quap functions
+# -----------------------------------------------------------------------------
 # TODO
 # * make all attributes read-only? quap() call populates struct.
 # * can require kwargs on __init__, then use those values to compute self._std,
 #   etc. so that the property just returns that value without doing
 #   a computation each time it is called.
+# * move `map_est` and `start` to Quap only.
 
-class Quap():
-    """The quadratic (*i.e.* Gaussian) approximation of the posterior.
-
+class PostModel(ABC):
+    """
     Attributes
     ----------
     coef : dict
@@ -472,7 +476,7 @@ class Quap():
         Maximum *a posteriori* estimates of any Deterministic or Potential
         variables.
     loglik : float
-        The log-likelihood of the model parameters.
+        The minus log-likelihood of the data, given the model parameters.
     model : :class:`pymc.Model`
         The pymc model object used to define the posterior.
     start : dict
@@ -549,6 +553,7 @@ class Quap():
             self.model.named_vars[k].name = v
         return self
 
+    # TODO allow subclasses to provide "description" line in `out`?
     def __str__(self):
         with pd.option_context('display.float_format', '{:.4f}'.format):
             try:
@@ -573,6 +578,16 @@ Log-likelihood: {self.loglik:.2f}
 
     def __repr__(self):
         return f"<{self.__class__.__name__}: {self.__str__()}>"
+
+
+class Quap(PostModel):
+    _descrip = "The quadratic (Gaussian) approximation of the posterior."
+    __doc__ = _descrip + "\n" + PostModel.__doc__
+
+
+class Ulam(PostModel):
+    _descrip = "Hamiltonian MCMC samples of the posterior."
+    __doc__ = _descrip + "\n" + PostModel.__doc__
 
 
 def quap(vars=None, var_names=None, model=None, data=None, start=None):
@@ -657,6 +672,76 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
         data=deepcopy(data),
         map_est={k: map_est[k] for k in dnames},
         loglik=opt.fun,  # equivalent of sum(loglik(model, pointwise=False))
+        model=deepcopy(model),
+        start=model.initial_point() if start is None else start,
+    )
+
+
+# TODO
+# * get correct number of samples from chains? We should flatten the DataSets
+# along the chain dimension instead of taking the mean.
+def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs):
+    """Compute the quadratic approximation for the MAP estimate.
+
+    Parameters
+    ----------
+    vars : list of TensorVariables, optional, default=model.unobserved_RVs
+        List of variables to optimize and set to optimum.
+    var_names : list of str, optional
+        List of `str` of variables names specified by `model`.
+    model : pymc.Model (optional if in `with` context)
+    start : dict[str] -> ndarray, optional, default=`model.initial_point`
+        Dictionary of initial parameter values. Keys should be names of random
+        variables in the model.
+    **kwargs : dict
+        Additional argumements to be passed to `pymc.sample()`.
+
+    Returns
+    -------
+    result : Ulam
+        Object containing information about the posterior parameter values.
+    """
+    sample_dims = ('chain', 'draw')
+    model = pm.modelcontext(model)
+    idata = pm.sample(
+        model=model,
+        initvals=start,
+        idata_kwargs=dict(log_likelihood=True),
+        **kwargs
+    )
+
+    # Get requested variables
+    if vars is None and var_names is None:
+        # filter out internally used variables
+        var_names = [x.name for x in model.free_RVs
+                     if not x.name.endswith('__')]
+    else:
+        if var_names is not None:
+            warnings.warn("`var_names` and `vars` set, ignoring `var_names`.")
+        var_names = [x.name for x in vars]
+
+    # Get the posterior samples
+    post = idata.posterior[list(var_names)]
+
+    # Coefficient values are just the mean of the samples
+    coef = post.mean(sample_dims)
+
+    # Compute the covariance matrix from the samples
+    cov = dataset_to_frame(
+        post
+        .stack(sample=sample_dims)
+        .transpose('sample', ...)
+    ).cov()
+
+    # Get the minus log likelihood of the data
+    loglik = -idata.log_likelihood.mean(sample_dims).sum()
+
+    # Coefficients are just the basic RVs, without the observed RVs
+    return Ulam(
+        coef=coef,
+        cov=cov,
+        data=deepcopy(data),
+        loglik=loglik,
         model=deepcopy(model),
         start=model.initial_point() if start is None else start,
     )
