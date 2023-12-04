@@ -349,6 +349,13 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
         hi = coef + z * obj.std
         df = pd.concat([coef, obj.std, lo, hi], axis=1)
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
+        if isinstance(obj, Ulam):
+            # Get number of effective observations
+            tf = az.summary(obj.samples)
+            # Fix automatic index names to match df
+            tf.index = tf.index.str.replace('[', '__').str.replace(']', '')
+            df['ess'] = tf['ess_bulk'].astype(int)
+            df['R_hat'] = tf['r_hat']
         # if hist:
         #     df['histogram'] = sparklines_from_norm(df['mean'], df['std'])
 
@@ -827,7 +834,6 @@ def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs)
         .to_dataarray()  # convert to be able to extract singleton value
     )
 
-    # Coefficients are just the basic RVs, without the observed RVs
     return Ulam(
         coef=coef,
         cov=cov,
