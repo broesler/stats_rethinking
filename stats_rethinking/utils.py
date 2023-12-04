@@ -622,7 +622,31 @@ class Ulam(PostModel):
     # or something to that effect.
     #
     def plot_trace(self):
+        """Plot the MCMC sample chains for each parameter."""
         return az.plot_trace(self.samples)
+
+    def pairplot(self, **kwargs):
+        """Plot the pairwise correlations between the model parameters.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Additional arguments to be passed to `seaborn.pairplot()`.
+
+        Returns
+        -------
+        grid : seaborn.PairGrid
+            Returns the underlying instance for further tweaking.
+        """
+        opts = dict(
+            corner=True,
+            diag_kind='kde',
+            plot_kws=dict(s=10, alpha=0.2),
+            height=1.5,
+        )
+        if kwargs is not None:
+            opts.update(kwargs)
+        return sns.pairplot(dataset_to_frame(self.samples), **opts)
 
 
 def quap(vars=None, var_names=None, model=None, data=None, start=None):

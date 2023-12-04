@@ -9,7 +9,6 @@
 """
 # =============================================================================
 
-import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -121,6 +120,9 @@ m9_1 = sts.ulam(model=the_model, data=df, chains=4, cores=4)
 
 print('m9.1:')
 sts.precis(m9_1)
+
+# m9_1.plot_trace()
+# m9_1.pairplot()
 
 plt.ion()
 plt.show()
