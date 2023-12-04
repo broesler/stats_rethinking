@@ -621,16 +621,34 @@ class Ulam(PostModel):
     # >>> az.plot_trace(all_post) 
     # or something to that effect.
     #
-    def plot_trace(self):
-        """Plot the MCMC sample chains for each parameter."""
-        return az.plot_trace(self.samples)
+    def plot_trace(self, title=None):
+        """Plot the MCMC sample chains for each parameter.
 
-    def pairplot(self, **kwargs):
+        Parameters
+        ----------
+        title : str, optional
+            The title of the figure.
+
+        Returns
+        -------
+        fig : plt.Figure
+            The figure handle containing the trace plots.
+        axes : ndarray of plt.Axes
+            An array corresponding to the axes of each trace plot.
+        """
+        p = az.plot_trace(self.samples)
+        fig = p[0, 0].figure
+        fig.suptitle(title)
+        return fig, p
+
+    def pairplot(self, title=None, **kwargs):
         """Plot the pairwise correlations between the model parameters.
 
         Parameters
         ----------
-        kwargs : dict
+        title : str, optional
+            The title of the figure.
+        kwargs : dict, optional
             Additional arguments to be passed to `seaborn.pairplot()`.
 
         Returns
@@ -646,7 +664,9 @@ class Ulam(PostModel):
         )
         if kwargs is not None:
             opts.update(kwargs)
-        return sns.pairplot(dataset_to_frame(self.samples), **opts)
+        g = sns.pairplot(dataset_to_frame(self.samples), **opts)
+        g.figure.suptitle(title)
+        return g
 
 
 def quap(vars=None, var_names=None, model=None, data=None, start=None):
