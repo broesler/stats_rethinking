@@ -596,16 +596,17 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
     Parameters
     ----------
     vars : list, optional, default=model.unobserved_RVs
-        List of variables to optimize and set to optimum
+        List of variables to optimize and set to optimum.
     var_names : list, optional
-        List of `str` of variables names specified by `model`
+        List of `str` of variables names specified by `model`. If `vars` is
+        given, `var_names` will be ignored.
     model : pymc.Model (optional if in `with` context)
     start : `dict` of parameter values, optional, default=`model.initial_point`
 
     Returns
     -------
-    result : dict
-        Dictionary of `scipy.stats.rv_frozen` distributions corresponding to
+    result : Quap
+        Quap object of `scipy.stats.rv_frozen` distributions corresponding to
         the MAP estimates of `vars`.
     """
     model = pm.modelcontext(model)
@@ -650,6 +651,7 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
             # warnings.warn(f"Hessian for '{v.name}' may be incorrect!")
             continue
 
+    # TODO clean up and get rid of these temp variables
     # Filter variables for output
     free_vars = model.free_RVs
     dnames = [x.name for x in model.deterministics]
@@ -1038,6 +1040,9 @@ def _makeiter(a):
     return a if isinstance(a, (tuple, list)) else [a]
 
 
+# -----------------------------------------------------------------------------
+#         Model-building
+# -----------------------------------------------------------------------------
 def norm_fit(data, hist_kws=None, ax=None):
     """Plot a histogram and a normal curve fit to the data."""
     if ax is None:
@@ -1174,6 +1179,9 @@ def bspline_basis(t, x=None, k=3, padded_knots=False):
         return B
 
 
+# -----------------------------------------------------------------------------
+#         Model comparison
+# -----------------------------------------------------------------------------
 def coef_table(models, mnames=None, params=None, std=True):
     """Create a summary table of coefficients in each model.
 
@@ -1269,14 +1277,14 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
         sns.pointplot(data=ct.reset_index(), x='coef', y=y, hue=hue,
                       join=False, dodge=0.3, ax=ax)
 
-    # FIXME get coords is broken
+    # FIXME get_coords is broken
     # warnings.warn('get_coords broken in Seaborn 0.13.0. No errorbars shown.')
     # Find the x,y coordinates for each point
     xc, yc, colors = get_coords(ax)
 
     # Manually add the errorbars since we have std values already
     z = stats.norm.ppf(1 - (1 - q)/2)
-    errs = 2 * ct['std'] * z  # ± err -> 2 * ...
+    errs = 2 * ct['std'] * z  # ± err -> 2σz
     errs = errs.dropna()
     ax.errorbar(xc, yc, fmt=' ', xerr=errs, ecolor=colors)
 
@@ -1482,7 +1490,7 @@ def get_coords(ax):
 
 
 # -----------------------------------------------------------------------------
-#         Utilities
+#         Dataset/Frame conversion utilities
 # -----------------------------------------------------------------------------
 logsumexp = _logsumexp
 
@@ -1509,6 +1517,8 @@ def flatten_dataset(ds):
     return ds.to_stacked_array('data', sample_dims=[], name='data')
 
 
+# TODO change to use [0], [1], etc. instead of __0, __1? This format would be
+# consistent with both r::rethinking and `arviz.summary(idata)` presentation.
 def cnames_from_dataset(ds):
     """Return a list of variable names from the flattened Dataset."""
     da = flatten_dataset(ds)
@@ -1545,9 +1555,14 @@ def frame_to_dataset(df, model=None):
     return ds
 
 
+# Filter variable names? include/exclude?
 def dataset_to_frame(ds):
     """Convert ArviZ Dataset to DataFrame by separating columns with
     multi-dimensional parameters, e.g. β (N,) into β__0, β__1, ..., β__N.
+
+    .. note::
+        This function assumes that the first dimension of a multidimensional
+        DataArray is the `index` dimension.
 
     Parameters
     ----------
