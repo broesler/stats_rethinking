@@ -483,6 +483,8 @@ class PostModel(ABC):
         Initial parameter values for the MAP optimization. Defaults to
         `model.initial_point`.
     """
+    _descrip = ""
+
     def __init__(self, *, coef=None, cov=None, data=None, map_est=None,
                  loglik=None, model=None, start=None):
         self.coef = coef
@@ -564,7 +566,7 @@ class PostModel(ABC):
 
         # FIXME indentation. inspect.cleandoc() fails because the
         # model.str_repr() is not always aligned left.
-        out = f"""Quadratic Approximate Posterior Distribution
+        out = f"""{self._descrip}
 
 Formula:
 {self.model.str_repr()}
@@ -581,7 +583,7 @@ Log-likelihood: {self.loglik:.2f}
 
 
 class Quap(PostModel):
-    _descrip = "The quadratic (Gaussian) approximation of the posterior."
+    _descrip = "Quadratic-approximate posterior"
     __doc__ = _descrip + "\n" + PostModel.__doc__
 
     def sample(self, N=10_000):
@@ -599,7 +601,7 @@ class Quap(PostModel):
 
 
 class Ulam(PostModel):
-    _descrip = "Hamiltonian MCMC samples of the posterior."
+    _descrip = "Hamiltonian Monte Carlo approximation."
     __doc__ = _descrip + "\n" + PostModel.__doc__
 
     def __init__(self, samples=None, **kwargs):
@@ -1670,7 +1672,7 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
     """
     if post is None:
         Ns = int(Ns)
-        post = model.sample(Ns)
+        post = model.get_samples(Ns)
 
     if 'chain' not in post.dims:
         post = post.expand_dims('chain', axis=0)
@@ -1826,7 +1828,7 @@ def DIC(model, post=None, Ns=1000):
     [1]: Gelman (2020). Bayesian Data Analysis, 3 ed. pp 172--173.
     """
     if post is None:
-        post = model.sample(Ns)
+        post = model.get_samples(Ns)
     f_loglik = model.model.compile_logp()
     dev = [-2 * f_loglik(post.iloc[i]) for i in range(Ns)]
     dev_hat = model.deviance
