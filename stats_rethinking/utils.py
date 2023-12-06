@@ -353,7 +353,6 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
             # Get number of effective observations
             tf = az.summary(obj.samples)
             # Fix automatic index names to match df
-            tf.index = tf.index.str.replace('[', '__').str.replace(']', '')
             df['ess'] = tf['ess_bulk'].astype(int)
             df['R_hat'] = tf['r_hat']
         # if hist:
@@ -1314,7 +1313,7 @@ def coef_table(models, mnames=None, params=None, std=True):
             except KeyError:
                 subtables = []
             for p in params:
-                subtables.append(ct.filter(regex=f"^{p}__[0-9]+", axis=0))
+                subtables.append(ct.filter(regex=f"^{p}\[[0-9]+\]", axis=0))
             ct = pd.concat(subtables).drop_duplicates()
         ct = (ct.T  # organize by parameter, then model
                 .melt(ignore_index=False, value_name=value_name)
@@ -1622,7 +1621,8 @@ def cnames_from_dataset(ds):
     # TODO case of 2D, etc. variables
     df = pd.DataFrame(da.coords['variable'].values)
     g = df.groupby(0)
-    df.loc[g[0].transform('size').gt(1), 0] += '__' + g.cumcount().astype(str)
+    str_counts = g.cumcount().astype(str) 
+    df.loc[g[0].transform('size').gt(1), 0] += '[' + str_counts + ']'
     return list(df[0].values)
 
 
@@ -1633,14 +1633,14 @@ def dataset_to_series(ds):
 
 def frame_to_dataset(df, model=None):
     """Convert DataFrame to ArviZ Dataset by combinining columns with
-    multi-dimensional parameters, e.g. β__0, β__1, ..., β__N into β (N,).
+    multi-dimensional parameters, e.g. β[0], β[1], ..., β[N] into β (N,).
     """
     model = pm.modelcontext(model)
-    var_names = df.columns.str.replace('__[0-9]+', '', regex=True).unique()
+    var_names = df.columns.str.replace('\[\d+\]', '', regex=True).unique()
     the_dict = dict()
     for v in var_names:
         # Add 'chain' dimension to match expected shape
-        cols = df.filter(regex=fr"^{v}(__\d+)?$")
+        cols = df.filter(regex=fr"^{v}(\[\d+\])?$")
         the_dict[v] = np.expand_dims(cols.values, 0)
     ds = az.convert_to_dataset(the_dict)
     # Remove dims for scalar variables with shape ()
@@ -1654,7 +1654,7 @@ def frame_to_dataset(df, model=None):
 # TODO Filter variable names? include/exclude?
 def dataset_to_frame(ds):
     """Convert ArviZ Dataset to DataFrame by separating columns with
-    multi-dimensional parameters, e.g. β (N,) into β__0, β__1, ..., β__N.
+    multi-dimensional parameters, e.g. β (N,) into β[0], β[1], ..., β[N].
 
     .. note::
         This function assumes that the first dimension of a multidimensional
@@ -1697,11 +1697,11 @@ def dataset_to_frame(ds):
 
 
 def _names_from_vec(vname, ncols):
-    """Create a list of strings ['x__0', 'x__1', ..., 'x__``ncols``'],
+    """Create a list of strings ['x[0]', 'x[1]', ..., 'x[``ncols``]'],
     where 'x' is ``vname``."""
     # TODO case of 2D, etc. variables
     fmt = '02d' if ncols > 10 else 'd'
-    return [f"{vname}__{i:{fmt}}" for i in range(ncols)]
+    return [f"{vname}[{i:{fmt}}]" for i in range(ncols)]
 
 
 # -----------------------------------------------------------------------------
