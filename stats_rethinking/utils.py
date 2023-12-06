@@ -423,9 +423,11 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     return df
 
 
-def plot_precis(obj, mname='model', fignum=None):
+def plot_precis(obj, mname='model', fignum=None, labels=None):
     """Plot the `precis` output of the object like a `coef_table`."""
     ct = precis(obj, verbose=False)
+    if labels is not None:
+        ct.index = labels
     # Convert to "coef table" for plotting. Expects:
     # -- index = ['model', 'param']
     # -- columns = ['coef', 'std']
