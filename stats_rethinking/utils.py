@@ -531,7 +531,7 @@ class PostModel(ABC):
         Analagous to `rethinking::extract.prior`.
         """
         idata = pm.sample_prior_predictive(samples=N, model=self.model)
-        return idata.prior.mean('chain')
+        return idata.prior.stack(sample=('chain', 'draw'))
 
     def deviance(self):
         """Return the deviance of the model."""
