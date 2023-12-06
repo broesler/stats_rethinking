@@ -1404,7 +1404,13 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
 
     # Plot the origin and move the legend outside the plot for clarity
     ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
-    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+
+    # Only give a legend if necessary
+    n_models = ct.index.get_level_values('model').unique().size
+    if n_models == 1:
+        ax.get_legend().remove()
+    else:
+        ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
     return fig, ax
 
