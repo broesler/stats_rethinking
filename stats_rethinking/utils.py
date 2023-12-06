@@ -369,11 +369,15 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
         if 'draw' not in obj.dims:
             raise TypeError("Expected dimensions ['draw'] in `obj`")
         if 'chain' in obj.dims:
-            obj = obj.mean('chain')
-        title = (f"'DataFrame': {obj.sizes['draw']:d} obs."
+            sample_dims = ('chain', 'draw')
+            N_samples = obj.sizes['chain'] * obj.sizes['draw']
+        else:
+            sample_dims = 'draw'
+            N_samples = obj.sizes['draw']
+        title = (f"'DataFrame': {N_samples} obs."
                  f" of {len(obj.data_vars)} variables:")
-        mean = dataset_to_series(obj.mean('draw'))
-        std = dataset_to_series(obj.std('draw'))
+        mean = dataset_to_series(obj.mean(sample_dims))
+        std = dataset_to_series(obj.std(sample_dims))
         z = stats.norm.ppf(1 - a)
         lo = mean - z * std
         hi = mean + z * std
@@ -1397,8 +1401,10 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     xc, yc, colors = get_coords(ax)
 
     # Manually add the errorbars since we have std values already
-    z = stats.norm.ppf(1 - (1 - q)/2)
-    errs = 2 * ct['std'] * z  # ± err -> 2σz
+    z = stats.norm.ppf(1 - (1 - q)/2)  # ≈ 1.96 for q = 0.95
+    # NOTE no need for factor of 2 here, because plt.errorbar plots a bar from
+    # y[i] -> y[i] + errs[i] and y[i] -> y[i] - errs[i].
+    errs = ct['std'] * z  # ±err
     errs = errs.dropna()
     ax.errorbar(xc, yc, fmt=' ', xerr=errs, ecolor=colors)
 
