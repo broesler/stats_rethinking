@@ -419,6 +419,19 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     return df
 
 
+def plot_precis(obj, mname='model', fignum=None):
+    """Plot the `precis` output of the object like a `coef_table`."""
+    ct = precis(obj, verbose=False)
+    # Convert to "coef table" for plotting. Expects:
+    # -- index = ['model', 'param']
+    # -- columns = ['coef', 'std']
+    ct = ct.rename({'mean': 'coef'}, axis='columns')
+    ct.index.name = 'param'
+    ct = pd.concat({mname: ct}, names=['model'])
+    return plot_coef_table(ct, fignum=fignum)
+
+
+
 def sparklines_from_norm(means, stds, width=12):
     """Generate list of sparklines from means and stds."""
     # Create matrix of samples
