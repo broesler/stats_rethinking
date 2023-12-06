@@ -109,7 +109,10 @@ with pm.Model():
     pulled_left = pm.Binomial('pulled_left', 1, p, observed=df['pulled_left'])
     m11_2 = sts.quap(data=df)
 
-# TODO not sure why sampling the prior gives a `p_dim_0` = 508
+# TODO not sure why sampling the prior gives a `p_dim_0` = 508. 
+# Write into pymc help as to why we need to explicitly compute the function
+# that has already been defined in the model.
+
 # Get the difference in treatments (R code 11.8)
 bad_prior = m11_2.sample_prior(N=10_000)
 p = expit(bad_prior['a'] + bad_prior['b'])
@@ -158,10 +161,10 @@ sts.precis(m11_4)
 post = m11_4.get_samples()
 p_left = expit(post['a'])
 
-# TODO implement (plot_)coef_table but for any given DataFrame/precis output.
-# Do we need a Precis object with a plot method?
-ct = sts.precis(p_left.to_dataset())
+fig, ax = sts.plot_precis(p_left, mname='m11_4', fignum=2)
 
+fig.set_size_inches((6, 3), forward=True)
+ax.axvline(0.5, ls='--', c='k')
 
 plt.ion()
 plt.show()
