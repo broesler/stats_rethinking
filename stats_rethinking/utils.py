@@ -334,11 +334,17 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
         A DataFrame with a row for each variable, and columns for mean,
         standard deviation, and low/high percentiles of the variable.
     """
-    if not isinstance(obj, (PostModel, xr.Dataset, pd.DataFrame, np.ndarray)):
+    if not isinstance(
+            obj, 
+            (PostModel, xr.DataArray, xr.Dataset, pd.DataFrame, np.ndarray)
+            ):
         raise TypeError(f"`obj` of type '{type(obj)}' is unsupported!")
 
     a = (1-p)/2
     pp = 100*np.array([a, 1-a])  # percentages for printing
+
+    if isinstance(obj, xr.DataArray):
+        obj = obj.to_dataset()
 
     if isinstance(obj, PostModel):
         title = None
