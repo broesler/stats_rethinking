@@ -312,6 +312,8 @@ def expand_grid(**kwargs):
 #       with many different datatypes.
 #       See: <https://github.com/rmcelreath/rethinking/blob/master/R/precis.r>
 #       pythonic way would be to make objects that contain a precis method.
+#   * other option: split these blocks into individual `_precis_dataset()`
+#     functions and the main is just a dispatcher.
 #
 def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
@@ -1402,6 +1404,9 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     # Find the x,y coordinates for each point
     xc, yc, colors = get_coords(ax)
 
+    # Could get errs straight from ct, but risk other column names with '%'
+    # errs = ct.filter(like='%').diff(axis='columns').dropna(axis='columns')
+
     # Manually add the errorbars since we have std values already
     z = stats.norm.ppf(1 - (1 - q)/2)  # ≈ 1.96 for q = 0.95
     # NOTE no need for factor of 2 here, because plt.errorbar plots a bar from
@@ -1410,7 +1415,7 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     errs = errs.dropna()
     ax.errorbar(xc, yc, fmt=' ', xerr=errs, ecolor=colors)
 
-    # Plot the origin and move the legend outside the plot for clarity
+    # Plot the origin and make horizontal grid-lines
     ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
 
     # Only give a legend if necessary
@@ -1418,6 +1423,7 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     if n_models == 1:
         ax.get_legend().remove()
     else:
+        # Move the legend outside the plot for clarity
         ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
     return fig, ax
