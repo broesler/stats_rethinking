@@ -160,11 +160,31 @@ sts.precis(m11_4)
 # (R code 11.11)
 post = m11_4.get_samples()
 p_left = expit(post['a'])
+p_left.name = 'p'
 
 fig, ax = sts.plot_precis(p_left, mname='m11_4', fignum=2)
 
 fig.set_size_inches((6, 3), forward=True)
 ax.axvline(0.5, ls='--', c='k')
+
+# Plot the treatment effects (R code 11.12)
+labels = ['R/N', 'L/N', 'R/P', 'L/P']
+fig, ax = sts.plot_precis(post['b'], fignum=3, labels=labels)
+fig.set_size_inches((6, 3), forward=True)
+
+# Plot the differences in the treatments
+post_b = (
+    post['b']
+    .assign_coords(b_dim_0=labels)
+    .stack(sample=('chain', 'draw'))
+    .transpose('sample', ...)
+)
+
+diffs = dict(
+    dbR=post_b.sel(b_dim_0='R/N') - post_b.sel(b_dim_0='R/P'),
+    dbL=post_b.sel(b_dim_0='L/N') - post_b.sel(b_dim_0='L/P')
+)
+sts.plot_precis(pd.DataFrame(diffs), fignum=4)
 
 plt.ion()
 plt.show()
