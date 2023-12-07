@@ -146,12 +146,11 @@ ax.spines[['top', 'right']].set_visible(False)
 #         Create the model with actor now (R Code 11.10)
 # -----------------------------------------------------------------------------
 with pm.Model():
-    a = pm.Normal('a', 0, 1.5, shape=(len(df['actor'].unique()),))  # (7,)
-    b = pm.Normal('b', 0, 0.5, shape=(len(df['treatment'].unique()),))    # (4,)
-    p = pm.Deterministic(
-        'p',
-        pm.math.invlogit(a[df['actor']] + b[df['treatment']])
-    )
+    actor = pm.MutableData('actor', df['actor'])
+    treatment = pm.MutableData('treatment', df['treatment'])
+    a = pm.Normal('a', 0, 1.5, shape=(len(df['actor'].unique()),))      # (7,)
+    b = pm.Normal('b', 0, 0.5, shape=(len(df['treatment'].unique()),))  # (4,)
+    p = pm.Deterministic('p', pm.math.invlogit(a[actor] + b[treatment]))
     pulled_left = pm.Binomial('pulled_left', 1, p, observed=df['pulled_left'])
     m11_4 = sts.ulam(data=df)
 
