@@ -921,9 +921,11 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 
     Returns
     -------
-    samples : (M, N) ndarray
+    samples : (M, N) xarray.DataArray
         An array of values of the linear model evaluated at each of M `eval_at`
-        points and `N` parameter samples.
+        points and `N` parameter samples. The DataArray will have dimension
+        'draw' for the samples, and dimensions '{var.name}_dim_{i}' for each
+        dimension `i` of parameter `var`.
     """
     if out.name not in fit.model:
         raise ValueError(f"Variable '{out}' does not exist in the model!")
@@ -932,7 +934,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         params = inputvars(out)
 
     if dist is None:
-        dist = fit.sample(N)  # take the posterior
+        dist = fit.get_samples(N)  # take the posterior
 
     if eval_at is not None:
         pm.set_data(eval_at, model=fit.model)
@@ -945,22 +947,28 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         on_unused_input='ignore',
     )
 
-    # Manual loop since params are 0-D variables in the model.
+    if 'chain' not in dist.dims:
+        dist = dist.expand_dims('chain', axis=0)
+
+    # Manual loop since out_func cannot be vectorized.
     out_samp = np.fromiter(
         (
-            out_func({v.name: dist[v.name].isel(draw=i) for v in params})
-            for i in range(dist.sizes['draw'])
+            out_func({
+                v.name: dist[v.name].sel(chain=i, draw=j) 
+                for v in params
+            })
+            for i in dist.coords['chain']
+            for j in dist.coords['draw']
         ),
         dtype=np.dtype((float, out.shape.eval())),
-        count=dist.sizes['draw'],
-    ).T  # (out.shape, draw)
+    ).T  # (out.shape, draw) NOTE may not need transpose here?
 
     # Return a DataArray for named dimensions.
     return xr.DataArray(
         out_samp,
         coords={
             f"{out.name}_dim_0": range(out_samp.shape[0]),
-            'draw': range(out_samp.shape[1])
+            'draw': range(out_samp.shape[1])  # TODO should this be 'sample'?
         }
     )
 

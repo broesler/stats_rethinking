@@ -82,7 +82,7 @@ with pm.Model():
 reg_prior = m11_1.sample_prior(N=10_000).sortby('p')
 reg_dens = stats.gaussian_kde(reg_prior['p'], bw_method=0.01).pdf(reg_prior['p'])
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         FIgure 11.3 (R code 11.6)
 # -----------------------------------------------------------------------------
 fig, axs = plt.subplots(num=1, ncols=2, clear=True)
@@ -99,7 +99,7 @@ ax.set(xlabel="prior probability 'pulled_left'",
 ax.spines[['top', 'right']].set_visible(False)
 
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Include b effect (R code 11.7)
 # -----------------------------------------------------------------------------
 with pm.Model():
@@ -109,7 +109,7 @@ with pm.Model():
     pulled_left = pm.Binomial('pulled_left', 1, p, observed=df['pulled_left'])
     m11_2 = sts.quap(data=df)
 
-# TODO not sure why sampling the prior gives a `p_dim_0` = 508. 
+# TODO not sure why sampling the prior gives a `p_dim_0` = 508.
 # Write into pymc help as to why we need to explicitly compute the function
 # that has already been defined in the model.
 
@@ -142,7 +142,7 @@ ax.set(xlabel="prior probability of\ndifference between treatments",
        ylabel='Density')
 ax.spines[['top', 'right']].set_visible(False)
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Create the model with actor now (R Code 11.10)
 # -----------------------------------------------------------------------------
 with pm.Model():
@@ -154,6 +154,7 @@ with pm.Model():
     pulled_left = pm.Binomial('pulled_left', 1, p, observed=df['pulled_left'])
     m11_4 = sts.ulam(data=df)
 
+print('m11.4:')
 sts.precis(m11_4)
 
 # (R code 11.11)
@@ -168,10 +169,10 @@ ax.axvline(0.5, ls='--', c='k')
 
 # Plot the treatment effects (R code 11.12)
 labels = ['R/N', 'L/N', 'R/P', 'L/P']
-fig, ax = sts.plot_precis(post['b'], fignum=3, labels=labels)
+fig, _ = sts.plot_precis(post['b'], fignum=3, labels=labels)
 fig.set_size_inches((6, 3), forward=True)
 
-# Plot the differences in the treatments
+# Plot the contrasts in the treatments (R code 11.13)
 post_b = (
     post['b']
     .assign_coords(b_dim_0=labels)
@@ -183,7 +184,116 @@ diffs = dict(
     dbR=post_b.sel(b_dim_0='R/N') - post_b.sel(b_dim_0='R/P'),
     dbL=post_b.sel(b_dim_0='L/N') - post_b.sel(b_dim_0='L/P')
 )
-sts.plot_precis(pd.DataFrame(diffs), fignum=4)
+
+fig, ax = sts.plot_precis(pd.DataFrame(diffs), fignum=4)
+fig.set_size_inches((12, 6), forward=True)
+ax.set_ylim((-0.5, 1.5))  # give more space around lines
+
+
+# -----------------------------------------------------------------------------
+#         (R code 11.14) Posterior preditictive check of pulled_left proportions
+# -----------------------------------------------------------------------------
+
+# TODO transpose the entire plot? "left/right" makes more sense that way.
+def plot_actors(pf, ci=None, title='', c='C0', ax=None):
+    """Plot the output proportions for each actor and treatment."""
+    if ax is None:
+        ax = plt.gca()
+
+    # Dividing line of left/right preference
+    ax.axhline(0.5, ls='--', lw=1, color='k', alpha=0.5)
+
+    # Label the treatment indices for easier use
+    pf = pf.copy()
+    pf.index = pf.index.set_levels(labels, level='treatment')
+
+    if ci is not None:
+        ci = ci.copy()
+        ci = ci.transpose(..., 'quantile').to_pandas()
+        ci.index = pf.index
+        errs = ci.sub(pf, axis='rows').abs().T  # (2, N) for errorbar
+
+    # Plot each actor as a "column"
+    N_actors = pf.index.get_level_values('actor').unique().size
+    N = len(pf)
+    for i in range(N_actors):
+        # Plot divider
+        ax.axvline(4*i + 4.5, c='k', lw=1)
+        # Plot "title"
+        ax.text(4*i + 2.5, 1.05, f"actor {i+1}", ha='center', va='bottom')
+
+        # Plot left/right data offset from each other for clarity
+        if i != 1:
+            ax.plot(4*i + np.r_[1, 3], pf.loc[i, ['R/N', 'R/P']], c=c)
+            ax.plot(4*i + np.r_[2, 4], pf.loc[i, ['L/N', 'L/P']], c=c)
+
+    # Plot all the points at once
+    xs = np.arange(1, N, 4)
+    # ax.scatter(xs,   pf.loc[:, 'R/N'], ec=c, fc='white')
+    # ax.scatter(xs+1, pf.loc[:, 'L/N'], ec=c, fc='white')
+    # ax.scatter(xs+2, pf.loc[:, 'R/P'], fc=c)
+    # ax.scatter(xs+3, pf.loc[:, 'L/P'], fc=c)
+
+    yoff = 0.05
+    # ax.text(1, pf.loc[0, 'R/N'] - yoff, 'R/N', ha='center', va='top')
+    # ax.text(2, pf.loc[0, 'L/N'] + yoff, 'L/N', ha='center', va='bottom')
+    # ax.text(3, pf.loc[0, 'R/P'] - yoff, 'R/P', ha='center', va='top')
+    # ax.text(4, pf.loc[0, 'L/P'] + yoff, 'L/P', ha='center', va='bottom')
+
+    for i, s in enumerate(labels):
+        if ci is None:
+            # Plot the data points, closed for 'participant', open otherwise
+            ax.scatter(xs + i, pf.loc[:, s],
+                       fc=(c if 'P' in s else 'white'), ec=c, zorder=2)
+            # Annotate the first four points
+            sign, va = (-1, 'top') if 'R' in s else (1, 'bottom')
+            ax.text(x=i + 1, y=pf.loc[0, s] + sign*yoff,
+                    s=s, ha='center', va=va, c=c)
+        else:
+            # PLot the data, but with errorbars now
+            ax.errorbar(xs + i, pf.loc[:, s],
+                        yerr=errs.loc[:, pd.IndexSlice[:, s]],
+                        fmt='o', c=c, mfc=(c if 'P' in s else 'white'), mec=c)
+
+    ax.set(
+        ylabel='proportion left lever',
+        xlim=(0, 29),
+        ylim=(-0.05, 1.05),
+        yticks=[0, 0.5, 1],
+    )
+    ax.set_title(title, y=1.15)
+    ax.tick_params(axis='x', bottom=False, labelbottom=False)
+    ax.spines[['top', 'right']].set_visible(False)
+
+    return ax
+
+
+# Plot these values vs the posterior predictions
+fig, axs = plt.subplots(num=4, nrows=2, clear=True)
+
+# Plot the observed proportions
+pf = df.groupby(['actor', 'treatment']).mean()['pulled_left']
+
+plot_actors(pf, title='observed proportions', ax=axs[0])
+
+# Get the posterior approximations at each point
+p_samp = sts.lmeval(
+    m11_4,
+    out=m11_4.model.p,
+    dist=post,
+    eval_at=dict({x: pf.index.get_level_values(x).values
+                  for x in ['actor', 'treatment']}),
+)
+
+p_mean = p_samp.mean('draw').to_series()
+p_mean.index = pf.index
+
+q = 0.89
+a = (1 - q)/2
+p_ci = p_samp.quantile([a, 1-a], dim='draw')
+
+plot_actors(p_mean, ci=p_ci, title='posterior predictions',  c='k', ax=axs[1])
+
 
 plt.ion()
 plt.show()
