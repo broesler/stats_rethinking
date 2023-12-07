@@ -346,7 +346,8 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     pp = 100*np.array([a, 1-a])  # percentages for printing
 
     if isinstance(obj, xr.DataArray):
-        obj = obj.to_dataset()
+        # TODO get name from 'p_dim_0', i.e.
+        obj = obj.to_dataset(name=obj.name or 'var')
 
     if isinstance(obj, PostModel):
         title = None
