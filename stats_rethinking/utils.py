@@ -576,11 +576,11 @@ class PostModel(ABC):
     #   >>> model.named_vars
     #   === {'x': new_name, 'y': y, 'z': z}
     #   Want the key 'x' to be changed to 'new_name' as well.
-    # * rename any vector parameters 'b__0', 'b__1', etc.
+    # * rename any vector parameters 'b[0]', 'b[1]', etc.
     def rename(self, mapper):
         """Rename a parameter.
 
-        .. note:: Does NOT work on vector parameters, e.g., 'b__0'.
+        .. note:: Does NOT work on vector parameters, e.g., 'b[0]'.
         """
         self.coef = self.coef.rename(mapper)
         self.cov = self.cov.rename(index=mapper, columns=mapper)
@@ -1345,7 +1345,7 @@ def coef_table(models, mnames=None, params=None, std=True):
             ct.columns = mnames
         ct.index.name = 'param'
         ct.columns.name = 'model'
-        # Use params to filter by indexed variables 'a__0', 'a__1', etc.
+        # Use params to filter by indexed variables 'a[0]', 'a[1]', etc.
         # should result from passing params=['a']
         if params is not None:
             try:
@@ -1708,12 +1708,10 @@ def flatten_dataset(ds):
     return ds.to_stacked_array('data', sample_dims=[], name='data')
 
 
-# TODO change to use [0], [1], etc. instead of __0, __1? This format would be
-# consistent with both r::rethinking and `arviz.summary(idata)` presentation.
 def cnames_from_dataset(ds):
     """Return a list of variable names from the flattened Dataset."""
     da = flatten_dataset(ds)
-    # Flatten vector names into singletons 'b__0', 'b__1', ..., 'b__n'
+    # Flatten vector names into singletons 'b[0]', 'b[1]', ..., 'b[n]'
     # TODO case of 2D, etc. variables
     df = pd.DataFrame(da.coords['variable'].values)
     g = df.groupby(0)
