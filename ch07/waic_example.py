@@ -89,22 +89,22 @@ assert np.isclose(WAIC, waic_vec.sum())
 
 # Test WAIC function with log likelihood
 wx = sts.WAIC(loglik=loglik)['dist']
-print(f"{wx['waic'] = :.4f}")
-print(f"{wx['std'] = :.4f}")
+print(f"{wx['WAIC'] = :.4f}")
+print(f"{wx['SE'] = :.4f}")
 
 # Should be exact
-np.testing.assert_allclose(wx['waic'], WAIC)
-np.testing.assert_allclose(wx['std'], std_WAIC)
+np.testing.assert_allclose(wx['WAIC'], WAIC)
+np.testing.assert_allclose(wx['SE'], std_WAIC)
 
 # Test WAIC function with model itself
 ww = sts.WAIC(model=q, post=post)['dist']
 
 # Should be exact if we give post
-print(f"{ww['waic'] = :.4f}")
-print(f"{ww['std'] = :.4f}")
+print(f"{ww['WAIC'] = :.4f}")
+print(f"{ww['SE'] = :.4f}")
 
-np.testing.assert_allclose(wx['waic'], WAIC)
-np.testing.assert_allclose(wx['std'], std_WAIC)
+np.testing.assert_allclose(wx['WAIC'], WAIC)
+np.testing.assert_allclose(wx['SE'], std_WAIC)
 
 plt.ion()
 plt.show()
