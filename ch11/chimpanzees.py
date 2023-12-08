@@ -295,6 +295,32 @@ p_ci = p_samp.quantile([a, 1-a], dim='draw')
 plot_actors(p_mean, ci=p_ci, title='posterior predictions',  c='k', ax=axs[1])
 
 
+# -----------------------------------------------------------------------------
+#         Create model with side and condition indices
+# -----------------------------------------------------------------------------
+# (R code 11.17) not necessary. Python is 0-indexed.
+
+# (R code 11.18)
+with pm.Model():
+    actor = pm.MutableData('actor', df['actor'])
+    side = pm.MutableData('side', df['prosoc_left'].astype(int))
+    cond = pm.MutableData('cond', df['condition'].astype(int))
+    a = pm.Normal('a', 0, 1.5, shape=(len(df['actor'].unique()),))      # (7,)
+    bs = pm.Normal('bs', 0, 0.5, shape=(2,))
+    bc = pm.Normal('bc', 0, 0.5, shape=(2,))
+    p = pm.Deterministic('p', pm.math.invlogit(a[actor] + bs[side] + bc[cond]))
+    pulled_left = pm.Binomial('pulled_left', 1, p, observed=df['pulled_left'])
+    m11_5 = sts.ulam(data=df)
+
+# Need to set m11.4 data back to the original for comparison
+m11_4.model.set_data('actor', df['actor'])
+m11_4.model.set_data('treatment', df['treatment'])
+
+ct = sts.compare([m11_4, m11_5], mnames=['m11.4', 'm11.5'], ic='LOOIC')
+print('ct:')
+with pd.option_context('display.precision', 2):
+    print(ct['ct'])
+
 plt.ion()
 plt.show()
 
