@@ -53,7 +53,7 @@ sts.precis(m9_3)
 # -----------------------------------------------------------------------------
 fig, axs = plt.subplots(num=1, ncols=2, clear=True)
 
-prior = pm.sample_prior_predictive(model=m9_3.model, samples=10_000)
+prior = m9_3.sample_prior(10_000)
 
 
 def plot_densities(ax, v, xlim=None, xlabel=None):

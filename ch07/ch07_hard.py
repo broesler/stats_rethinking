@@ -15,6 +15,8 @@ import pandas as pd
 import pymc as pm
 import xarray as xr
 
+from tqdm import tqdm
+
 import stats_rethinking as sts
 
 plt.style.use('seaborn-v0_8-darkgrid')
@@ -113,18 +115,18 @@ def poly_model(poly_order, x='A', y='height', data=train, priors='weak'):
 # Create polynomial models of height ~ age.
 Np = 6  # max polynomial terms
 print('Fitting models... ', end='')
-models = {i: poly_model(i, data=train, priors='weak') for i in range(1, Np+1)}
+models = {i: poly_model(i, data=train, priors='weak') 
+          for i in tqdm(range(1, Np+1))}
 print('done.')
 
 # Prior predictive checks with the linear model
 N = 20
-with models[1].model:
-    idata = pm.sample_prior_predictive(N)
+prior = models[1].sample_prior(N)
 
 fig, ax = plt.subplots(num=2, clear=True, constrained_layout=True)
 ax.axhline(0, c='k', ls='--', lw=1)   # x-axis
 ax.axhline(272, c='k', ls='-', lw=1)  # Wadlow line
-ax.plot(models[1].data['A'], idata.prior['μ'].mean('chain').T, 'k', alpha=0.4)
+ax.plot(models[1].data['A'], prior['μ'].T, 'k', alpha=0.4)
 ax.set(xlabel='age [std]',
        ylabel='height [cm]')
 

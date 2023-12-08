@@ -557,7 +557,12 @@ class PostModel(ABC):
         Analagous to `rethinking::extract.prior`.
         """
         idata = pm.sample_prior_predictive(samples=N, model=self.model)
-        return idata.prior.stack(sample=('chain', 'draw'))
+        return (
+            idata
+            .prior
+            .stack(sample=('chain', 'draw'))
+            .transpose('sample', ...)
+        )
 
     def deviance(self):
         """Return the deviance of the model."""
@@ -953,7 +958,15 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     )
 
     if 'chain' not in dist.dims:
-        dist = dist.expand_dims('chain')
+        try:
+            dist = dist.expand_dims('chain')
+        except ValueError:
+            try:
+                dist = dist.unstack('sample')
+            except ValueError:
+                raise ValueError("'dist' must have dimensions (1) 'draw', "
+                                 "(2) ('chain', 'draw'), or "
+                                 "(3) 'sample' == ('chain', 'draw').")
 
     # Manual loop since out_func cannot be vectorized.
     out_samp = np.fromiter(

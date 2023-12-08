@@ -76,9 +76,8 @@ with pm.Model() as the_model:
 # Sample the prior predictive lines over 2 standard deviations (R code 5.4)
 N_lines = 50
 A = np.r_[-2, 2]
-with the_model:
-    pm.set_data({'ind': A})
-    prior = pm.sample_prior_predictive(N_lines)
+quapA.model.set_data('ind', A)  # NOTE inconsistent with docs!! Should be dict.
+prior = quapA.sample_prior(N_lines)
 
 # Plot prior predictive lines
 fig, ax = plt.subplots(num=1, clear=True, constrained_layout=True)
@@ -87,7 +86,7 @@ ax.set(xlabel='Median Age Marriage [std]',
        aspect='equal')
 
 # Each column of data is a line
-ax.plot(A, prior.prior['mu'].mean('chain').T, 'k', alpha=0.4)
+ax.plot(A, prior['mu'].T, 'k', alpha=0.4)
 
 # -----------------------------------------------------------------------------
 #         Model the relationships between the variables

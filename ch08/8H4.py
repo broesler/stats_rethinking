@@ -88,9 +88,8 @@ with pm.Model():
 # Plot prior predictive
 N_lines = 50
 Ms = np.r_[-0.1, 1.1]
-with quapM.model:
-    pm.set_data({'M': Ms})
-    idata = pm.sample_prior_predictive(N_lines)
+quapM.model.set_data('M', Ms)
+prior = quapM.sample_prior(N_lines)
 
 # Plot priors
 fig, ax = plt.subplots(num=2, clear=True)
@@ -98,7 +97,7 @@ fig, ax = plt.subplots(num=2, clear=True)
 ax.axhline(df['L'].min(), c='k', ls='--', lw=1)
 ax.axhline(df['L'].max(), c='k', ls='--', lw=1)
 
-ax.plot(Ms, idata.prior['μ'].mean('chain').T, c='k', alpha=0.3)
+ax.plot(Ms, prior['μ'].T, c='k', alpha=0.3)
 
 ax.set(
     title=(r'$\alpha \sim \mathcal{N}(1, 0.25)$'
