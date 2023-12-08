@@ -224,7 +224,7 @@ def plot_actors(pf, ci=None, title='', c='C0', ax=None):
 
         # Plot left/right data offset from each other for clarity
         if i != 1:
-            ax.plot(4*i + np.r_[1, 3], pf.loc[i, ['R/N', 'R/P']], c=c)
+            ax.plot(4*i + np.r_[1, 3], pf.loc[i, ['R/N', 'R/P']], ls='--', c=c)
             ax.plot(4*i + np.r_[2, 4], pf.loc[i, ['L/N', 'L/P']], c=c)
 
     # Plot all the points at once
