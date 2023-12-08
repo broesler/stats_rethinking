@@ -337,7 +337,7 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
         standard deviation, and low/high percentiles of the variable.
     """
     if not isinstance(
-            obj, 
+            obj,
             (PostModel, xr.DataArray, xr.Dataset, pd.DataFrame, np.ndarray)
             ):
         raise TypeError(f"`obj` of type '{type(obj)}' is unsupported!")
@@ -438,7 +438,6 @@ def plot_precis(obj, mname='model', fignum=None, labels=None):
     ct.index.name = 'param'
     ct = pd.concat({mname: ct}, names=['model'])
     return plot_coef_table(ct, fignum=fignum)
-
 
 
 def sparklines_from_norm(means, stds, width=12):
@@ -630,6 +629,8 @@ class Quap(PostModel):
         df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
         return frame_to_dataset(df, model=self.model).squeeze('chain')
 
+    # Should we store samples the first time? That behavior would be consistent
+    # with Ulam, which only samples the posterior at creation time.
     def get_samples(self, N=1000):
         return self.sample(N)
 
@@ -652,7 +653,7 @@ class Ulam(PostModel):
     # >>> idata = pm.sample(..., discard_tuned_samples=False)
     # >>> all_post = xr.concat([idata.warmup_posterior, idata.posterior],
     #                          dim='concat_dim')
-    # >>> az.plot_trace(all_post) 
+    # >>> az.plot_trace(all_post)
     # or something to that effect.
     #
     def plot_trace(self, title=None):
@@ -861,6 +862,9 @@ def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs)
         .to_dataarray()  # convert to be able to extract singleton value
     )
 
+    # TODO include full log likelihood array so that calls to sts.loglikelihood
+    # can just return the already computed data instead of having to recompute.
+
     return Ulam(
         coef=coef,
         cov=cov,
@@ -955,7 +959,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     out_samp = np.fromiter(
         (
             out_func({
-                v.name: dist[v.name].sel(chain=i, draw=j) 
+                v.name: dist[v.name].sel(chain=i, draw=j)
                 for v in params
             })
             for i in dist.coords['chain']
@@ -1349,7 +1353,7 @@ def coef_table(models, mnames=None, params=None, std=True):
             except KeyError:
                 subtables = []
             for p in params:
-                subtables.append(ct.filter(regex=f"^{p}\[[0-9]+\]", axis=0))
+                subtables.append(ct.filter(regex=rf"^{p}\[[0-9]+\]", axis=0))
             ct = pd.concat(subtables).drop_duplicates()
         ct = (ct.T  # organize by parameter, then model
                 .melt(ignore_index=False, value_name=value_name)
@@ -1669,7 +1673,7 @@ def cnames_from_dataset(ds):
     # TODO case of 2D, etc. variables
     df = pd.DataFrame(da.coords['variable'].values)
     g = df.groupby(0)
-    str_counts = g.cumcount().astype(str) 
+    str_counts = g.cumcount().astype(str)
     df.loc[g[0].transform('size').gt(1), 0] += '[' + str_counts + ']'
     return list(df[0].values)
 
@@ -1684,7 +1688,7 @@ def frame_to_dataset(df, model=None):
     multi-dimensional parameters, e.g. β[0], β[1], ..., β[N] into β (N,).
     """
     model = pm.modelcontext(model)
-    var_names = df.columns.str.replace('\[\d+\]', '', regex=True).unique()
+    var_names = df.columns.str.replace(r'\[\d+\]', '', regex=True).unique()
     the_dict = dict()
     for v in var_names:
         # Add 'chain' dimension to match expected shape
@@ -1920,7 +1924,7 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
 
     # TODO HACK build this into sts.logsumexp(a, dim=('chain', 'draw'), ...)
     # axis = loglik[var_names[0]].get_axis_num(('chain', 'draw'))
-    return {v: logsumexp(loglik[v], axis=(0, 1)) - np.log(Ns) 
+    return {v: logsumexp(loglik[v], axis=(0, 1)) - np.log(Ns)
             for v in var_names}
 
 
