@@ -2085,7 +2085,7 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
     for v in the_lppd:
         penalty = loglik[v].var(dim=('chain', 'draw')).values
         waic_vec = -2 * (the_lppd[v] - penalty)
-        n_cases = loglik[v].shape[-1]  # TODO only works for 1-D variables?
+        n_cases = np.prod(loglik[v].shape[2:])  # ASSUMES (chain, draw, ...)
         std_err = (n_cases * np.var(waic_vec))**0.5
 
         if pointwise:
