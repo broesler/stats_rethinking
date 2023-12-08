@@ -628,7 +628,7 @@ class Quap(PostModel):
         mean = flatten_dataset(self.coef).values
         posterior = stats.multivariate_normal(mean=mean, cov=self.cov)
         df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
-        return frame_to_dataset(df, model=self.model).mean('chain')
+        return frame_to_dataset(df, model=self.model).squeeze('chain')
 
     def get_samples(self, N=1000):
         return self.sample(N)
@@ -1832,15 +1832,11 @@ def loglikelihood(model, post=None, var_names=None, eval_at=None, Ns=1000):
 
     Returns
     -------
-    result : xarray.Dataset (draw=Ns, var_dim=N)
+    result : xarray.Dataset (chain=M, draw=Ns, var_dim=N)
         Log likelihood for each of the ``var_names``. Each will be an array of
         size (Ns, N), for ``Ns`` samples of the posterior, and `N` data points.
     """
-    return (
-        inference_data(model, post, var_names, eval_at, Ns)
-        .log_likelihood
-        .mean('chain')
-    )
+    return inference_data(model, post, var_names, eval_at, Ns).log_likelihood
 
 
 def deviance(model=None, loglik=None, post=None, var_names=None, eval_at=None,
@@ -1913,13 +1909,19 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
             Ns=Ns,
         )
 
+    if 'chain' not in loglik.dims:
+        loglik = loglik.expand_dims('chain')
+
     if Ns is None:
-        Ns = loglik.sizes['draw']
+        Ns = loglik.sizes['chain'] * loglik.sizes['draw']
 
     if var_names is None:
         var_names = loglik.keys()
 
-    return {v: logsumexp(loglik[v], axis=0) - np.log(Ns) for v in var_names}
+    # TODO HACK build this into sts.logsumexp(a, dim=('chain', 'draw'), ...)
+    # axis = loglik[var_names[0]].get_axis_num(('chain', 'draw'))
+    return {v: logsumexp(loglik[v], axis=(0, 1)) - np.log(Ns) 
+            for v in var_names}
 
 
 def DIC(model, post=None, Ns=1000):
@@ -2024,9 +2026,9 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
 
     out = dict()
     for v in the_lppd:
-        penalty = loglik[v].var(dim='draw').values
+        penalty = loglik[v].var(dim=('chain', 'draw')).values
         waic_vec = -2 * (the_lppd[v] - penalty)
-        n_cases = loglik[v].shape[1]
+        n_cases = loglik[v].shape[-1]  # TODO only works for 1-D variables?
         std_err = (n_cases * np.var(waic_vec))**0.5
 
         if pointwise:
@@ -2334,7 +2336,7 @@ def sim_train_test(
     # test error would be without having the test data available.
     # Store these values for WAIC and LOOIC:
     idata_train = inference_data(q)
-    loglik_train = idata_train.log_likelihood.mean('chain')
+    loglik_train = idata_train.log_likelihood
 
     lppd_train = lppd(loglik=loglik_train)['y']
 
