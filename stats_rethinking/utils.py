@@ -32,7 +32,7 @@ from pytensor.graph.basic import ancestors
 #     RandomStateSharedVariable,
 # )
 from pytensor.tensor.sharedvar import TensorSharedVariable  # , SharedVariable
-from pytensor.tensor.var import TensorConstant, TensorVariable
+from pytensor.tensor.variable import TensorConstant, TensorVariable
 
 from scipy import stats, linalg
 from scipy.interpolate import BSpline
