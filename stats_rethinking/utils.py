@@ -949,7 +949,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     )
 
     if 'chain' not in dist.dims:
-        dist = dist.expand_dims('chain', axis=0)
+        dist = dist.expand_dims('chain')
 
     # Manual loop since out_func cannot be vectorized.
     out_samp = np.fromiter(
@@ -1796,7 +1796,7 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
         post = model.get_samples(Ns)
 
     if 'chain' not in post.dims:
-        post = post.expand_dims('chain', axis=0)
+        post = post.expand_dims('chain')
 
     if eval_at is not None:
         for k, v in eval_at.items():
