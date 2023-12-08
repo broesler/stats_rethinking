@@ -71,7 +71,7 @@ loglik = idata.log_likelihood  #.mean('chain')  # Dataset: 'dist' (Ns, N)
 # quap.loglik ≈ -loglik.mean(axis='draw').sum()?
 
 # Take the log of the average over each data point (R code 7.22)
-lppd = sts.logsumexp(loglik['dist'], axis=(0, 1)) - np.log(Ns)  # (Ns, N) -> (N,)
+lppd = sts.logsumexp(loglik['dist'], dim=('chain', 'draw')) - np.log(Ns)  # (Ns, N) -> (N,)
 
 # Penalty term (R code 7.23)
 p_WAIC = loglik['dist'].var(dim=('chain', 'draw'))  # (Ns, N) -> (N,)

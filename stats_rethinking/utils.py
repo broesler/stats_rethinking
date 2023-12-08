@@ -1639,7 +1639,51 @@ def get_coords(ax):
 # -----------------------------------------------------------------------------
 #         Dataset/Frame conversion utilities
 # -----------------------------------------------------------------------------
-logsumexp = _logsumexp
+def logsumexp(a, dim=None, **kwargs):
+    """Compute the log of the sum of the exponentials of input elements.
+
+    Parameters
+    ----------
+    a : array_like
+        Input array.
+    dim : str, Iterable of Hashable, "..." or None, optional
+        Name of dimension[s] along which to apply ``logsumexp``. For, *e.g.*,
+        ``dim="x"`` or ``dim=["x", "y"]``. If "..." or None, will reduce over
+        all dimensions. 
+
+        Only one of ``dim`` or ``axis`` may be given. If ``dim`` is given,
+        ``axis`` will be ignored.
+    **kwargs : Any
+        Additional keyword arguments passed on to ``scipy.special.logsumexp``.
+
+    Returns
+    -------
+    res : ndarray
+        The result, ``np.log(np.sum(np.exp(a)))`` calculated in a numerically
+        more stable way. If `b` is given then ``np.log(np.sum(b*np.exp(a)))``
+        is returned.
+    sgn : ndarray
+        If return_sign is True, this will be an array of floating-point numbers
+        matching `res` and !, 0, or -1 depending on the sign of the result. If
+        False, only one result is returned.
+
+    See Also
+    --------
+    scipy.special.logsumexp
+    """
+    axis = kwargs.pop('axis', None)
+
+    if dim is not None:
+        if axis is not None:
+            warnings.warn('Both `dim` and `axis` given, ignoring `axis`.')
+        # Test if a is an xr.DataArray
+        try:
+            axis = a.get_axis_num(dim)
+        except AttributeError as e:
+            pass
+
+    return _logsumexp(a, axis=axis, **kwargs)
+
 
 
 def numpy_to_data_array(values, var_name=None):
@@ -1922,9 +1966,7 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
     if var_names is None:
         var_names = loglik.keys()
 
-    # TODO HACK build this into sts.logsumexp(a, dim=('chain', 'draw'), ...)
-    # axis = loglik[var_names[0]].get_axis_num(('chain', 'draw'))
-    return {v: logsumexp(loglik[v], axis=(0, 1)) - np.log(Ns)
+    return {v: logsumexp(loglik[v], dim=('chain', 'draw')) - np.log(Ns)
             for v in var_names}
 
 
