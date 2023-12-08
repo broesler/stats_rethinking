@@ -64,7 +64,7 @@ idata = az.convert_to_inference_data(post.expand_dims('chain'))
 idata = pm.compute_log_likelihood(idata, model=q.model, progressbar=False)
 
 # Extract the relevant item
-loglik = idata.log_likelihood  #.mean('chain')  # Dataset: 'dist' (Ns, N)
+loglik = idata.log_likelihood  # Dataset: 'dist' (Ns, N)
 
 # np.linalg.norm((loglik_m.mean('draw') - loglik.mean('draw'))['dist']) # ≈ 0.063
 

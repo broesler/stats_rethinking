@@ -166,7 +166,7 @@ ax.axvline(p_max, c='k', ls='--', lw=1)
 # az.plot_trace(p_trace)
 
 # Manually
-kde = sts.density(p_trace.mean('chain'), adjust=0.5)
+kde = sts.density(p_trace.stack(sample=('chain', 'draw')), adjust=0.5)
 kde_p = kde.pdf(p_fine)
 p_max = p_fine[kde_p.argmax()]
 ax.plot(p_fine, kde_p / kde_p.max(),
