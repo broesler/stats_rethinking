@@ -572,16 +572,7 @@ class PostModel(ABC):
         """Return the Akaike information criteria of the model."""
         return self.deviance() + 2*sum(self.coef.sizes.values())
 
-    # TODO
-    # * rename the model variable itself
-    #   now:
-    #   >>> model.named_vars
-    #   === {'x': x, 'y': y, 'z': z}
-    #   >>> model.named_vars['x'].name = 'new_name'
-    #   >>> model.named_vars
-    #   === {'x': new_name, 'y': y, 'z': z}
-    #   Want the key 'x' to be changed to 'new_name' as well.
-    # * rename any vector parameters 'b[0]', 'b[1]', etc.
+    # TODO rename any vector parameters 'b[0]', 'b[1]', etc.
     def rename(self, mapper):
         """Rename a parameter.
 
@@ -1778,6 +1769,7 @@ def dataset_to_frame(ds):
         DataFrame with columns for each variable in the dataset. Vector
         variables will be separated into columns.
     """
+    # FIXME should use a MultiIndex ('chain', 'draw')?
     if 'chain' in ds.dims:
         ds = ds.mean('chain')
 
@@ -1912,7 +1904,6 @@ def deviance(model=None, loglik=None, post=None, var_names=None, eval_at=None,
     return {k: -2 * v.sum() for k, v in the_lppd.items()}
 
 
-# TODO combine identical documentation from lppd, WAIC, LOOIS functions.
 def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
          Ns=1000):
     r"""Compute the log pointwise predictive density for a model.
