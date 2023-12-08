@@ -13,11 +13,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import xarray as xr
 
 from pathlib import Path
 from scipy import stats
-from scipy.special import logit, expit
+from scipy.special import expit
 
 import stats_rethinking as sts
 
@@ -115,8 +114,8 @@ with pm.Model():
 
 # Get the difference in treatments (R code 11.8)
 bad_prior = m11_2.sample_prior(N=10_000)
-p = expit(bad_prior['a'] + bad_prior['b'])
-bad_diff = np.abs(p[:, 0] - p[:, 1]).sortby(lambda x: x)
+p_val = expit(bad_prior['a'] + bad_prior['b'])
+bad_diff = np.abs(p_val[:, 0] - p_val[:, 1]).sortby(lambda x: x)
 bad_dens = stats.gaussian_kde(bad_diff, bw_method=0.01).pdf(bad_diff)
 
 # More regularizing prior on b (R code 11.9)
@@ -128,8 +127,8 @@ with pm.Model():
     m11_3 = sts.quap(data=df)
 
 reg_prior = m11_3.sample_prior(N=10_000)
-p = expit(reg_prior['a'] + reg_prior['b'])
-reg_diff = np.abs(p[:, 0] - p[:, 1]).sortby(lambda x: x)
+p_val = expit(reg_prior['a'] + reg_prior['b'])
+reg_diff = np.abs(p_val[:, 0] - p_val[:, 1]).sortby(lambda x: x)
 reg_dens = stats.gaussian_kde(reg_diff, bw_method=0.01).pdf(reg_diff)
 
 # Plot on the right side
@@ -191,9 +190,8 @@ ax.set_ylim((-0.5, 1.5))  # give more space around lines
 
 
 # -----------------------------------------------------------------------------
-#         (R code 11.14) Posterior preditictive check of pulled_left proportions
+#         (R code 11.14) Posterior predictive check of pulled_left proportions
 # -----------------------------------------------------------------------------
-
 # TODO transpose the entire plot? "left/right" makes more sense that way.
 def plot_actors(pf, ci=None, title='', c='C0', ax=None):
     """Plot the output proportions for each actor and treatment."""
@@ -261,7 +259,7 @@ def plot_actors(pf, ci=None, title='', c='C0', ax=None):
         ylim=(-0.05, 1.05),
         yticks=[0, 0.5, 1],
     )
-    ax.set_title(title, y=1.15)
+    ax.set_title(title, y=1.05)
     ax.tick_params(axis='x', bottom=False, labelbottom=False)
     ax.spines[['top', 'right']].set_visible(False)
 
