@@ -315,7 +315,7 @@ def expand_grid(**kwargs):
 #   * other option: split these blocks into individual `_precis_dataset()`
 #     functions and the main is just a dispatcher.
 #
-def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
+def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
 
@@ -323,8 +323,8 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     ----------
     quap : array-like, DataFrame, or dict
         The model.
-    p : float in [0, 1]
-        The percentile of which to compute the interval.
+    q : float in [0, 1]
+        The quantile of which to compute the interval.
     digits : int
         Number of digits in the printed output if `verbose=True`.
     verbose : bool
@@ -342,8 +342,8 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
             ):
         raise TypeError(f"`obj` of type '{type(obj)}' is unsupported!")
 
-    a = (1-p)/2
-    pp = 100*np.array([a, 1-a])  # percentages for printing
+    a = (1-q)/2
+    pp = 100*np.array([a, 1-a])  # percentiles for printing
 
     if isinstance(obj, xr.DataArray):
         # TODO get name from 'p_dim_0', i.e.
