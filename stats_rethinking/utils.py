@@ -349,7 +349,7 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
         # TODO get name from 'p_dim_0', i.e.
         obj = obj.to_dataset(name=obj.name or 'var')
 
-    if isinstance(obj, PostModel):
+    if isinstance(obj, Quap):
         title = None
         # Compute density intervals
         coef = dataset_to_series(obj.coef)
@@ -358,14 +358,9 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
         hi = coef + z * obj.std
         df = pd.concat([coef, obj.std, lo, hi], axis=1)
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
-        if isinstance(obj, Ulam):
-            # Get number of effective observations
-            tf = az.summary(obj.samples)
-            # Fix automatic index names to match df
-            df['ess'] = tf['ess_bulk'].astype(int)
-            df['R_hat'] = tf['r_hat']
-        # if hist:
-        #     df['histogram'] = sparklines_from_norm(df['mean'], df['std'])
+
+    if isinstance(obj, Ulam):
+        obj = obj.samples
 
     # Dataset of data points (i.e. posterior distribution)
     if isinstance(obj, xr.Dataset):
@@ -381,10 +376,8 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
                  f" of {len(obj.data_vars)} variables:")
         mean = dataset_to_series(obj.mean(sample_dims))
         std = dataset_to_series(obj.std(sample_dims))
-        z = stats.norm.ppf(1 - a)
-        lo = mean - z * std
-        hi = mean + z * std
-        df = pd.concat([mean, std, lo, hi], axis=1)
+        quant = dataset_to_frame(obj.quantile([a, 1-a], dim=sample_dims)).T
+        df = pd.concat([mean, std, quant], axis=1)
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
         if hist:
             df['histogram'] = sparklines_from_dataframe(dataset_to_frame(obj))
