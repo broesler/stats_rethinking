@@ -419,9 +419,9 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
     return df
 
 
-def plot_precis(obj, mname='model', fignum=None, labels=None):
+def plot_precis(obj, mname='model', q=0.89, fignum=None, labels=None):
     """Plot the `precis` output of the object like a `coef_table`."""
-    ct = precis(obj, verbose=False)
+    ct = precis(obj, q=q, verbose=False, hist=False)
     if labels is not None:
         ct.index = labels
     # Convert to "coef table" for plotting. Expects:
@@ -1314,7 +1314,7 @@ def bspline_basis(t, x=None, k=3, padded_knots=False):
 # -----------------------------------------------------------------------------
 #         Model comparison
 # -----------------------------------------------------------------------------
-def coef_table(models, mnames=None, params=None, std=True):
+def coef_table(models, mnames=None, params=None):
     """Create a summary table of coefficients in each model.
 
     Parameters
@@ -1325,59 +1325,37 @@ def coef_table(models, mnames=None, params=None, std=True):
         Names of the models.
     params : list of str, optional
         Names of specific parameters to return.
-    std : bool, optional
-        If True, also return a table of standard deviations.
 
     Returns
     -------
-    ct, cs : pd.DataFrame
-        DataFrames of the coefficients and their standard deviations.
+    ct : pd.DataFrame
+        DataFrame with coefficients and their standard deviations as columns.
     """
-    coefs = [dataset_to_series(m.coef) for m in models]
-    stds = [m.std for m in models]
-
-    def transform_ct(ct, mnames=None, params=None, value_name='coef'):
-        """Make coefficient table tidy for plotting"""
-        if mnames is not None:
-            ct.columns = mnames
-        ct.index.name = 'param'
-        ct.columns.name = 'model'
-        # Use params to filter by indexed variables 'a[0]', 'a[1]', etc.
-        # should result from passing params=['a']
-        if params is not None:
-            try:
-                subtables = [ct.loc[params]]  # track each filtered table
-            except KeyError:
-                subtables = []
-            for p in params:
-                subtables.append(ct.filter(regex=rf"^{p}\[[0-9]+\]", axis=0))
-            ct = pd.concat(subtables).drop_duplicates()
-        ct = (ct.T  # organize by parameter, then model
-                .melt(ignore_index=False, value_name=value_name)
-                .set_index('param', append=True)
-                .reorder_levels(['param', 'model'])
-                # .sort_index()  # do not sort to keep order of input
-              )
-        return ct
-
-    ct = transform_ct(pd.concat(coefs, axis=1), mnames, params)
-    if not std:
-        return ct
-
-    cs = transform_ct(pd.concat(stds, axis=1), mnames, params,
-                      value_name='std')
-    return pd.concat([ct, cs], axis='columns')
+    df = pd.concat(
+        [precis(m, verbose=False, hist=False) for m in models],
+        keys=mnames or ['model{i}' for i in enumerate(models)],
+        names=['model', 'param']
+    )
+    # plot_coef_table expects ['coef', 'std', 'lo%', 'hi%']
+    df = (df.rename({'mean': 'coef'}, axis='columns')
+            .reorder_levels(['param', 'model'])
+          )
+    if params is not None:
+        # Silly workaround since df.filter does not work on MultiIndex.
+        df = df.reset_index(level='model')
+        for p in params:
+            df = df.filter(regex=rf"^{p}([\d+])?", axis='rows')
+        df = df.set_index('model', append=True)
+    return df.sort_index()
 
 
-def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
+def plot_coef_table(ct, by_model=False, fignum=None):
     """Plot the table of coefficients from `sts.coef_table`.
 
     Parameters
     ----------
     ct : :obj:`CoefTable`
         Coefficient table output from `coef_table`.
-    q : float in [0, 1], optional
-        The probability interval to plot.
     by_model : bool, optional
         If True, order the coefficients by model on the y-axis, with colors to
         denote parameters; otherwise, parameters will be the y-axis, with
@@ -1414,15 +1392,19 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     # Find the x,y coordinates for each point
     xc, yc, colors = get_coords(ax)
 
-    # Could get errs straight from ct, but risk other column names with '%'
-    # errs = ct.filter(like='%').diff(axis='columns').dropna(axis='columns')
+    # Get errs straight from coef_table
+    ci = ct.filter(like='%')
+    if not ci.empty:
+        errs = ci.sub(ct['coef'], axis='rows').abs().T  # (2, N) for errorbar
+    else:
+        # Assume we have std and approximate with symmetric errorbars
+        q = 0.89
+        z = stats.norm.ppf(1 - (1 - q)/2)  # ≈ 1.96 for q = 0.95
+        # NOTE no need for factor of 2 here, because plt.errorbar plots a bar from
+        # y[i] -> y[i] + errs[i] and y[i] -> y[i] - errs[i].
+        errs = ct['std'] * z  # ±err
+        errs = errs.dropna()
 
-    # Manually add the errorbars since we have std values already
-    z = stats.norm.ppf(1 - (1 - q)/2)  # ≈ 1.96 for q = 0.95
-    # NOTE no need for factor of 2 here, because plt.errorbar plots a bar from
-    # y[i] -> y[i] + errs[i] and y[i] -> y[i] - errs[i].
-    errs = ct['std'] * z  # ±err
-    errs = errs.dropna()
     ax.errorbar(xc, yc, fmt=' ', xerr=errs, ecolor=colors)
 
     # Plot the origin and make horizontal grid-lines
