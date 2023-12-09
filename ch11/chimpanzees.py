@@ -314,10 +314,13 @@ with pm.Model():
 m11_4.model.set_data('actor', df['actor'])
 m11_4.model.set_data('treatment', df['treatment'])
 
-ct = sts.compare([m11_4, m11_5], mnames=['m11.4', 'm11.5'], ic='LOOIC')
+ct = sts.coef_table([m11_4, m11_5], mnames=['m11.4', 'm11.5'], params=['a'])
+sts.plot_coef_table(ct, fignum=5)
+
+cmp = sts.compare([m11_4, m11_5], mnames=['m11.4', 'm11.5'], ic='LOOIC')
 print('ct:')
 with pd.option_context('display.precision', 2):
-    print(ct['ct'])
+    print(cmp['ct'])
 
 plt.ion()
 plt.show()
