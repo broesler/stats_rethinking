@@ -577,7 +577,6 @@ class PostModel(ABC):
             self.model.named_vars[k].name = v
         return self
 
-    # TODO allow subclasses to provide "description" line in `out`?
     def __str__(self):
         with pd.option_context('display.float_format', '{:.4f}'.format):
             try:
@@ -1628,7 +1627,7 @@ def logsumexp(a, dim=None, **kwargs):
     dim : str, Iterable of Hashable, "..." or None, optional
         Name of dimension[s] along which to apply ``logsumexp``. For, *e.g.*,
         ``dim="x"`` or ``dim=["x", "y"]``. If "..." or None, will reduce over
-        all dimensions. 
+        all dimensions.
 
         Only one of ``dim`` or ``axis`` may be given. If ``dim`` is given,
         ``axis`` will be ignored.
@@ -1658,11 +1657,10 @@ def logsumexp(a, dim=None, **kwargs):
         # Test if a is an xr.DataArray
         try:
             axis = a.get_axis_num(dim)
-        except AttributeError as e:
+        except AttributeError:
             pass
 
     return _logsumexp(a, axis=axis, **kwargs)
-
 
 
 def numpy_to_data_array(values, var_name=None):
