@@ -2077,7 +2077,7 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
 
 
 def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
-          Ns=1000, pointwise=False):
+          Ns=1000, pointwise=False, warn=False):
     """Compute the Pareto-smoothed Importance Sampling Leave-One-Out
     Cross-Validation score of the model.
 
@@ -2100,6 +2100,8 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
     pointwise : bool
         If True, return a vector of length `N` for each output variable, where
         `N` is the number of data points for that variable.
+    warn : bool
+        If True, report any warnings from ``az.loo``.
 
     Returns
     -------
@@ -2124,7 +2126,8 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
     out = dict()
     for v in var_names:
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore', category=UserWarning)
+            if not warn:
+                warnings.simplefilter('ignore', category=UserWarning)
             loo = az.loo(idata, pointwise=pointwise, var_name=v)
 
         elpd = loo.loo_i if pointwise else loo.elpd_loo
