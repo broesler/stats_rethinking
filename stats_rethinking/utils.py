@@ -1464,6 +1464,19 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
         # Model names must be strings for sns.pointplot to work properly!
         mnames = [str(x) for x in list(mnames)]
 
+    try:
+        Nobs = len(models[0].data)  # ASSUME DataFrame
+        if any([len(m.data) != Nobs for m in models]):
+            for name, m in zip(mnames, models):
+                print(f"{name}: {len(m.data)}")
+            warnings.warn(
+                'Different numbers of observations found for at least two'
+                'models. \nModel comparison is only valid for models fit to'
+                'exactly the same observations.'
+            )
+    except TypeError:
+        pass
+
     func = WAIC if ic == 'WAIC' else LOOIS
     diff_ic = f"d{ic}"
 
