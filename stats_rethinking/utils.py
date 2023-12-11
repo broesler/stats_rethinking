@@ -2137,6 +2137,8 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
             penalty=loo.p_loo,  # == loo_list$p_loo
             SE=2*loo.se,        # == loo_list$estimates['looic', 'SE']
         )
+        if pointwise:
+            d['pareto_k'] = loo.pareto_k  # == loo_list$k
         out[v] = pd.DataFrame(d) if pointwise else pd.Series(d)
 
     return out
