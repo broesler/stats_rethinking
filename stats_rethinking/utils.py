@@ -579,11 +579,11 @@ class PostModel(ABC):
 
     def __str__(self):
         with pd.option_context('display.float_format', '{:.4f}'.format):
-            # try:
-            #     # remove "dtype: object" line from the Series repr
-            #     meanstr = repr(self.coef.to_pandas()).rsplit('\n', 1)[0]
-            # except ValueError:
-            meanstr = repr(self.coef)
+            try:
+                # remove "dtype: object" line from the Series repr
+                meanstr = repr(dataset_to_series(self.coef)).rsplit('\n', 1)[0]
+            except ValueError:
+                meanstr = repr(self.coef)
 
         out = (
             f"{self._descrip}\n\n"
