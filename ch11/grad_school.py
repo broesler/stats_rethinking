@@ -67,15 +67,21 @@ df['admit_p'] = df['admit'] / df['applications']
 
 
 # TODO move into stats_rethinking
-def postcheck(fit, agg_name=None, N=1000, q=0.89, fignum=None):
+def postcheck(fit, agg_name=None, major_group=None, minor_group=None, N=1000,
+              q=0.89, fignum=None):
     """Plot the discrete observed data and the posterior predictions.
 
     Parameters
     ----------
     fit : :obj:`sts.PostModel'
-        The model to which the data is fitted.
+        The model to which the data is fitted. The model must have a ``data``
+        attribute containing a `dict`-like structure.
     agg_name : str, optional
         The name of the variable over which the data is aggregated.
+    major_group, minor_group : str, optional
+        Names of columns in the ``fit.data`` structure by which to group the
+        data. Either ``major_group`` or both can be provided, but not
+        ``minor_group`` alone.
     N : int, optional
         The number of samples to take of the posterior.
     q : float in [0, 1], optional
@@ -88,6 +94,9 @@ def postcheck(fit, agg_name=None, N=1000, q=0.89, fignum=None):
     ax : plt.Axes
         The axes in which the plot was drawn.
     """
+    if minor_group and major_group is None:
+        raise ValueError('Cannot provide `minor_group` without `major_group`.')
+
     y = fit.model.observed_RVs[0].name
     post = fit.get_samples(N)
 
@@ -129,50 +138,60 @@ def postcheck(fit, agg_name=None, N=1000, q=0.89, fignum=None):
 
     ax.legend()
     ax.set(xlabel='case',
-        ylabel=y)
+           ylabel=y)
 
     ax.spines[['top', 'right']].set_visible(False)
+
+    # Connect points in each major group
+    # TODO xp is index of each group
+    if major_group:
+        N_maj = len(fit.data[major_group].cat.categories)
+        x = 2*np.arange(N_maj)
+        xp = np.r_[[x, x+1]]
+
+        y0 = fit.data.loc[x, y]
+        y1 = fit.data.loc[x+1, y]
+        if agg_name is not None:
+            y0 /= fit.data.loc[x, agg_name]
+            y1 /= fit.data.loc[x+1, agg_name]
+        yp = np.r_[[y0, y1]]
+
+        ax.plot(xp, yp, 'C0')
+
+        # Label the cases
+        xv = np.arange(len(fit.data))
+        # TODO xind is the location of each group center
+        xind = xv[:-1:2]
+
+        ax.set_xticks(xind + 0.5)
+        ax.set_xticklabels(fit.data.loc[xind, major_group])
+
+        if minor_group:
+            ax.set_xticks(xv, minor=True)
+            ax.set_xticklabels(fit.data[minor_group], minor=True)
+            ax.tick_params(axis='x', which='minor', pad=18)
+            ax.tick_params(axis='x', which='major',  bottom=False)
+            ax.tick_params(axis='x', which='minor',  bottom=True)
+
+        # Lines between each department for clarity
+        # TODO compute right edge of each group
+        for x in xind + 1.5:
+            ax.axvline(x, lw=1, c='k')
+
     return ax
 
 
 # (R code 11.31)
 # sts.postcheck(m11_7, fignum=1)
-ax = postcheck(m11_7, agg_name='applications', fignum=1)
+ax = postcheck(
+    m11_7,
+    agg_name='applications',
+    major_group='dept',
+    minor_group='gender',
+    fignum=1
+)
 
-# TODO can maybe generalize the labeling and line grouping given up to 2 levels
-# of grouping. 
-# Need to compute the center of each group for the major label and individual
-# point locations for the minor label.
-# Maybe take kwargs "major_group='dept', minor_group='gender'"
-
-# Connect points in each department
 N_depts = len(df['dept'].cat.categories)
-x = 2*np.arange(N_depts)
-xp = np.r_[[x, x+1]]
-y0 = df.loc[x, 'admit'] / df.loc[x, 'applications']
-y1 = df.loc[x+1, 'admit'] / df.loc[x+1, 'applications']
-yp = np.r_[[y0, y1]]
-
-ax.plot(xp, yp, 'C0')
-
-# Label the cases
-xv = np.arange(len(df))
-xind = xv[:-1:2]
-
-ax.set_xticks(xind + 0.5)
-ax.set_xticklabels(df.loc[xind, 'dept'])
-
-ax.set_xticks(xv, minor=True)
-ax.set_xticklabels(df['gender'], minor=True)
-ax.tick_params(axis='x', which='minor', pad=18)
-
-ax.tick_params(axis='x', which='major',  bottom=False)  # don't draw the ticks
-ax.tick_params(axis='x', which='minor',  bottom=True)
-
-# Lines between each department for clarity
-for x in xind + 1.5:
-    ax.axvline(x, lw=1, c='k')
-
 
 # Create new model with departments separately indexed (R code 11.32)
 with pm.Model():
@@ -234,37 +253,14 @@ print(pg)
 #     .set_index('gender', append=True)
 # )
 
-
-print("pg:")
-print(pg)
-
-ax = postcheck(m11_8, agg_name='applications', fignum=2)
-
-x = 2*np.arange(N_depts)
-xp = np.r_[[x, x+1]]
-y0 = df.loc[x, 'admit'] / df.loc[x, 'applications']
-y1 = df.loc[x+1, 'admit'] / df.loc[x+1, 'applications']
-yp = np.r_[[y0, y1]]
-
-ax.plot(xp, yp, 'C0')
-
-# Label the cases
-xv = np.arange(len(df))
-xind = xv[:-1:2]
-
-ax.set_xticks(xind + 0.5)
-ax.set_xticklabels(df.loc[xind, 'dept'])
-
-ax.set_xticks(xv, minor=True)
-ax.set_xticklabels(df['gender'], minor=True)
-ax.tick_params(axis='x', which='minor', pad=18)
-
-ax.tick_params(axis='x', which='major',  bottom=False)  # don't draw the ticks
-ax.tick_params(axis='x', which='minor',  bottom=True)
-
-# Lines between each department for clarity
-for x in xind + 1.5:
-    ax.axvline(x, lw=1, c='k')
+# Re-plot with better predictions
+ax = postcheck(
+    m11_8,
+    agg_name='applications',
+    major_group='dept',
+    minor_group='gender',
+    fignum=2
+)
 
 
 plt.ion()
