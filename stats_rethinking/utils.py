@@ -579,24 +579,21 @@ class PostModel(ABC):
 
     def __str__(self):
         with pd.option_context('display.float_format', '{:.4f}'.format):
-            try:
-                # remove "dtype: object" line from the Series repr
-                meanstr = repr(self.coef.to_pandas()).rsplit('\n', 1)[0]
-            except ValueError:
-                meanstr = repr(self.coef)
+            # try:
+            #     # remove "dtype: object" line from the Series repr
+            #     meanstr = repr(self.coef.to_pandas()).rsplit('\n', 1)[0]
+            # except ValueError:
+            meanstr = repr(self.coef)
 
-        # FIXME indentation. inspect.cleandoc() fails because the
-        # model.str_repr() is not always aligned left.
-        out = f"""{self._descrip}
+        out = (
+            f"{self._descrip}\n\n"
+            "Formula:\n"
+            f"{self.model.str_repr()}\n\n"
+            "Posterior Means:\n"
+            f"{meanstr}\n\n"
+            f"Log-likelihood: {self.loglik:.2f}\n"
+        )
 
-Formula:
-{self.model.str_repr()}
-
-Posterior Means:
-{meanstr}
-
-Log-likelihood: {self.loglik:.2f}
-"""
         return out
 
     def __repr__(self):
