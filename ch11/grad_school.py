@@ -174,6 +174,93 @@ for x in xind + 1.5:
     ax.axvline(x, lw=1, c='k')
 
 
+# Create new model with departments separately indexed (R code 11.32)
+with pm.Model():
+    α = pm.Normal('α', 0, 1.5, shape=(2,))
+    δ = pm.Normal('δ', 0, 1.5, shape=(N_depts,))
+    p = pm.Deterministic('p', pm.math.invlogit(α[df['gid']] + δ[df['dept'].cat.codes]))
+    admit = pm.Binomial('admit', df['applications'], p, observed=df['admit'])
+    m11_8 = sts.ulam(data=df)
+
+print('m11.8:')
+sts.precis(m11_8)
+
+# (R code 11.33) Compute the contrasts
+post = m11_8.get_samples()
+diff_a = post['α'].diff('α_dim_0').squeeze()
+diff_p = expit(post['α']).diff('α_dim_0').squeeze()
+sts.precis(xr.Dataset(dict(diff_a=diff_a, diff_p=diff_p)))
+
+# (R code 11.34) Tabulate rates of admission across departments
+df['applications_p'] = (
+    df
+    .groupby('dept', observed=True)
+    ['applications']
+    .transform(lambda x: x / x.sum())
+)
+pg = df[['dept', 'gender', 'applications_p']].set_index(['dept', 'gender'])
+
+# NOTE why can't we just apply the transformation to one column of groupby!?
+# Want to be able to do something like:
+# pg = (
+#     df
+#     .groupby('dept')
+#     [['gender', 'applications']]
+#     .transform({
+#         'gender': None,  # or lambda x: x
+#         'applications': lambda x: x / x.sum(),
+#     })
+# )
+#
+# Convoluted workaround using `apply`:
+# def f(group):
+#     return pd.DataFrame({
+#         'gender': group['gender'],
+#         'applications': group['applications'] / group['applications'].sum(),
+#     })
+#
+#
+# pg = (
+#     df.groupby('dept')
+#     [['gender', 'applications']]
+#     .apply(f)
+#     .reset_index(level=1, drop=True)
+#     .set_index('gender', append=True)
+# )
+
+
+print("pg:")
+print(pg)
+
+ax = postcheck(m11_8, agg_name='applications', fignum=2)
+
+x = 2*np.arange(N_depts)
+xp = np.r_[[x, x+1]]
+y0 = df.loc[x, 'admit'] / df.loc[x, 'applications']
+y1 = df.loc[x+1, 'admit'] / df.loc[x+1, 'applications']
+yp = np.r_[[y0, y1]]
+
+ax.plot(xp, yp, 'C0')
+
+# Label the cases
+xv = np.arange(len(df))
+xind = xv[:-1:2]
+
+ax.set_xticks(xind + 0.5)
+ax.set_xticklabels(df.loc[xind, 'dept'])
+
+ax.set_xticks(xv, minor=True)
+ax.set_xticklabels(df['gender'], minor=True)
+ax.tick_params(axis='x', which='minor', pad=18)
+
+ax.tick_params(axis='x', which='major',  bottom=False)  # don't draw the ticks
+ax.tick_params(axis='x', which='minor',  bottom=True)
+
+# Lines between each department for clarity
+for x in xind + 1.5:
+    ax.axvline(x, lw=1, c='k')
+
+
 plt.ion()
 plt.show()
 
