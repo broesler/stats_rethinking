@@ -193,33 +193,39 @@ sts.precis(xr.Dataset(dict(diff_a=diff_a, diff_p=diff_p)))
 
 # (R code 11.34) Tabulate rates of admission across departments
 df['applications_p'] = (
-    df
-    .groupby('dept', observed=True)
-    ['applications']
-    .transform(lambda x: x / x.sum())
+    df.groupby('dept', observed=True)
+    ['applications'].transform(lambda group: group / group.sum())
 )
-pg = df[['dept', 'gender', 'applications_p']].set_index(['dept', 'gender'])
+
+# Make the pivot table for easy reading
+pg = (
+    df[['dept', 'gender', 'applications_p']]
+    .set_index('gender')
+    .pivot(columns=['dept'])
+)
+
+print("pg:")
+print(pg)
+
 
 # NOTE why can't we just apply the transformation to one column of groupby!?
 # Want to be able to do something like:
 # pg = (
 #     df
 #     .groupby('dept')
-#     [['gender', 'applications']]
 #     .transform({
-#         'gender': None,  # or lambda x: x
 #         'applications': lambda x: x / x.sum(),
 #     })
+#     [['gender', 'applications']]
 # )
-#
+
 # Convoluted workaround using `apply`:
 # def f(group):
 #     return pd.DataFrame({
 #         'gender': group['gender'],
 #         'applications': group['applications'] / group['applications'].sum(),
 #     })
-#
-#
+
 # pg = (
 #     df.groupby('dept')
 #     [['gender', 'applications']]
