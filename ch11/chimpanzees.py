@@ -322,6 +322,40 @@ print('ct:')
 with pd.option_context('display.precision', 2):
     print(cmp['ct'])
 
+
+# ----------------------------------------------------------------------------- 
+#        Aggregate model 
+# -----------------------------------------------------------------------------
+# Aggregate the data by treatment (R cod 11.23)
+g = (
+    df
+    .groupby(['treatment', 'actor', 'prosoc_left', 'condition'])
+    .sum()
+    ['pulled_left']
+    .reset_index()
+    .rename({'pulled_left': 'left_pulls'}, axis='columns')
+)
+
+# Total trials
+Nt = df.groupby(['treatment', 'actor']).count()['pulled_left'].loc[0, 0]
+
+# (R code 11.24)
+with pm.Model():
+    actor = pm.MutableData('actor', g['actor'])
+    treatment = pm.MutableData('treatment', g['treatment'])
+    a = pm.Normal('a', 0, 1.5, shape=(len(g['actor'].unique()),))      # (7,)
+    b = pm.Normal('b', 0, 0.5, shape=(len(g['treatment'].unique()),))  # (4,)
+    p = pm.Deterministic('p', pm.math.invlogit(a[actor] + b[treatment]))
+    left_pulls = pm.Binomial('left_pulls', Nt, p, observed=g['left_pulls'])
+    m11_6 = sts.ulam(data=g)
+
+
+cmp = sts.compare([m11_4, m11_6], mnames=['m11.4', 'm11.6'], ic='LOOIC')
+print('ct:')
+with pd.option_context('display.precision', 2):
+    print(cmp['ct'])
+
+
 plt.ion()
 plt.show()
 
