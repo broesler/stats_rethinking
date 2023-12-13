@@ -1108,6 +1108,115 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     return ax
 
 
+def postcheck(fit, agg_name=None, major_group=None, minor_group=None, N=1000,
+              q=0.89, fignum=None):
+    """Plot the discrete observed data and the posterior predictions.
+
+    Parameters
+    ----------
+    fit : PostModel
+        The model to which the data is fitted. The model must have a ``data``
+        attribute containing a `dict`-like structure.
+    agg_name : str, optional
+        The name of the variable over which the data is aggregated.
+    major_group, minor_group : str, optional
+        Names of columns in the ``fit.data`` structure by which to group the
+        data. Either ``major_group`` or both can be provided, but not
+        ``minor_group`` alone.
+    N : int, optional
+        The number of samples to take of the posterior.
+    q : float in [0, 1], optional
+        The quantile of which to compute the interval.
+    fignum : int, optional
+        The Figure number in which to plot.
+
+    Returns
+    -------
+    ax : plt.Axes
+        The axes in which the plot was drawn.
+    """
+    if minor_group and major_group is None:
+        raise ValueError('Cannot provide `minor_group` without `major_group`.')
+
+    df = fit.data.copy()  # avoid changing structure
+
+    y = fit.model.observed_RVs[0].name
+    post = fit.get_samples(N)
+
+    yv = df[y]
+    xv = np.arange(len(yv))
+
+    pred = lmeval(
+        fit,
+        out=fit.model['p'],
+        dist=post,
+    )
+
+    sims = lmeval(
+        fit,
+        out=fit.model[y],
+        params=fit.model.free_RVs,  # ignore deterministics
+        dist=post,
+    )
+
+    μ = pred.mean('draw')
+
+    a = (1 - q) / 2
+    μ_PI = pred.quantile([a, 1-a], dim='draw')
+    y_PI = sims.quantile([a, 1-a], dim='draw')
+
+    if agg_name is not None:
+        yv /= df[agg_name]
+        y_PI = y_PI.values / df[agg_name].values
+
+    fig = plt.figure(fignum, clear=True)
+    ax = fig.add_subplot()
+
+    # Plot the mean and simulated PIs
+    ax.errorbar(xv, μ, yerr=np.abs(μ_PI - μ), c='k',
+                ls='none', marker='o', mfc='none', mec='k', label='pred')
+    ax.scatter(np.tile(xv, (2, 1)), y_PI, marker='+', c='k', label='y PI')
+    # Plot the data
+    ax.scatter(xv, yv, c='C0', label='data', zorder=10)
+
+    ax.legend()
+    ax.set(xlabel='case',
+           ylabel=y)
+
+    ax.spines[['top', 'right']].set_visible(False)
+
+    # Connect points in each major group
+    # ASSUME 2 points per category.
+    # TODO update for arbitrary number of members in each group.
+    if major_group:
+        N_maj = len(df[major_group].cat.categories)
+        x = 2*np.arange(N_maj)
+        xp = np.r_[[x, x+1]]
+        yp = np.r_[[df.loc[x, y], df.loc[x+1, y]]]
+        ax.plot(xp, yp, 'C0')
+
+        # Label the cases
+        xv = np.arange(len(df))
+        # TODO xind is the location of each group center
+        xind = xv[:-1:2]
+
+        ax.set_xticks(xind + 0.5)
+        ax.set_xticklabels(df.loc[xind, major_group])
+
+        if minor_group:
+            ax.set_xticks(xv, minor=True)
+            ax.set_xticklabels(df[minor_group], minor=True)
+            ax.tick_params(axis='x', which='minor', pad=18)
+            ax.tick_params(axis='x', which='major',  bottom=False)
+            ax.tick_params(axis='x', which='minor',  bottom=True)
+
+        # Lines between each department for clarity
+        # TODO compute right edge of each group
+        for x in xind + 1.5:
+            ax.axvline(x, lw=1, c='k')
+
+    return ax
+
 # -----------------------------------------------------------------------------
 #         Graph Utilities
 # -----------------------------------------------------------------------------

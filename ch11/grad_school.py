@@ -10,14 +10,12 @@
 # =============================================================================
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import pymc as pm
 import xarray as xr
 
 from pathlib import Path
-from scipy import stats
-from scipy.special import logit, expit
+from scipy.special import expit
 
 import stats_rethinking as sts
 
@@ -65,125 +63,8 @@ sts.precis(xr.Dataset(dict(diff_a=diff_a, diff_p=diff_p)))
 
 df['admit_p'] = df['admit'] / df['applications']
 
-
-# TODO move into stats_rethinking
-def postcheck(fit, agg_name=None, major_group=None, minor_group=None, N=1000,
-              q=0.89, fignum=None):
-    """Plot the discrete observed data and the posterior predictions.
-
-    Parameters
-    ----------
-    fit : :obj:`sts.PostModel'
-        The model to which the data is fitted. The model must have a ``data``
-        attribute containing a `dict`-like structure.
-    agg_name : str, optional
-        The name of the variable over which the data is aggregated.
-    major_group, minor_group : str, optional
-        Names of columns in the ``fit.data`` structure by which to group the
-        data. Either ``major_group`` or both can be provided, but not
-        ``minor_group`` alone.
-    N : int, optional
-        The number of samples to take of the posterior.
-    q : float in [0, 1], optional
-        The quantile of which to compute the interval.
-    fignum : int, optional
-        The Figure number in which to plot.
-
-    Returns
-    -------
-    ax : plt.Axes
-        The axes in which the plot was drawn.
-    """
-    if minor_group and major_group is None:
-        raise ValueError('Cannot provide `minor_group` without `major_group`.')
-
-    y = fit.model.observed_RVs[0].name
-    post = fit.get_samples(N)
-
-    yv = fit.data[y].copy()
-    xv = np.arange(len(yv))
-
-    pred = sts.lmeval(
-        fit,
-        out=fit.model['p'],
-        dist=post,
-    )
-
-    sims = sts.lmeval(
-        fit,
-        out=fit.model[y],
-        params=fit.model.free_RVs,  # ignore deterministics
-        dist=post,
-    )
-
-    μ = pred.mean('draw')
-
-    a = (1 - q) / 2
-    μ_PI = pred.quantile([a, 1-a], dim='draw')
-    y_PI = sims.quantile([a, 1-a], dim='draw')
-
-    if agg_name is not None:
-        yv /= fit.data[agg_name]
-        y_PI = y_PI.values / fit.data[agg_name].values
-
-    fig = plt.figure(fignum, clear=True)
-    ax = fig.add_subplot()
-
-    # Plot the mean and simulated PIs
-    ax.errorbar(xv, μ, yerr=np.abs(μ_PI - μ), c='k',
-                ls='none', marker='o', mfc='none', mec='k', label='pred')
-    ax.scatter(np.tile(xv, (2, 1)), y_PI, marker='+', c='k', label='y PI')
-    # Plot the data
-    ax.scatter(xv, yv, c='C0', label='data', zorder=10)
-
-    ax.legend()
-    ax.set(xlabel='case',
-           ylabel=y)
-
-    ax.spines[['top', 'right']].set_visible(False)
-
-    # Connect points in each major group
-    # TODO xp is index of each group
-    if major_group:
-        N_maj = len(fit.data[major_group].cat.categories)
-        x = 2*np.arange(N_maj)
-        xp = np.r_[[x, x+1]]
-
-        y0 = fit.data.loc[x, y]
-        y1 = fit.data.loc[x+1, y]
-        if agg_name is not None:
-            y0 /= fit.data.loc[x, agg_name]
-            y1 /= fit.data.loc[x+1, agg_name]
-        yp = np.r_[[y0, y1]]
-
-        ax.plot(xp, yp, 'C0')
-
-        # Label the cases
-        xv = np.arange(len(fit.data))
-        # TODO xind is the location of each group center
-        xind = xv[:-1:2]
-
-        ax.set_xticks(xind + 0.5)
-        ax.set_xticklabels(fit.data.loc[xind, major_group])
-
-        if minor_group:
-            ax.set_xticks(xv, minor=True)
-            ax.set_xticklabels(fit.data[minor_group], minor=True)
-            ax.tick_params(axis='x', which='minor', pad=18)
-            ax.tick_params(axis='x', which='major',  bottom=False)
-            ax.tick_params(axis='x', which='minor',  bottom=True)
-
-        # Lines between each department for clarity
-        # TODO compute right edge of each group
-        for x in xind + 1.5:
-            ax.axvline(x, lw=1, c='k')
-
-    return ax
-
-
 # (R code 11.31)
-# sts.postcheck(m11_7, fignum=1)
-ax = postcheck(
+ax = sts.postcheck(
     m11_7,
     agg_name='applications',
     major_group='dept',
@@ -197,7 +78,10 @@ N_depts = len(df['dept'].cat.categories)
 with pm.Model():
     α = pm.Normal('α', 0, 1.5, shape=(2,))
     δ = pm.Normal('δ', 0, 1.5, shape=(N_depts,))
-    p = pm.Deterministic('p', pm.math.invlogit(α[df['gid']] + δ[df['dept'].cat.codes]))
+    p = pm.Deterministic(
+        'p',
+        pm.math.invlogit(α[df['gid']] + δ[df['dept'].cat.codes])
+    )
     admit = pm.Binomial('admit', df['applications'], p, observed=df['admit'])
     m11_8 = sts.ulam(data=df)
 
@@ -254,7 +138,7 @@ print(pg)
 # )
 
 # Re-plot with better predictions
-ax = postcheck(
+ax = sts.postcheck(
     m11_8,
     agg_name='applications',
     major_group='dept',
