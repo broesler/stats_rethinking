@@ -49,8 +49,8 @@ assert (df['applications'] == df['admit'] + df['reject']).all()
 df['gid'] = df['gender'].cat.codes
 
 with pm.Model():
-    a = pm.Normal('a', 0, 1.5, shape=(2,))
-    p = pm.Deterministic('p', pm.math.invlogit(a[df['gid']]))
+    α = pm.Normal('α', 0, 1.5, shape=(2,))
+    p = pm.Deterministic('p', pm.math.invlogit(α[df['gid']]))
     admit = pm.Binomial('admit', df['applications'], p, observed=df['admit'])
     m11_7 = sts.ulam(data=df)
 
@@ -58,8 +58,8 @@ print('m11.7:')
 sts.precis(m11_7)
 
 post = m11_7.get_samples()
-diff_a = post['a'].diff('a_dim_0').squeeze()
-diff_p = expit(post['a']).diff('a_dim_0').squeeze()
+diff_a = post['α'].diff('α_dim_0').squeeze()
+diff_p = expit(post['α']).diff('α_dim_0').squeeze()
 sts.precis(xr.Dataset(dict(diff_a=diff_a, diff_p=diff_p)))
 
 df['admit_p'] = df['admit'] / df['applications']
