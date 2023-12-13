@@ -1784,9 +1784,8 @@ def dataset_to_frame(ds):
 def _names_from_vec(vname, ncols):
     """Create a list of strings ['x[0]', 'x[1]', ..., 'x[``ncols``]'],
     where 'x' is ``vname``."""
-    # TODO case of 2D, etc. variables
-    fmt = '02d' if ncols > 10 else 'd'
-    return [f"{vname}[{i:{fmt}}]" for i in range(ncols)]
+    # TODO case of N-D variables
+    return [f"{vname}[{i:d}]" for i in range(ncols)]
 
 
 # -----------------------------------------------------------------------------
