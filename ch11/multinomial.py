@@ -23,9 +23,9 @@ rng = np.random.default_rng(seed=56)
 #         Case 1
 # -----------------------------------------------------------------------------
 # Simulate career choices among 500 individuals
-N = 500                   # number of individuals
-income = np.arange(1, 4)  # expected income
-score = 0.5 * income      # scores for each career, based on income
+N = 500                # number of individuals
+income = np.arange(3)  # expected income
+score = 0.5 * income   # scores for each career, based on income
 
 # Convert scores to probabilities
 probs = softmax(score)
@@ -44,16 +44,17 @@ with pm.Model() as model:
         'p',
         pm.math.softmax(pm.math.stack([pm.math.zeros_like(s2), s2, s3]))
     )
-    career = pm.Categorical('career', p=p, observed=df[['career']])
-    # m11_9 = sts.ulam(data=df)  # FIXME fails on first iteration
+    career = pm.Categorical('career', p=p, observed=df['career'])
+    m11_9 = sts.ulam(data=df)
 
-# SamplingError: Initial evaluation of model at starting point failed
-# Starting values:
-# {'b': array(-0.76)}
-#
-# Logp initial evaluation results:
-# {'b': -2.54, 'career': -inf}
-# You can call `model.debug()` for more details.
+print('m11.9:')
+sts.precis(m11_9)
+
+idata_9 = pm.sample_posterior_predictive(
+    model=m11_9.model,
+    trace=m11_9.samples
+)
+print(idata_9.posterior_predictive['career'])
 
 # -----------------------------------------------------------------------------
 #         Case 2
@@ -77,18 +78,23 @@ with pm.Model() as model:
     a3 = pm.Normal('a3', 0, 5)
     b2 = pm.Normal('b2', 0, 5)
     b3 = pm.Normal('b3', 0, 5)
-    s2 = pm.Deterministic('s2', a2 + b2*family_income)
-    s3 = pm.Deterministic('s3', a3 + b3*family_income)
-    p = pm.Deterministic(
-        'p',
-        pm.math.softmax(pm.math.concatenate([pm.math.zeros_like(s2), s2, s3]))
-        # (3*N,) works, but not stack -> (3, N), etc.
-    )
+    s2 = a2 + b2*family_income
+    s3 = a3 + b3*family_income
+    zero = pm.math.zeros_like(s2)
+    score = pm.math.stack([zero, s2, s3], axis=1)
+    # stack -> (N, 3), p.sum(axis=1) = 1.0
+    p = pm.Deterministic('p', pm.math.softmax(score, axis=1))
     career = pm.Categorical('career', p, observed=df['career'])
     m11_10 = sts.ulam(data=df)
 
 print('m11.10:')
 sts.precis(m11_10)
+
+idata_10 = pm.sample_posterior_predictive(
+    model=m11_10.model,
+    trace=m11_10.samples
+)
+print(idata_10.posterior_predictive['career'])
 
 
 # =============================================================================
