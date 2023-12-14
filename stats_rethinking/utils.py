@@ -1107,8 +1107,9 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     return ax
 
 
-def postcheck(fit, agg_name=None, major_group=None, minor_group=None, N=1000,
-              q=0.89, fignum=None):
+def postcheck(fit, mean_name, agg_name=None,
+              major_group=None, minor_group=None,
+              N=1000, q=0.89, fignum=None):
     """Plot the discrete observed data and the posterior predictions.
 
     Parameters
@@ -1116,6 +1117,8 @@ def postcheck(fit, agg_name=None, major_group=None, minor_group=None, N=1000,
     fit : PostModel
         The model to which the data is fitted. The model must have a ``data``
         attribute containing a `dict`-like structure.
+    mean_name : str, optional
+        THe name of the variable which represents the mean of the outcome.
     agg_name : str, optional
         The name of the variable over which the data is aggregated.
     major_group, minor_group : str, optional
@@ -1147,7 +1150,7 @@ def postcheck(fit, agg_name=None, major_group=None, minor_group=None, N=1000,
 
     pred = lmeval(
         fit,
-        out=fit.model['p'],
+        out=fit.model[mean_name],
         dist=post,
     )
 

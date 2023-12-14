@@ -66,6 +66,7 @@ df['admit_p'] = df['admit'] / df['applications']
 # (R code 11.31)
 ax = sts.postcheck(
     m11_7,
+    mean_name='p',
     agg_name='applications',
     major_group='dept',
     minor_group='gender',
@@ -140,6 +141,7 @@ print(pg)
 # Re-plot with better predictions
 ax = sts.postcheck(
     m11_8,
+    mean_name='p',
     agg_name='applications',
     major_group='dept',
     minor_group='gender',
