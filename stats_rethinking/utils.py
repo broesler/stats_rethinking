@@ -959,16 +959,16 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
             for j in dist.coords['draw']
         ),
         dtype=np.dtype((float, out.shape.eval())),
-    ).T  # (out.shape, draw) NOTE may not need transpose here?
+    )  # (draw, out.shape)
 
-    # Return a DataArray for named dimensions.
-    return xr.DataArray(
-        out_samp,
-        coords={
-            f"{out.name}_dim_0": range(out_samp.shape[0]),
-            'draw': range(out_samp.shape[1])  # TODO should this be 'sample'?
-        }
-    )
+    # Build the coordinates in order of the out_samp dimensions
+    coords = dict(draw=range(out_samp.shape[0]))
+    coords.update({
+        f"{out.name}_dim_{i}": range(x)
+        for i, x in enumerate(out_samp.shape[1:])
+    })
+
+    return xr.DataArray(out_samp, coords=coords)
 
 
 # TODO
@@ -1078,10 +1078,9 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
         xe = fit_x
         mu_samp = fit_y
 
-    # TODO expect xarray with dimension 'draw'
     # Compute mean and error
-    mu_mean = mu_samp.mean(axis=1)
-    mu_pi = percentiles(mu_samp, q=q, axis=1)  # 0.89 default
+    mu_mean = mu_samp.mean(dim='draw')
+    mu_pi = percentiles(mu_samp, q=q, axis=mu_samp.get_axis_num('draw'))
 
     if unstd:
         xe = unstandardize(xe, data[x])
