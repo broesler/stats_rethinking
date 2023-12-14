@@ -9,21 +9,17 @@
 """
 # =============================================================================
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import xarray as xr
 
-from pathlib import Path
-from scipy import stats
 from scipy.special import softmax
 
 import stats_rethinking as sts
 
 rng = np.random.default_rng(seed=56)
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Case 1
 # -----------------------------------------------------------------------------
 # Simulate career choices among 500 individuals
@@ -32,10 +28,10 @@ income = np.arange(1, 4)  # expected income
 score = 0.5 * income      # scores for each career, based on income
 
 # Convert scores to probabilities
-p = softmax(score)
+probs = softmax(score)
 
 # Random choices of careers
-careers = rng.choice(income, size=N, p=p)
+careers = rng.choice(income, size=N, p=probs)
 
 df = pd.DataFrame(dict(career=careers))
 
@@ -45,27 +41,33 @@ with pm.Model() as model:
     s2 = pm.Deterministic('s2', 2*b)
     s3 = pm.Deterministic('s3', 3*b)
     p = pm.Deterministic(
-        'p', 
+        'p',
         pm.math.softmax(pm.math.stack([pm.math.zeros_like(s2), s2, s3]))
     )
-    career = pm.Categorical('career', p, observed=df['career'])
-    # FIXME fails on first iteration
-    # m11_9 = sts.ulam(data=df)
+    career = pm.Categorical('career', p=p, observed=df[['career']])
+    # m11_9 = sts.ulam(data=df)  # FIXME fails on first iteration
 
-# ----------------------------------------------------------------------------- 
+# SamplingError: Initial evaluation of model at starting point failed
+# Starting values:
+# {'b': array(-0.76)}
+#
+# Logp initial evaluation results:
+# {'b': -2.54, 'career': -inf}
+# You can call `model.debug()` for more details.
+
+# -----------------------------------------------------------------------------
 #         Case 2
 # -----------------------------------------------------------------------------
-N = 100
+N = 100  # number of individuals
 
 # Simulate family incomes for each individual
 family_income = rng.random(N)
 
 # Assign unique coefficient for each type of event
 coef = np.r_[1, 0, -1]
-
 score = 0.5*income + coef*family_income[:, np.newaxis]  # (N, 3)
-p = softmax(score, axis=1)
-careers = np.array([rng.choice(income, p=p[i]) for i, _ in enumerate(p)])
+probs = softmax(score, axis=1)  # (N, 3), rows sum to 1.0
+careers = np.array([rng.choice(income, p=x) for x in probs])
 
 df = pd.DataFrame(dict(career=careers, family_income=family_income))
 
@@ -78,17 +80,15 @@ with pm.Model() as model:
     s2 = pm.Deterministic('s2', a2 + b2*family_income)
     s3 = pm.Deterministic('s3', a3 + b3*family_income)
     p = pm.Deterministic(
-        'p', 
+        'p',
         pm.math.softmax(pm.math.concatenate([pm.math.zeros_like(s2), s2, s3]))
+        # (3*N,) works, but not stack -> (3, N), etc.
     )
     career = pm.Categorical('career', p, observed=df['career'])
-    # career = pm.Multinomial('career', N, p, observed=df['career'])
     m11_10 = sts.ulam(data=df)
 
 print('m11.10:')
 sts.precis(m11_10)
-
-
 
 
 # =============================================================================
