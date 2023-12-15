@@ -1532,7 +1532,7 @@ def plot_coef_table(ct, by_model=False, fignum=None):
 # TODO make a CompareTable object?
 #   * Include `sort` as a method.
 #   * Print lower precision by default.
-def compare(models, mnames=None, ic='WAIC', sort=False):
+def compare(models, mnames=None, ic='WAIC', args=None, sort=False):
     """Create a comparison table of models based on information criteria.
 
     Parameters
@@ -1543,6 +1543,11 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
         Names of the models. If None, models will be numbered sequentially in
         order of input.
     ic : str in {'WAIC', 'LOOIC', 'PSIS'}
+        The name of the information criteria to use for comparison.
+    args : dict_like, optional
+        Additional keyword arguments to be passed to the ``ic`` function when
+        making the comparison table. These arguments will *not* be used when
+        computing the pointwise `dSE` matrix.
     sort : bool
         If True, sort the result by the difference in WAIC values.
 
@@ -1589,10 +1594,13 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
     func = WAIC if ic == 'WAIC' else LOOIS
     diff_ic = f"d{ic}"
 
+    if args is None:
+        args = dict()
+
     # Create the dataframe of information criteria, with (model, var) as index
     df = (
         pd.concat(
-            [pd.DataFrame(func(m)) for m in models],
+            [pd.DataFrame(func(m, **args)) for m in models],
             keys=mnames,
             names=['model', 'var'],
             axis='columns'
