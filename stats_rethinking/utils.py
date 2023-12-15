@@ -839,13 +839,14 @@ def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs)
     ).cov()
 
     # Get the minus log likelihood of the data
-    loglik = float(
+    ds = (
         -idata
         .log_likelihood
         .mean(sample_dims)
         .sum()
-        .to_dataarray()  # convert to be able to extract singleton value
+        .to_pandas()  # convert to be able to extract singleton value
     )
+    loglik = float(ds.iloc[0]) if len(ds) == 1 else ds
 
     # TODO include full log likelihood array so that calls to sts.loglikelihood
     # can just return the already computed data instead of having to recompute.
@@ -2108,6 +2109,7 @@ def DIC(model, post=None, Ns=1000):
     ----------
     [1]: Gelman (2020). Bayesian Data Analysis, 3 ed. pp 172--173.
     """
+    # FIXME this will fail for Ulam objects with (chain, draw)
     if post is None:
         post = model.get_samples(Ns)
     f_loglik = model.model.compile_logp()
