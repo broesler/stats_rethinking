@@ -975,6 +975,8 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 # * options for `unstd` in {'x', 'y', 'both'}
 # * add "ci" = {'hpdi', 'pi', None} option
 # * add option for observed variable and plots its PI too.
+# * add option for discrete variables, or another function?
+# * split into 2 functions for (fit_x, fit_y) and (quap, mean_var)?
 def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
            x=None, y=None, data=None,
            eval_at=None, unstd=False, q=0.89, ax=None,
@@ -1422,8 +1424,11 @@ def bspline_basis(t, x=None, k=3, padded_knots=False):
 # -----------------------------------------------------------------------------
 #         Model comparison
 # -----------------------------------------------------------------------------
-def coef_table(models, mnames=None, params=None):
+# TODO CoefTable object? include plot method.
+def coef_table(models, mnames=None, params=None, hist=False):
     """Create a summary table of coefficients in each model.
+
+    .. note:: ``coef_table`` is just a concatenation of ``precis`` outputs.
 
     Parameters
     ----------
@@ -1433,6 +1438,8 @@ def coef_table(models, mnames=None, params=None):
         Names of the models.
     params : list of str, optional
         Names of specific parameters to return.
+    hist : bool, optional
+        If True, include sparkline histograms in the table.
 
     Returns
     -------
@@ -1440,8 +1447,8 @@ def coef_table(models, mnames=None, params=None):
         DataFrame with coefficients and their standard deviations as columns.
     """
     df = pd.concat(
-        [precis(m, verbose=False, hist=False) for m in models],
-        keys=mnames or ['model{i}' for i in enumerate(models)],
+        [precis(m, verbose=False, hist=hist) for m in models],
+        keys=mnames or [f"model_{i}" for i, _ in enumerate(models)],
         names=['model', 'param']
     )
     # plot_coef_table expects ['coef', 'std', 'lo%', 'hi%']
@@ -1508,8 +1515,8 @@ def plot_coef_table(ct, by_model=False, fignum=None):
         # Assume we have std and approximate with symmetric errorbars
         q = 0.89
         z = stats.norm.ppf(1 - (1 - q)/2)  # ≈ 1.96 for q = 0.95
-        # NOTE no need for factor of 2 here, because plt.errorbar plots a bar from
-        # y[i] -> y[i] + errs[i] and y[i] -> y[i] - errs[i].
+        # No need for factor of 2 here, because plt.errorbar plots a bar
+        # from y[i] -> y[i] + errs[i] and y[i] -> y[i] - errs[i].
         errs = ct['std'] * z  # ±err
         errs = errs.dropna()
 
@@ -1518,6 +1525,7 @@ def plot_coef_table(ct, by_model=False, fignum=None):
     # Plot the origin and make horizontal grid-lines
     ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
 
+    # TODO if by_model, need to compute `n_params` instead.
     # Only give a legend if necessary
     n_models = ct.index.get_level_values('model').unique().size
     if n_models == 1:

@@ -237,6 +237,7 @@ fig.set_size_inches((12.8, 4.8), forward=True)
 plot_data(axs[0], x='P', xv=Pseq, topK=4)
 plot_data(axs[1], x='population', xv=pop_seq)
 
+# TODO dummy legend entries for the open/closed circles. Move inside plot_data.
 axs[0].legend(loc='upper left')
 axs[0].set(
     xlabel='log population [std]',
@@ -277,21 +278,70 @@ with pm.Model() as model:
     β = pm.Exponential('β', 1, shape=(2,))
     λ = pm.Deterministic('λ', pm.math.exp(α[cid]) * P**β[cid])
     T = pm.Poisson('T', λ, observed=df['total_tools'])
-    m11_12 = sts.ulam(data=df)
+    m11_11x = sts.ulam(data=df)
 
 
+# (R code 11.51)
 fig, ax = plt.subplots(num=4, clear=True)
 plot_data(ax, x='population', xv=pop_seq)
 
+ax.legend(loc='lower right')
 ax.set(
     xlabel='population',
     ylabel='total tools',
     xticks=[0, 50_000, 150_000, 250_000],
-    # xlim=(-10_000, 300_000),
+    xlim=(-10_000, 300_000),
     ylim=(None, 90),
 )
 
-print(sts.compare([m11_11, m11_12], ['11', '12'])['ct'])
+print(sts.coef_table([m11_11, m11_11x], ['11', '11x'], hist=True))
+print(sts.compare([m11_11, m11_11x], ['11', '11x'])['ct'])
+
+
+# ----------------------------------------------------------------------------- 
+#         Creat model with offset
+# -----------------------------------------------------------------------------
+# Simulate data with daily counts (R code 11.53)
+N_days = 30  # 1 month
+y_daily = stats.poisson(1.5).rvs(N_days)
+
+# Simulate data with weekly counts (R code 11.54)
+N_weeks = 4
+days_week = 7
+y_weekly = stats.poisson(days_week * 0.5).rvs(N_weeks)
+
+exposure = np.r_[np.ones(N_days), np.repeat(days_week, N_weeks)]
+monastery = np.r_[np.zeros(N_days), np.ones(N_weeks)]
+
+tf = pd.DataFrame(dict(
+    y=np.r_[y_daily, y_weekly], 
+    days=exposure,
+    monastery=monastery
+))
+
+tf['log_days'] = np.log(tf['days'])
+
+# Fit the model
+with pm.Model() as model:
+    log_days = pm.ConstantData('log_days', tf['log_days'])
+    m = pm.ConstantData('m', tf['monastery'])
+    α = pm.Normal('α', 0, 1)
+    β = pm.Normal('β', 0, 1)
+    λ = pm.Deterministic(
+        'λ',
+        pm.math.exp(log_days + α + β*m)
+    )
+    y = pm.Poisson('y', λ, observed=tf['y'])
+    m11_12 = sts.ulam(data=tf)
+
+post = m11_12.get_samples()
+λ_daily = np.exp(post['α'])
+λ_weekly = np.exp(post['α'] + post['β'])
+λ_daily.name = 'λ'
+λ_weekly.name = 'λ'
+
+ct = sts.coef_table([λ_daily, λ_weekly], ['daily', 'weekly'], hist=True)
+print(ct)
 
 plt.ion()
 plt.show()
