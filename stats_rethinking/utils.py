@@ -258,7 +258,7 @@ def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
     return p_grid, posterior, prior
 
 
-def density(data, adjust=1.0, **kwargs):
+def density(data, adjust=0.5, **kwargs):
     """Return the kernel density estimate of the data, consistent with
     R function of the same name.
 
