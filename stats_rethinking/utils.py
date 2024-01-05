@@ -589,13 +589,16 @@ class PostModel(ABC):
             except ValueError:
                 meanstr = repr(self.coef)
 
+            loglikstr = repr(self.loglik).rsplit('\n', 1)[0]
+
+        # FIXME loglik format breaks if multiple output variables.
+        # See ch11/cats.py.
         out = (
             f"{self._descrip}\n\n"
             "Formula:\n"
             f"{self.model.str_repr()}\n\n"
-            "Posterior Means:\n"
-            f"{meanstr}\n\n"
-            f"Log-likelihood: {self.loglik:.2f}\n"
+            f"Posterior Means:\n{meanstr}\n\n"
+            f"Log-likelihood:\n{loglikstr}\n"
         )
 
         return out
