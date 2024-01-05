@@ -135,6 +135,10 @@ def percentiles(data, q=0.89, **kwargs):
     quantile
     """
     a = (1 - (q)) / 2
+    if 'axis' in kwargs and 'dim' in kwargs:
+        raise ValueError('Only one of `axis` or `dim` may be given!')
+    if 'dim' in kwargs:
+        kwargs['axis'] = data.get_axis_num(kwargs.pop('dim'))
     quantiles = quantile(data, (a, 1-a), **kwargs)
     return quantiles
 
