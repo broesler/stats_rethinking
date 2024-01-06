@@ -38,7 +38,7 @@ with pm.Model() as the_model:
     ind = pm.MutableData('ind', adults['weight'])
     obs = pm.MutableData('obs', adults['height'])
     alpha = pm.Normal('alpha', mu=178, sigma=20)
-    beta = pm.Lognormal('beta', mu=0, sigma=1)
+    beta = pm.LogNormal('beta', mu=0, sigma=1)
     sigma = pm.Uniform('sigma', 0, 50)
     mu = pm.Deterministic('mu', alpha + beta*(ind - wbar))
     # likelihood -- same shape as the independent variable!

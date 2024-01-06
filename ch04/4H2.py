@@ -54,7 +54,7 @@ w_bar = weight.mean()
 
 with pm.Model() as the_model:
     alpha = pm.Normal('alpha', height.mean(), 3*height.std())
-    beta = pm.Lognormal('beta', 0, 1)
+    beta = pm.LogNormal('beta', 0, 1)
     sigma = pm.Uniform('sigma', 0, 50)
     mu = alpha + beta * (weight - w_bar)
     h = pm.Normal('h', mu, sigma, observed=height)

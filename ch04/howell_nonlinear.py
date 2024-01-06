@@ -70,7 +70,7 @@ for poly_order in range(1, Np+1):
     with pm.Model() as poly_model:
         # Parameter priors
         alpha = pm.Normal('alpha', mu=178, sigma=20, shape=(1,))
-        b1 = pm.Lognormal('b1', mu=0, sigma=1, shape=(1,))  # linear term > 0
+        b1 = pm.LogNormal('b1', mu=0, sigma=1, shape=(1,))  # linear term > 0
         bn = pm.Normal('bn', mu=0, sigma=10, shape=(poly_order-1,))
         beta = pm.Deterministic('beta', pm.math.concatenate([alpha, b1, bn]))
 
