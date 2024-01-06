@@ -50,7 +50,7 @@ with pm.Model() as the_model:
 post = quap.sample()
 sts.precis(post)
 print('covariance:')
-print(post.cov())
+print(post.drop_vars('chain').to_pandas().cov())
 
 q = 0.89
 
@@ -81,8 +81,7 @@ h_pi = sts.percentiles(h_samp, q=q, axis=1)  # (2, Nd)
 # See: <https://github.com/rasmusbergpalm/pymc3-quap/blob/main/quap/quap.py>
 # for using `arviz.convert_to_inference_data'
 
-post_dict = post.to_dict(orient='list')  # dict like {column -> [values]}
-tr = az.convert_to_inference_data(post_dict)
+tr = az.convert_to_inference_data(post.expand_dims('chain'))
 
 # Compute the posterior sample of mu using quap values of alpha and beta.
 with the_model:
@@ -106,10 +105,10 @@ mu_s = sts.lmeval(quap,
                   eval_at={'ind': x_s},
                   params=[quap.model.alpha, quap.model.beta])
 
-mu_s_mean = mu_s.mean(axis=1)
-mu_s_hpdi = sts.hpdi(mu_s, q=q, axis=1)
+mu_s_mean = mu_s.mean('draw')
+mu_s_hpdi = sts.hpdi(mu_s, q=q, axis=mu_s.get_axis_num('draw'))
 
-assert np.allclose(mu_samp, mu_s)
+assert np.allclose(mu_samp.T, mu_s)
 
 # Figure 4.10 (R code 4.55, 4.57)
 fig = plt.figure(1, clear=True, constrained_layout=True)
