@@ -63,22 +63,22 @@ for col in ['in_event', 'out_event', 'breed', 'color']:
 
 # See <https://discourse.pymc.io/t/simple-exponential-survival-function/4961>
 
-# FIXME off by a factor of ~2 in the output D distribution means?
 # Define the model
+days_to_event = df['days_to_event']
+color_id = (df['color'] == 'Black').astype(int)
+adopted = df['out_event'] == 'Adoption'
 
 # junpenglao's model:
 with pm.Model():
-    days_to_event = pm.MutableData('days_to_event', df['days_to_event'])
-    color_id = pm.MutableData('color_id', (df['color'] == 'Black').astype(int))
-    adopted = pm.MutableData('adopted', df['out_event'] == 'Adoption')
-
     # # Define model parameters with indicator variable (NOT IDEAL)
     # a = pm.Normal('a', 0, 1)
     # b = pm.Normal('b', 0, 1)
     # log_rate = a + b * color_id
-    # obs_adopted = pm.Exponential('obs_adopted', pm.math.exp(log_rate), observed=days_to_event)
+    # obs_adopted = pm.Exponential('obs_adopted', pm.math.exp(log_rate),
+    #                              observed=days_to_event)
     # # Correct logp for censored data
-    # survival = pm.Potential('survival', pm.math.switch(adopted, 0, -log_rate))
+    # survival = pm.Potential('survival',
+    #                         pm.math.switch(adopted, 0, -log_rate))
 
     # Define model parameters (PREFERRED)
     α = pm.Normal('α', 0, 1, shape=(2,))  # color_id == 0 or 1
@@ -86,7 +86,7 @@ with pm.Model():
     λ = 1/μ
     obs_adopted = pm.Exponential('obs_adopted', λ, observed=days_to_event)
     # Correct logp for censored data
-    survival = pm.Potential('survival', pm.math.switch(adopted, 0, α[color_id]))
+    pm.Potential('survival', pm.math.switch(adopted, 0, α[color_id]))
 
     m11_14_junpenglao = sts.ulam(data=df)
 
@@ -108,16 +108,9 @@ postp_junpenglao = pm.sample_posterior_predictive(
 
 # john_c's model
 with pm.Model():
-    days_to_event = pm.ConstantData('days_to_event', df['days_to_event'])
-    color_id = pm.ConstantData('color_id', (df['color'] == 'Black').astype(int))
-    adopted = pm.ConstantData('adopted', df['out_event'] == 'Adoption')
-
-    # Define model parameters
     α = pm.Normal('α', 0, 1, shape=(2,))  # color_id == 0 or 1
     μ = pm.math.exp(α[color_id])
     λ = 1/μ
-
-    # obs_adopted = pm.Exponential('obs_adopted', λ, observed=days_to_event)
 
     # Censored data == not adopted
     # Example directly from:
@@ -128,7 +121,8 @@ with pm.Model():
         Corresponds to a probability function:
 
         .. math::
-            p(t|\lambda, \mathrm{obs}) = \prod_i \lambda_i^{\mathrm{obs}_i} e^{\lambda_i t_i}
+            p(t|\lambda, \mathrm{obs}) =
+                \prod_i \lambda_i^{\mathrm{obs}_i} e^{\lambda_i t_i}
 
         Parameters
         ----------
@@ -166,14 +160,14 @@ with pm.Model():
         t, λ = dist_params
         return np.where(
             np.array(adopted == 1),
-            stats.expon.rvs(scale=1/λ, size=size),                    # not censored = Exp(λ)
-            stats.expon.isf(stats.uniform.rvs(size=size), scale=1/λ)  # censored = Exp(λ).isf()
+            stats.expon.rvs(scale=1/λ, size=size),
+            stats.expon.isf(stats.uniform.rvs(size=size), scale=1/λ)
         )
 
     # NOTE DensityDist -> CustomDist in new API
-    exp_surv = pm.CustomDist('exp_surv', days_to_event, λ,
-                             logp=logp, observed=adopted,
-                             random=random)
+    obs_adopted = pm.CustomDist('obs_adopted', days_to_event, λ,
+                                logp=logp, observed=adopted,
+                                random=random)
 
     m11_14_john = sts.ulam(data=df)
 
@@ -196,19 +190,28 @@ postp_john = pm.sample_posterior_predictive(
     random_seed=56,
 )
 
+
 # -----------------------------------------------------------------------------
 #       Plots
 # -----------------------------------------------------------------------------
+def plot_density(data, ax=None, **kwargs):
+    if ax is None:
+        ax = plt.gca()
+    x = np.sort(data.stack(sample=('chain', 'draw')))
+    dens = sts.density(x).pdf(x)
+    ax.plot(x, dens, **kwargs)
+    return ax
+
 
 # Plot the distributions of adoption times for Black cats vs others
 fig = plt.figure(1, clear=True)
 ax = fig.add_subplot()
 for idx, label, c in zip([0, 1], ['Other cats', 'Black cats'], ['C3', 'k']):
     # TODO move to function:
-    # sts.plot_density(post['D'].sel(α_dim_0=idx), ax=ax, c=c, label=label)
-    x = np.sort(post['D'].sel(α_dim_0=idx).stack(sample=('chain', 'draw')))
-    dens = sts.density(x).pdf(x)
-    ax.plot(x, dens, c=c, label=label)
+    plot_density(post['D'].sel(α_dim_0=idx), ax=ax, c=c, label=label)
+    # x = np.sort(post['D'].sel(α_dim_0=idx).stack(sample=('chain', 'draw')))
+    # dens = sts.density(x).pdf(x)
+    # ax.plot(x, dens, c=c, label=label)
 
 ax.legend()
 ax.set(title='Distribution of Adoption Times',
@@ -237,6 +240,28 @@ for idx, label, c in zip([0, 1], ['Other cats', 'Black cats'], ['C3', 'k']):
 ax.legend()
 ax.set(xlabel='days until adoption',
        ylabel='fraction of cats remaining')
+ax.spines[['top', 'right']].set_visible(False)
+
+# Plot posterior predictive checks
+fig = plt.figure(3, clear=True)
+ax = fig.add_subplot()
+for idx, label, c in zip([0, 1], ['Other cats', 'Black cats'], ['C3', 'k']):
+    plot_density(post['D'].sel(α_dim_0=idx), ax=ax, c=c, label=label)
+    for data, ls in zip([postp_junpenglao, postp_john], ['--', '-.']):
+        plot_density(
+            (data
+             .posterior_predictive
+             ['obs_adopted']
+             .sel(obs_adopted_dim_2=color_id.index[color_id == idx])
+             .mean('obs_adopted_dim_2')
+             ),
+            ax=ax, c=c, ls=ls, label=label + ' - posterior pred.',
+        )
+
+ax.legend()
+ax.set(title='Distribution of Adoption Times',
+       xlabel='waiting time [days]',
+       ylabel='density')
 ax.spines[['top', 'right']].set_visible(False)
 
 plt.ion()
