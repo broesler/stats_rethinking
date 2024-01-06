@@ -289,6 +289,15 @@ def density(data, adjust=0.5, **kwargs):
     return kde
 
 
+def plot_density(data, ax=None, **kwargs):
+    if ax is None:
+        ax = plt.gca()
+    x = np.sort(data.stack(sample=('chain', 'draw')))
+    dens = density(x).pdf(x)
+    ax.plot(x, dens, **kwargs)
+    return ax
+
+
 # TODO expand documentation with examples
 def expand_grid(**kwargs):
     """Return a DataFrame of points, where the columns are kwargs.

@@ -194,24 +194,11 @@ postp_john = pm.sample_posterior_predictive(
 # -----------------------------------------------------------------------------
 #       Plots
 # -----------------------------------------------------------------------------
-def plot_density(data, ax=None, **kwargs):
-    if ax is None:
-        ax = plt.gca()
-    x = np.sort(data.stack(sample=('chain', 'draw')))
-    dens = sts.density(x).pdf(x)
-    ax.plot(x, dens, **kwargs)
-    return ax
-
-
 # Plot the distributions of adoption times for Black cats vs others
 fig = plt.figure(1, clear=True)
 ax = fig.add_subplot()
 for idx, label, c in zip([0, 1], ['Other cats', 'Black cats'], ['C3', 'k']):
-    # TODO move to function:
-    plot_density(post['D'].sel(α_dim_0=idx), ax=ax, c=c, label=label)
-    # x = np.sort(post['D'].sel(α_dim_0=idx).stack(sample=('chain', 'draw')))
-    # dens = sts.density(x).pdf(x)
-    # ax.plot(x, dens, c=c, label=label)
+    sts.plot_density(post['D'].sel(α_dim_0=idx), ax=ax, c=c, label=label)
 
 ax.legend()
 ax.set(title='Distribution of Adoption Times',
@@ -246,9 +233,9 @@ ax.spines[['top', 'right']].set_visible(False)
 fig = plt.figure(3, clear=True)
 ax = fig.add_subplot()
 for idx, label, c in zip([0, 1], ['Other cats', 'Black cats'], ['C3', 'k']):
-    plot_density(post['D'].sel(α_dim_0=idx), ax=ax, c=c, label=label)
+    sts.plot_density(post['D'].sel(α_dim_0=idx), ax=ax, c=c, label=label)
     for data, ls in zip([postp_junpenglao, postp_john], ['--', '-.']):
-        plot_density(
+        sts.plot_density(
             (data
              .posterior_predictive
              ['obs_adopted']
