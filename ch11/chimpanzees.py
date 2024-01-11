@@ -55,11 +55,11 @@ df['actor'] -= 1  # python is 0-indexed
 df['treatment'] = df['prosoc_left'] + 2 * df['condition']  # in range(4)
 
 # (R code 11.3)
-# print(df.pivot_table(
-#     index='treatment',
-#     values=['prosoc_left', 'condition'],
-#     aggfunc='sum',
-# ))
+print(df.pivot_table(
+    index='treatment',
+    values=['prosoc_left', 'condition'],
+    aggfunc='sum',
+))
 
 # Build a simple model (R code 11.4)
 with pm.Model():
