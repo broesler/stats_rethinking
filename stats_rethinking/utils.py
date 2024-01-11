@@ -1610,8 +1610,8 @@ def compare(models, mnames=None, ic='WAIC', args=None, sort=False):
                 print(f"{name}: {len(m.data)}")
             warnings.warn(
                 'Different numbers of observations found for at least two'
-                'models. \nModel comparison is only valid for models fit to'
-                'exactly the same observations.'
+                ' models. \nModel comparison is only valid for models fit to'
+                ' exactly the same observations.'
             )
     except TypeError:
         pass
