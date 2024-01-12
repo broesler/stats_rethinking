@@ -36,7 +36,6 @@ import pandas as pd
 import pymc as pm
 
 from pathlib import Path
-from scipy import stats
 
 import stats_rethinking as sts
 
@@ -71,7 +70,7 @@ with pm.Model() as the_model:
     β_P = pm.Normal('β_P', 0, 5)
     β_V = pm.Normal('β_V', 0, 5)
     β_A = pm.Normal('β_A', 0, 5)
-    p = pm.Deterministic('p', pm.math.invlogit(α + β_P * P + β_V * V + β_A * A))
+    p = pm.Deterministic('p', pm.math.invlogit(α + β_P*P + β_V*V + β_A*A))
     y = pm.Binomial('y', df['n'], p, observed=df['y'])
     m_quap = sts.quap(data=df)
     m_ulam = sts.ulam(data=df)
@@ -119,12 +118,12 @@ ax.set_xticklabels(df['n'])
 ax.set_xlabel('N')
 
 ax.errorbar(
-    x, 
-    precis_p['mean'], 
-    yerr=p_errs, 
-    c='C0', 
-    ls='none', 
-    marker='o'
+    x,
+    precis_p['mean'],
+    yerr=p_errs,
+    c='C0',
+    ls='none',
+    marker='o',
     label='p',
 )
 
@@ -140,6 +139,37 @@ ax.errorbar(
 
 ax.legend(loc='lower left')
 ax.set_ylabel('p')
+
+# -----------------------------------------------------------------------------
+#         (c) Add an interaction to the model
+# -----------------------------------------------------------------------------
+with pm.Model():
+    P = df['P'] == 'L'
+    V = df['V'] == 'L'
+    A = df['A'] == 'A'
+    α = pm.Normal('α', 0, 10)
+    β_P = pm.Normal('β_P', 0, 5)
+    β_V = pm.Normal('β_V', 0, 5)
+    β_A = pm.Normal('β_A', 0, 5)
+    β_PA = pm.Normal('β_PA', 0, 5)
+    p = pm.Deterministic(
+        'p',
+        pm.math.invlogit(α + β_P*P + β_V*V + β_A*A + β_PA*A*P)
+    )
+    y = pm.Binomial('y', df['n'], p, observed=df['y'])
+    m_int = sts.ulam(data=df)
+
+print('Interaction:')
+sts.precis(m_int)
+
+models = [m_ulam, m_int]
+mnames = ['simple', 'interaction'] 
+
+sts.plot_coef_table(sts.coef_table(models, mnames), fignum=3)
+
+cmp = sts.compare(models, mnames)['ct']
+print(cmp)
+# Interaction term wins!
 
 # =============================================================================
 # =============================================================================
