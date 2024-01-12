@@ -47,17 +47,13 @@ df = pd.read_csv(Path('../data/eagles.csv'))
 # Data columns (total 5 columns):
 #    Column  Non-Null Count  Dtype
 # ---  ------  --------------  -----
-#  0   y       8 non-null      int64
-#  1   n       8 non-null      int64
-#  2   P       8 non-null      object
-#  3   A       8 non-null      object
-#  4   V       8 non-null      object
+#  0   y       8 non-null      int64    # number of successful attempts
+#  1   n       8 non-null      int64    # total number of attempts
+#  2   P       8 non-null      object   # whether the pirate had a large body
+#  3   A       8 non-null      object   # whether the victim had a large body
+#  4   V       8 non-null      object   # whether the pirate was an adult
 # dtypes: int64(2), object(3)
 # memory usage: 452.0 bytes
-
-for col in list('PAV'):
-    df[col] = df[col].astype('category')
-
 
 # -----------------------------------------------------------------------------
 #         (a) Build the model and compare quap and ulam
