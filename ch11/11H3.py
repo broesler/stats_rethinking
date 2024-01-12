@@ -106,6 +106,8 @@ x = np.arange(len(df))
 p_errs = precis_p.filter(like='%').sub(precis_p['mean'], axis='rows').abs().T
 y_errs = precis_y.filter(like='%').sub(precis_y['mean'], axis='rows').abs().T
 
+dodge = 0.15
+
 fig = plt.figure(2, clear=True)
 ax = fig.add_subplot()
 
@@ -114,7 +116,7 @@ ax.set_xticklabels(df['n'])
 ax.set_xlabel('N')
 
 ax.errorbar(
-    x,
+    x - dodge,
     precis_p['mean'],
     yerr=p_errs,
     c='C0',
@@ -124,17 +126,20 @@ ax.errorbar(
 )
 
 ax.errorbar(
-    x + 0.3,
+    x + dodge,
     precis_y['mean'] / df['n'].values,  # scale by N to get same scale as p
     yerr=y_errs / df['n'].values,
     c='C3',
     ls='none',
     marker='o',
-    label='y',
+    label='y / n',
 )
 
+ax.scatter(x, df['y'] / df['n'], marker='x', c='k', label='data: y/n')
+
 ax.legend(loc='lower left')
-ax.set_ylabel('p')
+ax.set(title='posterior predictions',
+       ylabel='p')
 
 # -----------------------------------------------------------------------------
 #         (c) Add an interaction to the model
