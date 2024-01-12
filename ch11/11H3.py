@@ -59,6 +59,10 @@ df = pd.read_csv(Path('../data/eagles.csv'))
 for col in list('PAV'):
     df[col] = df[col].astype('category')
 
+
+# -----------------------------------------------------------------------------
+#         (a) Build the model and compare quap and ulam
+# -----------------------------------------------------------------------------
 with pm.Model() as the_model:
     P = df['P'] == 'L'
     V = df['V'] == 'L'
@@ -67,7 +71,7 @@ with pm.Model() as the_model:
     β_P = pm.Normal('β_P', 0, 5)
     β_V = pm.Normal('β_V', 0, 5)
     β_A = pm.Normal('β_A', 0, 5)
-    p = pm.math.invlogit(α + β_P * P + β_V * V + β_A * A)
+    p = pm.Deterministic('p', pm.math.invlogit(α + β_P * P + β_V * V + β_A * A))
     y = pm.Binomial('y', df['n'], p, observed=df['y'])
     m_quap = sts.quap(data=df)
     m_ulam = sts.ulam(data=df)
@@ -76,6 +80,66 @@ print('quap:')
 sts.precis(m_quap)
 print('ulam:')
 sts.precis(m_ulam)
+
+models = [m_quap, m_ulam]
+mnames = ['quap', 'ulam']
+ct = sts.coef_table(models, mnames)
+sts.plot_coef_table(ct, fignum=1)
+
+# TODO plot sample distributions of each parameter for each model?
+
+# -----------------------------------------------------------------------------
+#         (b) Plot the posterior predictions
+# -----------------------------------------------------------------------------
+# (1) The predicted probability of success is just the mean of `p`.
+post_p = m_ulam.deterministics['p']
+print('p:')
+precis_p = sts.precis(post_p)
+
+post_y = (
+    pm.sample_posterior_predictive(
+        trace=m_ulam.get_samples(),
+        model=m_ulam.model
+    )
+    .posterior_predictive['y']
+)
+print('y:')
+precis_y = sts.precis(post_y)
+
+# Plot p and y on same plot, but with different y-scales for comparison
+x = np.arange(len(df))
+p_errs = precis_p.filter(like='%').sub(precis_p['mean'], axis='rows').abs().T
+y_errs = precis_y.filter(like='%').sub(precis_y['mean'], axis='rows').abs().T
+
+fig = plt.figure(2, clear=True)
+ax = fig.add_subplot()
+
+ax.set_xticks(x)
+ax.set_xticklabels(df['n'])
+ax.set_xlabel('N')
+
+ax.errorbar(
+    x, 
+    precis_p['mean'], 
+    yerr=p_errs, 
+    c='C0', 
+    ls='none', 
+    marker='o'
+    label='p',
+)
+
+ax.errorbar(
+    x + 0.3,
+    precis_y['mean'] / df['n'].values,  # scale by N to get same scale as p
+    yerr=y_errs / df['n'].values,
+    c='C3',
+    ls='none',
+    marker='o',
+    label='y',
+)
+
+ax.legend(loc='lower left')
+ax.set_ylabel('p')
 
 # =============================================================================
 # =============================================================================
