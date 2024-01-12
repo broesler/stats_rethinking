@@ -525,7 +525,7 @@ class PostModel(ABC):
     _descrip = ""
 
     def __init__(self, *, coef=None, cov=None, data=None, map_est=None,
-                 loglik=None, model=None, start=None):
+                 loglik=None, model=None, start=None, **kwargs):
         self.coef = coef
         self.cov = cov
         self.data = data
@@ -533,6 +533,8 @@ class PostModel(ABC):
         self.loglik = loglik
         self.model = model
         self.start = start
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
     @property
     def std(self):
@@ -841,8 +843,9 @@ def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs)
             warnings.warn("`var_names` and `vars` set, ignoring `var_names`.")
         var_names = [x.name for x in vars]
 
-    # Get the posterior samples
+    # Get the posterior samples, including Deterministics
     post = idata.posterior[list(var_names)]
+    deterministics = idata.posterior[[x.name for x in model.deterministics]]
 
     # Coefficient values are just the mean of the samples
     coef = post.mean(sample_dims)
@@ -875,6 +878,7 @@ def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs)
         model=deepcopy(model),
         start=model.initial_point() if start is None else start,
         samples=post,
+        deterministics=deterministics,
     )
 
 
@@ -1481,6 +1485,7 @@ def coef_table(models, mnames=None, params=None, hist=False):
     return df.sort_index()
 
 
+# TODO transpose=True flag to swap x, y axes
 def plot_coef_table(ct, by_model=False, fignum=None):
     """Plot the table of coefficients from `sts.coef_table`.
 
