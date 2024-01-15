@@ -996,7 +996,9 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 # * options for `unstd` in {'x', 'y', 'both'}
 # * add "ci" = {'hpdi', 'pi', None} option
 # * add option for observed variable and plots its PI too.
+#   - see ch11/11H4.py
 # * add option for discrete variables, or another function?
+#   - see ch11/11H3.py
 # * split into 2 functions for (fit_x, fit_y) and (quap, mean_var)?
 def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
            x=None, y=None, data=None,
@@ -1102,8 +1104,9 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
         mu_samp = fit_y
 
     # Compute mean and error
-    mu_mean = mu_samp.mean(dim='draw')
-    mu_pi = percentiles(mu_samp, q=q, axis=mu_samp.get_axis_num('draw'))
+    sample_dims = ('chain', 'draw') if 'chain' in mu_samp.dims else 'draw'
+    mu_mean = mu_samp.mean(sample_dims)
+    mu_pi = percentiles(mu_samp, q=q, axis=mu_samp.get_axis_num(sample_dims))
 
     if unstd:
         xe = unstandardize(xe, data[x])
