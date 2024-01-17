@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import xarray as xr
 
 from cycler import cycler
 from pathlib import Path
@@ -24,7 +23,7 @@ import stats_rethinking as sts
 
 
 # -----------------------------------------------------------------------------
-#         Test plot of beta distribution
+#         Test plot of beta distribution (R code 12.1)
 # -----------------------------------------------------------------------------
 def beta2(pbar, theta):
     # Convert to standard parameterization
@@ -49,12 +48,13 @@ ax.set_prop_cycle(
 θ = 10
 for pbar in pbars:
     ax.plot(x, beta2(pbar, θ).pdf(x),
-            label=(f"{pbar = :g}, "
+            label=(rf"$\overline{{p}}$ = {pbar:g}, "
                    rf"($\alpha$ = {pbar*θ:.1f}, $\beta$ = {(1 - pbar)*θ:.1f})")
             )
 
 ax.legend()
-ax.set(xlabel='x',
+ax.set(title=rf"Beta($\overline{{p}}$, {θ=:g})",
+       xlabel='x',
        ylabel='density',
        xlim=(0, 1))
 ax.spines[['top', 'right']].set_visible(False)
@@ -75,46 +75,53 @@ for θ in θs:
             )
 
 ax.legend()
-ax.set(xlabel='x')
+ax.set(title=rf"Beta($\overline{{p}}$={pbar:g}, $\theta$)",
+       xlabel='x')
 ax.spines[['top', 'right']].set_visible(False)
 
 
-# ----------------------------------------------------------------------------- 
-#         Model the UCB Admissions data
 # -----------------------------------------------------------------------------
-df = (pd.read_csv(Path('../data/UCBadmit.csv'))
-    .reset_index()
-    .rename({'index': 'case'}, axis='columns')
-)
+#         Model the UCB Admissions data (R code 12.2)
+# -----------------------------------------------------------------------------
+df = pd.read_csv(Path('../data/UCBadmit.csv'))
 
 # Reorganize
-df = (df
+df = (
+    df
     .assign(
         dept=df['dept'].astype('category'),
         gender=df['applicant.gender'].astype('category')
     )
     .drop('applicant.gender', axis='columns')
+    .reset_index()
+    .rename({'index': 'case'}, axis='columns')
 )
+
 
 # Create integer index column
 df['gid'] = df['gender'].cat.codes
 
 # Define the model
 with pm.Model() as model:
-    N = df['applications']
     a = pm.Normal('a', 0, 1.5, shape=(2,))
     pbar = pm.Deterministic('pbar', pm.math.invlogit(a[df['gid']]))
     θ = pm.Exponential('θ', 1)
-    α, β = pbar*θ, (1-pbar)*θ
-    admit = pm.BetaBinomial('admit', n=N, alpha=α, beta=β, observed=df['admit'])
+    admit = pm.BetaBinomial(
+        'admit',
+        n=df['applications'],
+        alpha=pbar*θ,
+        beta=(1-pbar)*θ,
+        observed=df['admit']
+    )
     m12_1 = sts.ulam(data=df)
 
+# (R code 12.3)
 post = m12_1.get_samples()
 post['da'] = post['a'].diff('a_dim_0').squeeze()
 sts.precis(post)
 
-# ----------------------------------------------------------------------------- 
-#         Plot posterior distributions
+# -----------------------------------------------------------------------------
+#         Plot posterior distributions (R code 12.4)
 # -----------------------------------------------------------------------------
 gid = 0  # female applicants
 # sample_dims = ('chain', 'draw')
@@ -138,7 +145,7 @@ ax.set(title='distribution of female admission rates',
        ylim=(0, 3))
 ax.spines[['top', 'right']].set_visible(False)
 
-# Plot the predictions
+# Plot the predictions (R code 12.5)
 ax = sts.postcheck(
     m12_1,
     mean_name='pbar',
