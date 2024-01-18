@@ -999,6 +999,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 #   - see ch11/11H4.py
 # * add option for discrete variables, or another function?
 #   - see ch11/11H3.py
+#   - see sts.postcheck below!!
 # * split into 2 functions for (fit_x, fit_y) and (quap, mean_var)?
 def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
            x=None, y=None, data=None,
@@ -1134,8 +1135,8 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     return ax
 
 
-def postcheck(fit, mean_name, agg_name=None,
-              major_group=None, minor_group=None,
+def postcheck(fit, mean_name, mean_transform=None,
+              agg_name=None, major_group=None, minor_group=None,
               N=1000, q=0.89, fignum=None):
     """Plot the discrete observed data and the posterior predictions.
 
@@ -1145,7 +1146,9 @@ def postcheck(fit, mean_name, agg_name=None,
         The model to which the data is fitted. The model must have a ``data``
         attribute containing a `dict`-like structure.
     mean_name : str, optional
-        THe name of the variable which represents the mean of the outcome.
+        The name of the variable which represents the mean of the outcome.
+    mean_transform : callable, optional
+        A function by which to transform the mean variable values. 
     agg_name : str, optional
         The name of the variable over which the data is aggregated.
     major_group, minor_group : str, optional
@@ -1181,6 +1184,9 @@ def postcheck(fit, mean_name, agg_name=None,
         dist=post,
     )
 
+    if mean_transform is not None:
+        pred = mean_transform(pred)
+
     sims = lmeval(
         fit,
         out=fit.model[y],
@@ -1205,6 +1211,7 @@ def postcheck(fit, mean_name, agg_name=None,
     ax.errorbar(xv, μ, yerr=np.abs(μ_PI - μ), c='k',
                 ls='none', marker='o', mfc='none', mec='k', label='pred')
     ax.scatter(np.tile(xv, (2, 1)), y_PI, marker='+', c='k', label='y PI')
+
     # Plot the data
     ax.scatter(xv, yv, c='C0', label='data', zorder=10)
 
@@ -1243,6 +1250,10 @@ def postcheck(fit, mean_name, agg_name=None,
         # TODO compute right edge of each group
         for x in xind + 1.5:
             ax.axvline(x, lw=1, c='k')
+    elif agg_name:
+        ax.set_xticks(xv)
+        ax.set_xticklabels(df[agg_name])
+        ax.set_xlabel(agg_name)
 
     return ax
 

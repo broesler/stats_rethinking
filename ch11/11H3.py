@@ -89,7 +89,7 @@ sts.plot_coef_table(ct, fignum=1)
 # (1) The predicted probability of success is just the mean of `p`.
 post_p = m_ulam.deterministics['p']
 print('p:')
-precis_p = sts.precis(post_p)
+sts.precis(post_p)
 
 post_y = (
     pm.sample_posterior_predictive(
@@ -99,47 +99,27 @@ post_y = (
     .posterior_predictive['y']
 )
 print('y:')
-precis_y = sts.precis(post_y)
+sts.precis(post_y)
 
-# Plot p and y on same plot, but with different y-scales for comparison
-x = np.arange(len(df))
-p_errs = precis_p.filter(like='%').sub(precis_p['mean'], axis='rows').abs().T
-y_errs = precis_y.filter(like='%').sub(precis_y['mean'], axis='rows').abs().T
-
-dodge = 0.15
-
-fig = plt.figure(2, clear=True)
-ax = fig.add_subplot()
-
-ax.set_xticks(x)
-ax.set_xticklabels(df['n'])
-ax.set_xlabel('N')
-
-ax.errorbar(
-    x - dodge,
-    precis_p['mean'],
-    yerr=p_errs,
-    c='C0',
-    ls='none',
-    marker='o',
-    label='p',
+# Plot posterior predictions using postcheck
+ax = sts.postcheck(
+    m_ulam,
+    mean_name='p',
+    mean_transform=lambda x: x * df['n'].values,
+    fignum=2
 )
+ax.set(title='posterior predictions (natural scale)')
 
-ax.errorbar(
-    x + dodge,
-    precis_y['mean'] / df['n'].values,  # scale by N to get same scale as p
-    yerr=y_errs / df['n'].values,
-    c='C3',
-    ls='none',
-    marker='o',
-    label='y / n',
+# Plot posterior predictions using postcheck
+ax = sts.postcheck(
+    m_ulam,
+    mean_name='p',
+    agg_name='n',
+    fignum=3
 )
+ax.set_ylabel('p')
 
-ax.scatter(x, df['y'] / df['n'], marker='x', c='k', label='data: y/n')
-
-ax.legend(loc='lower left')
-ax.set(title='posterior predictions',
-       ylabel='p')
+ax.set(title='posterior predictions (probabilty scale)')
 
 # -----------------------------------------------------------------------------
 #         (c) Add an interaction to the model
@@ -166,7 +146,7 @@ sts.precis(m_int)
 models = [m_ulam, m_int]
 mnames = ['simple', 'interaction'] 
 
-sts.plot_coef_table(sts.coef_table(models, mnames), fignum=3)
+sts.plot_coef_table(sts.coef_table(models, mnames), fignum=4)
 
 cmp = sts.compare(models, mnames)['ct']
 print(cmp)
