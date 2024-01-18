@@ -1323,17 +1323,22 @@ def norm_fit(data, hist_kws=None, ax=None):
     return ax
 
 
-def standardize(x):
+def standardize(x, data=None):
     """Standardize the input vector `x` by the mean and std of `data`.
 
     .. note::
-        The following lines are equivalent:
+        Both numpy and xarray use `ddof=0` as the default, whereas pandas
+        defaults to `ddof=1`.
+
+        If `x` is a `pd.Series`, the following lines are equivalent:
                            (x - x.mean()) / x.std() == stats.zscore(x, ddof=1)
         (N / (N-1))**0.5 * (x - x.mean()) / x.std() == stats.zscore(x, ddof=0)
-        where N = x.size
+        where N = x.size.
     """
-    center = x.mean()
-    scale = x.std()
+    if data is None:
+        data = x
+    center = np.mean(data)
+    scale = np.std(data)
     z = (x - center) / scale
     if hasattr(z, 'attrs'):
         z.attrs = {'center': center, 'scale': scale}
@@ -1362,8 +1367,8 @@ def unstandardize(x, data=None):
             raise ValueError(("Must provide `data` or ",
                               "`x.attrs = {'center': float, 'scale': float}"))
     else:
-        center = data.mean()
-        scale = data.std()
+        center = np.mean(data)
+        scale = np.std(data)
     return center + scale * x
 
 
