@@ -44,7 +44,8 @@ df = pd.read_csv(Path('../data/Kline.csv'))
 # memory usage: 532.0 bytes
 
 # (R code 11.40)
-# df['population'] = df['population'].astype(float)
+# allow model evaluation at arbitrary values
+df['population'] = df['population'].astype(float)
 df['P'] = sts.standardize(np.log(df['population']))
 df['contact_id'] = (df['contact'] == 'high').astype(int)
 
@@ -56,8 +57,8 @@ xs = np.linspace(0, 100, 200)
 
 # (R code 11.41-43)
 # NOTE r::dlnorm(x, meanlog, sdlog) -> s = sdlog, scale = np.exp(meanlog)
-α_weak = stats.lognorm.pdf(xs, 10)
-α_strong = stats.lognorm.pdf(xs, 0.5, scale=np.exp(3))
+α_weak = stats.lognorm.pdf(xs, scale=np.exp(0), s=10)
+α_strong = stats.lognorm.pdf(xs, scale=np.exp(3), s=0.5)
 
 fig, ax = plt.subplots(num=1, clear=True)
 ax.plot(xs, α_weak, 'k-', label=r'$\alpha \sim \mathcal{N}(0, 10)$')
@@ -66,7 +67,7 @@ ax.plot(xs, α_strong, 'C0-', label=r'$\alpha \sim \mathcal{N}(3, 0.5)$')
 ax.legend()
 ax.set(
     xlabel='Mean number of tools',
-    ylabel='Density',
+    ylabel=r'Density $e^\alpha$',
     xlim=(0, 100),
     ylim=(0, 0.08),
 )
@@ -174,7 +175,7 @@ pop_seq = np.exp(
         Pseq,
         np.log(df['population'])
     )
-).astype(int)  # natural scale, population must be an integer
+)  # natural scale
 
 
 def plot_data(ax, model, x, xv, log_scale=True, topK=0):
