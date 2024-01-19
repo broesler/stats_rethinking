@@ -289,6 +289,7 @@ def density(data, adjust=0.5, **kwargs):
     return kde
 
 
+# TODO docstring
 def plot_density(data, ax=None, **kwargs):
     if ax is None:
         ax = plt.gca()
@@ -1257,6 +1258,7 @@ def postcheck(fit, mean_name, mean_transform=None,
 
     return ax
 
+
 # -----------------------------------------------------------------------------
 #         Graph Utilities
 # -----------------------------------------------------------------------------
@@ -1792,6 +1794,43 @@ def get_coords(ax):
     xc, yc, colors = [np.asarray(x) for x in zip(*pts)]
     return xc, yc, colors
 
+
+def simplehist(x, ax=None, **kwargs):
+    """Plot a histogram of an integer-valued array.
+
+    Parameters
+    ----------
+    x : (N,) array_like or sequence of (N,) arrays
+        Input values. This argument takes either a single array or a sequence
+        of arrays which are not required to be of the same length.
+    ax : Axes, optional
+        The axes in which to plot the histogram.
+
+    Returns
+    -------
+    n : array or list of arrays
+        The values of the histogram bins.
+    bins : array
+        The edges of the bins. Length nbins + 1. Always a single array even
+        when multiple data sets are passed in.        
+    patches : 
+        Container of individual artists used to create the histogram or list of
+        such containers if there are multiple input datasets.
+
+    Other Parameters
+    ----------------
+    *args, **kwargs
+        Arguments passed to `matplotlib.pyplot.hist`.
+
+    See Also
+    --------
+    matplotlib.pyplot.hist, numpy.histogram
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    # bins = [0, ..., 6] - 0.5 = [-0.5, 0.5, ..., 5.5]
+    return ax.hist(x, bins=np.arange(x.max()+2)-0.5, **kwargs)
 
 # -----------------------------------------------------------------------------
 #         Dataset/Frame conversion utilities

@@ -46,8 +46,7 @@ np.testing.assert_allclose(zeros_total, zeros_drink + zeros_work)
 # (R code 12.8)
 # Plot the outcome variable
 fig, ax = plt.subplots(num=1, clear=True)
-# bins = [0, ..., 6] - 0.5 = [-0.5, 0.5, ..., 5.5]
-ax.hist(y, bins=np.arange(7)-0.5, color='k', rwidth=0.1)
+sts.simplehist(y, ax=ax, color='k', rwidth=0.1)
 ax.bar(0, zeros_drink, bottom=zeros_work,
        width=0.1, color='C0', label='zeros by drinking')
 ax.legend()
