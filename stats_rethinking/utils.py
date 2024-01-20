@@ -1840,8 +1840,13 @@ def simplehist(x, ax=None, **kwargs):
     if ax is None:
         ax = plt.gca()
 
+    # Set defaults
+    opts = dict(alpha=0.6, ec='k')
+    opts.update(kwargs)
+
     # bins = [0, ..., 6] - 0.5 = [-0.5, 0.5, ..., 5.5]
-    return ax.hist(x, bins=np.arange(x.max()+2)-0.5, **kwargs)
+    return ax.hist(x, bins=np.arange(x.max()+2)-0.5, **opts)
+
 
 # -----------------------------------------------------------------------------
 #         Dataset/Frame conversion utilities
