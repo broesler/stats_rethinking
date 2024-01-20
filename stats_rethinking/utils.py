@@ -329,7 +329,7 @@ def expand_grid(**kwargs):
 #   * other option: split these blocks into individual `_precis_dataset()`
 #     functions and the main is just a dispatcher.
 #
-def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
+def precis(obj, q=0.89, digits=4, verbose=True, hist=True, filter=None):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
 
@@ -343,6 +343,8 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
         Number of digits in the printed output if `verbose=True`.
     verbose : bool
         If True, print the output.
+    filter : dict of {'items', 'like', 'regex'} -> str
+        Dictionary of a single kwarg from `pd.filter`. Acts on the rows.
 
     Returns
     -------
@@ -422,6 +424,9 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
         if hist:
             df['histogram'] = sparklines_from_array(obj)
 
+    if filter is not None:
+        df = df.filter(**filter, axis='rows')
+
     if verbose:
         if title is not None:
             print(title)
@@ -433,9 +438,9 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
     return df
 
 
-def plot_precis(obj, mname='model', q=0.89, fignum=None, labels=None):
+def plot_precis(obj, mname='model', q=0.89, fignum=None, labels=None, filter=None):
     """Plot the `precis` output of the object like a `coef_table`."""
-    ct = precis(obj, q=q, verbose=False, hist=False)
+    ct = precis(obj, q=q, verbose=False, hist=False, filter=filter)
     if labels is not None:
         ct.index = labels
     # Convert to "coef table" for plotting. Expects:
