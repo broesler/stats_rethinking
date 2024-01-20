@@ -948,7 +948,8 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         raise ValueError(f"Variable '{out}' does not exist in the model!")
 
     if params is None:
-        params = inputvars(out)
+        params = [x for x in inputvars(out) 
+                  if x not in fit.model.deterministics]
 
     if dist is None:
         dist = fit.get_samples(N)  # take the posterior
@@ -974,6 +975,11 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
                 raise ValueError("'dist' must have dimensions (1) 'draw', "
                                  "(2) ('chain', 'draw'), or "
                                  "(3) 'sample' == ('chain', 'draw').")
+
+    # TODO retain ('chain', 'draw') dimensions for consistency
+    #   This will be a big refactor of many early scripts that rely on using
+    #   the first dimension, or 'draw' simension. Consider creating a `flatten`
+    #   kwarg that defaults to True?
 
     # Manual loop since out_func cannot be vectorized.
     out_samp = np.fromiter(
