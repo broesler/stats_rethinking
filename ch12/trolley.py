@@ -174,7 +174,16 @@ for i, (a, c) in enumerate(zip([0, 1, 0],
                         pk_ci.isel(quantile=1, cutpoints_dim_0=j),
                         facecolor='k', alpha=0.3)
 
-    # TODO plot the data
+    # Get the distribution of responses
+    tf = df.loc[(df['action'] == a) & (df['contact'] == c),
+                ['intention', 'response']]
+    g = tf.groupby('intention')['response'].value_counts().sort_index()
+
+    # Plot the cutpoint data
+    pr = g.groupby('intention').transform(lambda x: (x / x.sum()).cumsum())
+    for k in kI:
+        ax.scatter(np.full(Km1, k), pr.loc[k, :6], c='C0', alpha=0.4)
+
     # TODO use the "first in column" feature
     if i == 0:
         ax.set(ylabel='probability')
@@ -183,9 +192,22 @@ for i, (a, c) in enumerate(zip([0, 1, 0],
            xticks=(0, 1),
            ylim=(-0.05, 1.05))
     # Plot the frequencies on the bottom row
+    # NOTE these bars are supposed to be *simulated*, not the data.
+    bw = 0.2  # bar width
+    responses = g[0].index
+
     ax = axs[1, i]
-    ax.set(xlabel='response',
-           ylabel='frequency')
+    for k, c in zip(kI, ['k', 'C0']):
+        ax.bar(responses - (1-k)*bw, g[k], width=bw,
+               align='edge', color=c, alpha=0.6, ec='white',
+               label=f"intention = {k}")
+
+    if i == 0:
+        ax.legend()
+        ax.set(ylabel='frequency',
+               xticks=responses)
+
+    ax.set(xlabel='response')
 
 
 # =============================================================================
