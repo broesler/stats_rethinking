@@ -144,9 +144,7 @@ sts.plot_precis(m12_6, filter=dict(like='β'), fignum=2)
 # -----------------------------------------------------------------------------
 post = m12_6.get_samples()
 
-# TODO instead of 50 lines, do a mean and CI over the samples.
 kI = [0, 1]
-N_lines = 50
 sample_dims = ('chain', 'draw')
 
 fig, axs = plt.subplots(num=3, nrows=2, ncols=3,
@@ -172,12 +170,18 @@ for i, (a, c) in enumerate(zip([0, 1, 0],
     )
     # Compute the probabilities from the intercept and linear model
     pk = expit(post['cutpoints'] - φ_samp)
-    # Transpose for easier plotting
-    pk = pk.transpose(..., 'φ_dim_0', 'cutpoints_dim_0')
+    q = 0.89
+    qq = (1 - q) / 2
+    pk_ci = pk.quantile([qq, 1 - qq], sample_dims)
     # Plot the probabilities on the top row
     ax = axs[0, i]
-    for j in range(N_lines):
-        ax.plot([0, 1], pk[0, j], c='k', alpha=0.1)  # plot all 6 at once
+    ax.plot([0, 1], pk.mean(sample_dims).T, c='k')  # plot all 6 at once
+    for j in range(Km1):
+        ax.fill_between([0, 1],
+                        pk_ci.isel(quantile=0, cutpoints_dim_0=j),
+                        pk_ci.isel(quantile=1, cutpoints_dim_0=j),
+                        facecolor='k', alpha=0.3)
+
     # TODO plot the data
     # TODO use the "first in column" feature
     if i == 0:
