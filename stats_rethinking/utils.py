@@ -1121,7 +1121,7 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     # Compute mean and error
     sample_dims = ('chain', 'draw') if 'chain' in mu_samp.dims else 'draw'
     mu_mean = mu_samp.mean(sample_dims)
-    mu_pi = percentiles(mu_samp, q=q, axis=mu_samp.get_axis_num(sample_dims))
+    mu_pi = percentiles(mu_samp, q=q, dim=sample_dims)
 
     if unstd:
         xe = unstandardize(xe, data[x])
