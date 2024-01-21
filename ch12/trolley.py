@@ -13,10 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import xarray as xr
 
 from pathlib import Path
-from scipy import stats
 from scipy.special import logit, expit
 
 import stats_rethinking as sts
@@ -150,24 +148,32 @@ sample_dims = ('chain', 'draw')
 fig, axs = plt.subplots(num=3, nrows=2, ncols=3,
                         sharex='row', sharey='row', clear=True)
 
-
 for i, (a, c) in enumerate(zip([0, 1, 0],
                                [0, 0, 1])):
     # Sample the link function (mean, φ)
     φ_samp = sts.lmeval(
         m12_6,
         out=m12_6.model.φ,
-        eval_at=dict(A=np.full_like(kI, a), I=kI, C=np.full_like(kI, c))
+        eval_at=dict(
+            A=np.full_like(kI, a),
+            I=kI,
+            C=np.full_like(kI, c)
+        )
     )
+
+    # # Sample the posterior predictive
+    # y_samp = pm.sample_posterior_predictive(post, model=m12_6.model)
 
     # Compute the probabilities from the intercept and linear model
     pk = expit(post['cutpoints'] - φ_samp)
+
     q = 0.89
     qq = (1 - q) / 2
     pk_ci = pk.quantile([qq, 1 - qq], sample_dims)
+
     # Plot the probabilities on the top row
     ax = axs[0, i]
-    ax.plot([0, 1], pk.mean(sample_dims).T, c='k')  # plot all 6 at once
+    ax.plot([0, 1], pk.mean(sample_dims).T, c='k', lw=1)  # plot all 6 at once
     for j in range(Km1):
         ax.fill_between([0, 1],
                         pk_ci.isel(quantile=0, cutpoints_dim_0=j),
@@ -186,11 +192,13 @@ for i, (a, c) in enumerate(zip([0, 1, 0],
 
     # TODO use the "first in column" feature
     if i == 0:
-        ax.set(ylabel='probability')
-    ax.set(title=f"action = {a}, contact = {c}",
-           xlabel='intention',
-           xticks=(0, 1),
-           ylim=(-0.05, 1.05))
+        ax.set(ylabel='probability',
+               xticks=(0, 1),
+               ylim=(-0.05, 1.05))
+
+    ax.set(title=f"action = {a}, contact = {c}")
+    ax.set_xlabel('intention', labelpad=-10)
+
     # Plot the frequencies on the bottom row
     # NOTE these bars are supposed to be *simulated*, not the data.
     bw = 0.2  # bar width
