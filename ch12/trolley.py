@@ -159,15 +159,7 @@ for i, (a, c) in enumerate(zip([0, 1, 0],
         out=m12_6.model.φ,
         eval_at=dict(A=np.full_like(kI, a), I=kI, C=np.full_like(kI, c))
     )
-    # Reshape for math with post
-    φ_samp = xr.DataArray(
-        φ_samp.values.reshape((4, 1000, -1)),
-        coords=dict(
-            chain=np.arange(4),
-            draw=np.arange(1000),
-            φ_dim_0=np.arange(len(kI))
-        )
-    )
+
     # Compute the probabilities from the intercept and linear model
     pk = expit(post['cutpoints'] - φ_samp)
     q = 0.89
