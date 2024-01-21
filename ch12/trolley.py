@@ -145,6 +145,7 @@ post = m12_6.get_samples()
 kI = [0, 1]
 sample_dims = ('chain', 'draw')
 
+# Create a triptych of action/contact pairs for each intention value.
 fig, axs = plt.subplots(num=3, nrows=2, ncols=3,
                         sharex='row', sharey='row', clear=True)
 
@@ -162,7 +163,7 @@ for i, (a, c) in enumerate(zip([0, 1, 0],
     )
 
     # # Sample the posterior predictive
-    # y_samp = pm.sample_posterior_predictive(post, model=m12_6.model)
+    # R_samp = pm.sample_posterior_predictive(post, model=m12_6.model)
 
     # Compute the probabilities from the intercept and linear model
     pk = expit(post['cutpoints'] - φ_samp)
@@ -205,9 +206,9 @@ for i, (a, c) in enumerate(zip([0, 1, 0],
     responses = g[0].index
 
     ax = axs[1, i]
-    for k, c in zip(kI, ['k', 'C0']):
+    for k, color in zip(kI, ['k', 'C0']):
         ax.bar(responses - (1-k)*bw, g[k], width=bw,
-               align='edge', color=c, alpha=0.6, ec='white',
+               align='edge', color=color, alpha=0.6, ec='white',
                label=f"intention = {k}")
 
     if i == 0:
