@@ -129,7 +129,8 @@ with pm.Model() as model:
     cutpoints = pm.Normal('cutpoints', 0, 1.5, shape=(Km1,),
                           transform=pm.distributions.transforms.ordered,
                           initval=np.linspace(-2, 3, Km1))
-    R = pm.OrderedLogistic('R', cutpoints=cutpoints, eta=φ, observed=y)
+    R = pm.OrderedLogistic('R', cutpoints=cutpoints, eta=φ,
+                           observed=y, shape=φ.shape)
     m12_6 = sts.ulam(data=df)
 
 print('m12.6:')
@@ -162,8 +163,14 @@ for i, (a, c) in enumerate(zip([0, 1, 0],
         )
     )
 
-    # # Sample the posterior predictive
-    # R_samp = pm.sample_posterior_predictive(post, model=m12_6.model)
+    # Sample the posterior predictive
+    R_samp = (
+        pm.sample_posterior_predictive(post, model=m12_6.model)
+        .posterior_predictive['R']
+        .stack(sample=sample_dims)
+        .transpose('sample', ...)
+    )
+    R_samp += 1  # 1, 2, ..., 7 index
 
     # Compute the probabilities from the intercept and linear model
     pk = expit(post['cutpoints'] - φ_samp)
@@ -201,20 +208,14 @@ for i, (a, c) in enumerate(zip([0, 1, 0],
     ax.set_xlabel('intention', labelpad=-10)
 
     # Plot the frequencies on the bottom row
-    # NOTE these bars are supposed to be *simulated*, not the data.
-    bw = 0.2  # bar width
-    responses = g[0].index
-
     ax = axs[1, i]
-    for k, color in zip(kI, ['k', 'C0']):
-        ax.bar(responses - (1-k)*bw, g[k], width=bw,
-               align='edge', color=color, alpha=0.6, ec='white',
-               label=f"intention = {k}")
+    label = ['intention = 0', 'intention = 1'] if i == 0 else None
+    sts.simplehist(R_samp, density=True, ax=ax,
+                   rwidth=0.4, color=['k', 'C0'], ec='white', label=label)
 
     if i == 0:
         ax.legend()
-        ax.set(ylabel='frequency',
-               xticks=responses)
+        ax.set(ylabel='frequency')
 
     ax.set(xlabel='response')
 
