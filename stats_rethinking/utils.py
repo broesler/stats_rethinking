@@ -976,6 +976,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
                                  "(2) ('chain', 'draw'), or "
                                  "(3) 'sample' == ('chain', 'draw').")
 
+    # TODO `progress_bar` kwarg + tqdm on this operation
     # Manual loop since out_func cannot be vectorized.
     out_samp = np.fromiter(
         (
@@ -989,8 +990,8 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         dtype=np.dtype((float, out.shape.eval())),
     )  # (draw, out.shape)
 
-    # TODO retain ('chain', 'draw') dimensions for consistency
-    #   This will be a big refactor of many early scripts that rely on using
+    # Retain ('chain', 'draw') dimensions for consistency
+    #   TODO This will be a big refactor of many early scripts that rely on using
     #   the first dimension, or 'draw' simension. Consider creating a `flatten`
     #   kwarg that defaults to True?
     N_chains, N_draws = dist.coords['chain'].size, dist.coords['draw'].size

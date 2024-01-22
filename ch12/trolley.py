@@ -76,7 +76,7 @@ axs[2].set(
     xlabel='response',
     ylabel='log cumulative odds'
 )
-axs[2].locator_params(integer=True)
+# axs[2].locator_params(integer=True)
 
 # Likelihood
 # lik = np.diff(np.r_[0, cum_pr_k])  # (7,)
@@ -105,7 +105,7 @@ print(
         cum_pr_k=cum_pr_k,
         model_p=model_p,
         diff=cum_pr_k-model_p
-    ))
+    )).T
 )
 
 # -----------------------------------------------------------------------------
@@ -196,9 +196,8 @@ for i, (a, c) in enumerate(zip([0, 1, 0],
     # Plot the cutpoint data
     pr = g.groupby('intention').transform(lambda x: (x / x.sum()).cumsum())
     for k in kI:
-        ax.scatter(np.full(Km1, k), pr.loc[k, :6], c='C0', alpha=0.4)
+        ax.scatter(np.full(Km1, k), pr.loc[k, :6], c='C0')
 
-    # TODO use the "first in column" feature
     if i == 0:
         ax.set(ylabel='probability',
                xticks=(0, 1),
