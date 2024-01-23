@@ -129,14 +129,14 @@ with pm.Model() as model:
     cutpoints = pm.Normal('cutpoints', 0, 1.5, shape=(Km1,),
                           transform=pm.distributions.transforms.ordered,
                           initval=np.linspace(-2, 3, Km1))
-    R = pm.OrderedLogistic('R', cutpoints=cutpoints, eta=φ,
-                           observed=y, shape=φ.shape)
+    R = pm.OrderedLogistic('R', cutpoints=cutpoints, eta=φ, shape=φ.shape,
+                           observed=y)
     m12_6 = sts.ulam(data=df)
 
 print('m12.6:')
-sts.precis(m12_6, filter=dict(like='β'))
+sts.precis(m12_6, filter_kws=dict(like='β'))
 
-sts.plot_precis(m12_6, filter=dict(like='β'), fignum=2)
+sts.plot_precis(m12_6, filter_kws=dict(like='β'), fignum=2)
 
 # -----------------------------------------------------------------------------
 #         Plot posterior predictive
@@ -149,6 +149,7 @@ sample_dims = ('chain', 'draw')
 # Create a triptych of action/contact pairs for each intention value.
 fig, axs = plt.subplots(num=3, nrows=2, ncols=3,
                         sharex='row', sharey='row', clear=True)
+fig.set_size_inches((10, 6), forward=True)
 
 for i, (a, c) in enumerate(zip([0, 1, 0],
                                [0, 0, 1])):

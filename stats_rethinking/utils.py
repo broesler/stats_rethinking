@@ -321,6 +321,7 @@ def expand_grid(**kwargs):
 
 # TODO
 #   * expand documentation with examples
+#   * Implement `omit` kwarg like r::rethinking::precis (R code 12.35)
 #   * remove dependence on input type. pd.DataFrame.from_dict? or kwarg?
 #       R version uses a LOT of "setMethod" calls to allow function to work
 #       with many different datatypes.
@@ -329,7 +330,7 @@ def expand_grid(**kwargs):
 #   * other option: split these blocks into individual `_precis_dataset()`
 #     functions and the main is just a dispatcher.
 #
-def precis(obj, q=0.89, digits=4, verbose=True, hist=True, filter=None):
+def precis(obj, q=0.89, digits=4, verbose=True, hist=True, filter_kws=None):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
 
@@ -343,7 +344,7 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True, filter=None):
         Number of digits in the printed output if `verbose=True`.
     verbose : bool
         If True, print the output.
-    filter : dict of {'items', 'like', 'regex'} -> str
+    filter_kws : dict of {'items', 'like', 'regex'} -> str
         Dictionary of a single kwarg from `pd.filter`. Acts on the rows.
 
     Returns
@@ -424,8 +425,8 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True, filter=None):
         if hist:
             df['histogram'] = sparklines_from_array(obj)
 
-    if filter is not None:
-        df = df.filter(**filter, axis='rows')
+    if filter_kws is not None:
+        df = df.filter(**filter_kws, axis='rows')
 
     if verbose:
         if title is not None:
@@ -438,9 +439,10 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True, filter=None):
     return df
 
 
-def plot_precis(obj, mname='model', q=0.89, fignum=None, labels=None, filter=None):
+def plot_precis(obj, mname='model', q=0.89,
+                fignum=None, labels=None, filter_kws=None):
     """Plot the `precis` output of the object like a `coef_table`."""
-    ct = precis(obj, q=q, verbose=False, hist=False, filter=filter)
+    ct = precis(obj, q=q, verbose=False, hist=False, filter_kws=filter_kws)
     if labels is not None:
         ct.index = labels
     # Convert to "coef table" for plotting. Expects:
@@ -685,11 +687,16 @@ class Ulam(PostModel):
         fig.suptitle(title)
         return fig, p
 
-    def pairplot(self, title=None, **kwargs):
+    def pairplot(self, var_names=None, labels=None, title=None, **kwargs):
         """Plot the pairwise correlations between the model parameters.
 
         Parameters
         ----------
+        var_names : list of str, optional
+            A list of variable names to plot.
+        labels : list of str, optional
+            A list of the variable names to use on the plot, e.g., for a vector
+            variable β[0], β[1], ..., β[N] -> 'A', 'B', ..., 'G'.
         title : str, optional
             The title of the figure.
         kwargs : dict, optional
@@ -706,10 +713,25 @@ class Ulam(PostModel):
             plot_kws=dict(s=10, alpha=0.2),
             height=1.5,
         )
-        if kwargs is not None:
-            opts.update(kwargs)
-        g = sns.pairplot(dataset_to_frame(self.samples), **opts)
+        opts.update(kwargs)
+
+        # Plot samples from the posterios
+        post = self.get_samples()
+
+        # Filter by variable names
+        if var_names is not None:
+            post = post[var_names]
+
+        # Expand and re-label any vector variables
+        df = dataset_to_frame(post)
+
+        if labels is not None:
+            df.columns = labels
+
+        # Make the plot
+        g = sns.pairplot(df, **opts)
         g.figure.suptitle(title)
+
         return g
 
 
