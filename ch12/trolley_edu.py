@@ -17,7 +17,6 @@ import pymc as pm
 from cycler import cycler
 from pathlib import Path
 from scipy import stats
-from scipy.special import logit, expit
 
 import stats_rethinking as sts
 
@@ -76,7 +75,7 @@ with pm.Model() as model:
     β_C = pm.Normal('β_C', 0, 1)
     β_E = pm.Normal('β_E', 0, 1)
     δ = pm.Dirichlet('δ', np.full(K, 2))  # constrain to a simplex
-    # Append a 0 and sum each of the predictor rows. 
+    # Append a 0 and sum each of the predictor rows.
     # Note that sum(δj[:E+1]) == cumsum(δj)[E]
     # It is MUCH faster to index into a constant array than to evaluate an
     # array of tensor functions.
