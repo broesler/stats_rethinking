@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-Description:
+§12.4 Trolley problem with Ordered Categorical predictor.
 """
 # =============================================================================
 
