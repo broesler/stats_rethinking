@@ -6,6 +6,12 @@
 #
 """
 §12.4 Trolley problem with gender, etc. as predictors. See also "11H5".
+
+See 2023 Rethinking Lecture 11 @ 55:16.
+
+We cannot interpret the effect of education, β_E, without controlling for
+*both* age and gender! Age and gender "cause" education, which provides
+a backdoor to confounding the effect of education on response.
 """
 # =============================================================================
 
@@ -14,9 +20,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 
-from cycler import cycler
 from pathlib import Path
-from scipy import stats
 
 import stats_rethinking as sts
 
@@ -42,38 +46,27 @@ edu_cats = [
 
 df['edu'] = df['edu'].cat.reorder_categories(edu_cats, ordered=True)
 
-# -----------------------------------------------------------------------------
-#         Plot a Dirichlet distribution
-# -----------------------------------------------------------------------------
 K = df['response'].cat.categories.size  # number of responses
 Km1 = K - 1
-
-N_lines = 10
-
-delta = stats.dirichlet(np.full(K, 2)).rvs(N_lines)  # (N_lines, K)
-
-fig, ax = plt.subplots(num=1, clear=True)
-ax.set_prop_cycle(cycler(color=plt.cm.viridis.resampled(N_lines).colors))
-ax.plot(delta.T, ls='-', marker='o', mfc='white')
-ax.set(title=r'Dirichlet$(\alpha=2)$',
-       xlabel='index',
-       ylabel='probability')
 
 # -----------------------------------------------------------------------------
 #         Build the Model
 # -----------------------------------------------------------------------------
-# NOTE this model takes ~2-3 minutes to sample
+# NOTE this model takes ~4 minutes to sample
 with pm.Model() as model:
     A = pm.MutableData('A', df['action'])
     I = pm.MutableData('I', df['intention'])
     C = pm.MutableData('C', df['contact'])
-    y = df['response'].cat.codes  # must be on [0, 7] scale
     E = pm.MutableData('E', df['edu'].cat.codes)
+    G = pm.MutableData('G', df['male'])  # 1 == male, 0 == female
+    Y = pm.MutableData('Y', df['age'])   # include age as continuous
+    y = df['response'].cat.codes  # must be on [0, 7] scale
     # Slope priors
-    β_A = pm.Normal('β_A', 0, 1)
-    β_I = pm.Normal('β_I', 0, 1)
-    β_C = pm.Normal('β_C', 0, 1)
-    β_E = pm.Normal('β_E', 0, 1)
+    β_A = pm.Normal('β_A', 0, 1, shape=(2,))
+    β_I = pm.Normal('β_I', 0, 1, shape=(2,))
+    β_C = pm.Normal('β_C', 0, 1, shape=(2,))
+    β_E = pm.Normal('β_E', 0, 1, shape=(2,))
+    β_Y = pm.Normal('β_Y', 0, 1, shape=(2,))
     δ = pm.Dirichlet('δ', np.full(K, 2))  # constrain to a simplex
     # Append a 0 and sum each of the predictor rows.
     # Note that sum(δj[:E+1]) == cumsum(δj)[E]
@@ -82,7 +75,8 @@ with pm.Model() as model:
     δj = pm.math.concatenate([[0], δ])
     D = pm.Deterministic('D', pm.math.cumsum(δj))
     # The linear model
-    φ = pm.Deterministic('φ', β_A*A + β_I*I + β_C*C + β_E*D[E])
+    φ = pm.Deterministic('φ', (β_A[G]*A + β_I[G]*I + β_C[G]*C
+                               + β_E[G]*D[E] + β_Y[G]*Y))
     # The cutpoints, constrained to be ordered.
     κ = pm.Normal('κ', 0, 1.5, shape=(Km1,),
                   transform=pm.distributions.transforms.ordered,
@@ -93,11 +87,18 @@ with pm.Model() as model:
 print('mRXE:')
 sts.precis(mRXE, filter_kws=dict(regex='β|δ'))
 
-# NOTE unclear if edu_cats are correct. Book version uses the first 7, showing
-# "Some College" corresponding to δ[4] (lowest value). This way makes logical
-# sense, but then δ[0] corresponds to "Elementary School", which is the
-# baseline, *not* the first δ value.
-g = mRXE.pairplot(var_names=['δ'], labels=edu_cats[1:])
+# Are women more or less bothered by contact than men?
+#   => Compare β_C[0] and β_C[1].
+ct = sts.coef_table([mRXE], ['mRXE'], params=['β_C'])
+ct = ct.rename(index={
+    'β_C[0]': 'β_C[female]',
+    'β_C[1]': 'β_C[male]'
+})
+
+sts.plot_coef_table(ct, fignum=1)
+
+# => β_C[male] > β_C[female]! So males actually "disapprove" of contact more
+# than females.
 
 # =============================================================================
 # =============================================================================
