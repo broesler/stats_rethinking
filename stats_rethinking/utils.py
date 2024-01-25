@@ -1536,9 +1536,8 @@ def coef_table(models, mnames=None, params=None, hist=False):
     if params is not None:
         # Silly workaround since df.filter does not work on MultiIndex.
         df = df.reset_index(level='model')
-        for p in params:
-            df = df.filter(regex=rf"^{p}([\d+])?", axis='rows')
-        df = df.set_index('model', append=True)
+        tf = [df.filter(regex=rf"^{p}([\d+])?", axis='rows') for p in params]
+        df = pd.concat(tf).set_index('model', append=True)
     return df.sort_index()
 
 
