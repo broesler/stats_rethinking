@@ -1207,6 +1207,8 @@ def postcheck(fit, mean_name, mean_transform=None,
     if minor_group and major_group is None:
         raise ValueError('Cannot provide `minor_group` without `major_group`.')
 
+    sample_dims = ('chain', 'draw')
+
     df = fit.data.copy()  # avoid changing structure
 
     y = fit.model.observed_RVs[0].name
@@ -1231,11 +1233,11 @@ def postcheck(fit, mean_name, mean_transform=None,
         dist=post,
     )
 
-    μ = pred.mean('draw')
+    μ = pred.mean(sample_dims)
 
     a = (1 - q) / 2
-    μ_PI = pred.quantile([a, 1-a], dim='draw')
-    y_PI = sims.quantile([a, 1-a], dim='draw')
+    μ_PI = pred.quantile([a, 1-a], dim=sample_dims)
+    y_PI = sims.quantile([a, 1-a], dim=sample_dims)
 
     if agg_name is not None:
         yv /= df[agg_name]
