@@ -246,11 +246,62 @@ sts.plot_compare(cmp['ct'], fignum=3)
 
 # Best model: D ~ F + A + F*A
 
-# TODO plot counterfactuals
+# TODO plot counterfactuals of best model vs baseline
 
 # ----------------------------------------------------------------------------- 
 #         12H4. Compare `damage_norm` and `log(damage_norm)`
 # -----------------------------------------------------------------------------
+df['logA'] = sts.standardize(np.log(df['damage_norm']))
+
+with pm.Model():
+    # Define the data
+    F = pm.MutableData('F', df['femininity'])
+    A = pm.MutableData('A', df['logA'])
+    # Define the priors
+    α = pm.Normal('α', 3, 0.5)
+    β_F = pm.Normal('β_F', 0, 0.1)
+    β_A = pm.Normal('β_A', 0, 0.1)
+    β_FA = pm.Normal('β_FA', 0, 0.1)
+    # Build the outcome variable
+    λ = pm.Deterministic('λ', pm.math.exp(α + β_F*F + β_A*A + β_FA*F*A))
+    φ = pm.Exponential('φ', 1)
+    D = pm.NegativeBinomial('D', mu=λ, alpha=φ, shape=λ.shape,
+                            observed=df['deaths'])
+    mFA = sts.ulam(data=df, cores=1)
+
+print('mFA:')
+sts.precis(mFA)
+
+models = [imodels['F*A'], mFA]
+mnames = ['F*A', 'F*log(A)']
+
+ct = sts.coef_table(models, mnames, params=['β'])
+cmp = sts.compare(models, mnames)
+
+sts.plot_compare(cmp['ct'], fignum=4)
+sts.plot_coef_table(ct, fignum=5)
+
+# Plot predictions at mean damage_norm
+Fs = np.linspace(1, 11)
+As = 0*Fs
+
+fig, axs = plt.subplots(num=6, ncols=2, clear=True)
+ax = axs[0]
+ax.scatter('femininity', 'deaths', data=df, alpha=0.4)
+ax.axhline(df['deaths'].mean(), ls='--', lw=1, c='gray', label='mean deaths')
+
+# Plot posterior mean
+λ_samp = sts.lmeval(mFA, out=mFA.model.λ, eval_at=dict(F=Fs, A=As))
+D_samp = sts.lmeval(mFA, out=mFA.model.D, eval_at=dict(F=Fs, A=As))
+
+# Plot posterior mean + predictive
+sts.lmplot(mGF, fit_x=Fs, fit_y=λ_samp, ax=ax)
+sts.lmplot(mGF, fit_x=Fs, fit_y=D_samp, line_kws=dict(c='none'), ax=ax)
+
+ax.set(xlabel='femininity',
+       ylabel='deaths',
+       xticks=fem_levels,
+       yscale='log')
 
 # =============================================================================
 # =============================================================================
