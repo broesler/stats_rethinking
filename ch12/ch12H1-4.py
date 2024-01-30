@@ -15,7 +15,6 @@ import pandas as pd
 import pymc as pm
 
 from pathlib import Path
-from scipy import stats
 
 import stats_rethinking as sts
 
@@ -61,8 +60,8 @@ sts.precis(mD)
 with pm.Model():
     F = pm.MutableData('F', df['femininity'])
     α = pm.Normal('α', 3, 0.5)
-    β = pm.Normal('β', 0, 0.1)
-    λ = pm.Deterministic('λ', pm.math.exp(α + β*F))
+    β_F = pm.Normal('β_F', 0, 0.1)
+    λ = pm.Deterministic('λ', pm.math.exp(α + β_F*F))
     D = pm.Poisson('D', λ, shape=λ.shape, observed=df['deaths'])
     mF = sts.ulam(data=df)
 
@@ -104,8 +103,8 @@ sts.lmplot(
 with pm.Model():
     F = pm.MutableData('F', df['femininity'])
     α = pm.Normal('α', 3, 0.5)
-    β = pm.Normal('β', 0, 0.1)
-    λ = pm.Deterministic('λ', pm.math.exp(α + β*F))
+    β_F = pm.Normal('β_F', 0, 0.1)
+    λ = pm.Deterministic('λ', pm.math.exp(α + β_F*F))
     φ = pm.Exponential('φ', 1)
     D = pm.NegativeBinomial('D', mu=λ, alpha=φ, shape=λ.shape,
                             observed=df['deaths'])
@@ -147,29 +146,111 @@ ax.legend(
 # A: The Gamma-Poisson model has an 89% confidence interval that overlaps
 # 0 deaths, as opposed to the Poisson model, which has an 89% confidence
 # interval that barely drops below 9 deaths. Since nearly 2/3rds of the
-# hurricanes have <= 10 deaths, the Poisson model 
+# hurricanes have <= 10 deaths, the Poisson model
 
 # -----------------------------------------------------------------------------
 #         12H3. Include an interaction effect
 # -----------------------------------------------------------------------------
 # Normalize inputs
-df['A'] = sts.standardize(np.log(df['damage_norm']))
+df['A'] = sts.standardize(df['damage_norm'])
 df['P'] = sts.standardize(df['min_pressure'])
 
-with pm.Model():
-    F = pm.MutableData('F', df['femininity'])
-    P = pm.MutableData('P', df['P'])
-    A = pm.MutableData('A', df['A'])
-    α = pm.Normal('α', 3, 0.5)
-    β_F = pm.Normal('β_F', 0, 0.1)
-    β_P = pm.Normal('β_P', 0, 0.1)
-    β_A = pm.Normal('β_A', 0, 0.1)
-    λ = pm.Deterministic('λ', pm.math.exp(α + β_F*F + β_P*P + β_A*A))
-    φ = pm.Exponential('φ', 1)
-    D = pm.NegativeBinomial('D', mu=λ, alpha=φ, shape=λ.shape,
-                            observed=df['deaths'])
-    mFPA = sts.ulam(data=df)
+# Assumed DAG:
+# F -> D <- A
+#      ^  /
+#      |/
+#      P
+#
+# P -> A -> D is a pipe. Control for A to close the pipe.
 
+
+def make_interaction_model(interaction, verbose=True):
+    """Define a Ulam model with various interactions between F, A, and P.
+
+    Parameters
+    ----------
+    interaction : str
+        'A'         == D ~ F + A
+        'P'         == D ~ F + P
+        'A + P'     == D ~ F + A + P
+        'F*A'       == D ~ F + A + F*A
+        'F*P'       == D ~ F + P + F*P
+        'F*A + F*P' == D ~ F + A + P + F*A + F*P
+    verbose : bool, optional
+        If True, print status.
+
+    Returns
+    -------
+    result : Ulam
+        The fitted model object.
+    """
+    if verbose:
+        print(f"\n\n---------- Making model with {interaction = }...")
+
+    with pm.Model():
+        # Define the data
+        F = pm.MutableData('F', df['femininity'])
+        A = pm.MutableData('A', df['A'])
+        P = pm.MutableData('P', df['P'])
+        # Define the priors
+        α = pm.Normal('α', 3, 0.5)
+        β_F = pm.Normal('β_F', 0, 0.1)
+
+        # Define the linear model
+        linear_model = α + β_F*F
+
+        if 'A' in interaction:
+            β_A = pm.Normal('β_A', 0, 0.1)
+            linear_model += β_A*A
+        if 'P' in interaction:
+            β_P = pm.Normal('β_P', 0, 0.1)
+            linear_model += β_P*P
+
+        # Add interaction terms
+        if 'F*A' in interaction:
+            β_FA = pm.Normal('β_FA', 0, 0.1)
+            linear_model += β_FA*F*A
+        if 'F*P' in interaction:
+            β_FP = pm.Normal('β_FP', 0, 0.1)
+            linear_model += β_FP*F*P
+
+        # Build the outcome variable
+        λ = pm.Deterministic('λ', pm.math.exp(linear_model))
+        φ = pm.Exponential('φ', 1)
+        D = pm.NegativeBinomial('D', mu=λ, alpha=φ, shape=λ.shape,
+                                observed=df['deaths'])
+
+        the_model = sts.ulam(data=df, cores=1)
+
+    if verbose:
+        sts.precis(the_model)
+
+    return the_model
+
+
+# Build all of the models and plot for comparison
+interactions = ['A', 'P', 'A + P', 'F*A', 'F*P', 'F*A + F*P']
+imodels = {k: make_interaction_model(k) for k in interactions}
+
+models = [mGF] + list(imodels.values())
+mnames = ['F'] + interactions
+
+# Reset the model after plotting
+pm.set_data(dict(F=df['femininity']), model=mGF.model)
+
+ct = sts.coef_table(models, mnames, params=['β'])
+cmp = sts.compare(models, mnames)
+
+sts.plot_coef_table(ct, fignum=2)
+sts.plot_compare(cmp['ct'], fignum=3)
+
+# Best model: D ~ F + A + F*A
+
+# TODO plot counterfactuals
+
+# ----------------------------------------------------------------------------- 
+#         12H4. Compare `damage_norm` and `log(damage_norm)`
+# -----------------------------------------------------------------------------
 
 # =============================================================================
 # =============================================================================
