@@ -163,10 +163,10 @@ print('----------Point Estimates----------')
 p_map = p_grid[skewed_posterior.argmax()]  # R code 3.14
 print(f"MAP estimate of posterior: {p_map:{fstr}}")
 
-# SLOW!!!
-# kde = sts.density(skewed_samples, adjust=0.01).pdf(p_grid)
-# p_map_kde = p_grid[kde.argmax()]
-# print(f"MAP estimate of   samples: {p_map_kde:{fstr}}")
+# NB: no longer slow
+kde = sts.density(skewed_samples, adjust=0.01).pdf(p_grid)
+p_map_kde = p_grid[kde.argmax()]
+print(f"MAP estimate of   samples: {p_map_kde:{fstr}}")
 
 # R code 3.15 and 3.16
 print(f"Mean:   {np.mean(skewed_samples):{fstr}}")

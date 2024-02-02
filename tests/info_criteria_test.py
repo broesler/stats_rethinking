@@ -158,12 +158,12 @@ res = pd.Series({('deviance', 'train'): -2 * np.sum(lppd_train),
 
 # Compile Results
 wx = sts.WAIC(loglik=loglik)['y']
-res[('WAIC', 'test')] = wx['waic']
-res[('WAIC', 'err')] = np.abs(wx['waic'] - res[('deviance', 'test')])
+res[('WAIC', 'test')] = wx['WAIC']
+res[('WAIC', 'err')] = np.abs(wx['WAIC'] - res[('deviance', 'test')])
 
 lx = sts.LOOIS(idata=idata)
-res[('LOOIC', 'test')] = lx['PSIS']
-res[('LOOIC', 'err')] = np.abs(lx['PSIS'] - res[('deviance', 'test')])
+res[('LOOIC', 'test')] = lx['y']['PSIS']
+res[('LOOIC', 'err')] = np.abs(lx['y']['PSIS'] - res[('deviance', 'test')])
 
 # cx = sts.LOOCV(
 #     model=q,

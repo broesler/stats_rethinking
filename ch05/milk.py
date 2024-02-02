@@ -69,9 +69,8 @@ with pm.Model() as m5_5_draft:
 Nl = 50
 x_s = np.r_[-2, 2]
 
-with m5_5_draft:
-    pm.set_data({'ind': x_s})
-    prior5_5_draft = pm.sample_prior_predictive(Nl).prior.mean('chain')
+quapNK.model.set_data('ind', x_s)
+prior5_5_draft = quapNK.sample_prior(Nl)
 
 # A better prior (R code 5.25)
 with pm.Model() as m5_5:
@@ -84,9 +83,10 @@ with pm.Model() as m5_5:
     K = pm.Normal('K', μ, σ, observed=obs, shape=ind.shape)
     # Compute the posterior
     quapNK = sts.quap()
-    # Compute the prior on a different input
-    pm.set_data({'ind': x_s})
-    prior5_5 = pm.sample_prior_predictive(Nl).prior.mean('chain')
+
+# Compute the prior on a different input
+quapNK.model.set_data('ind', x_s)
+prior5_5 = quapNK.sample_prior(Nl)
 
 # Figure 5.7 (R code 5.24)
 fig = plt.figure(1, clear=True, constrained_layout=True)

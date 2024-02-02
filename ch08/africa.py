@@ -121,9 +121,8 @@ m8_1_weak = gdp_model(data=dA1)
 # Plot the prior predictive (R code 8.3)
 N_lines = 50
 rs = np.r_[-0.1, 1.1]
-with m8_1_weak.model:
-    pm.set_data({'ind': rs})
-    idata_w = pm.sample_prior_predictive(N_lines)
+m8_1_weak.model.set_data('ind', rs)
+prior_w = m8_1_weak.sample_prior(N_lines)
 
 # Figure 8.3
 fig = plt.figure(1, clear=True, constrained_layout=True)
@@ -135,7 +134,7 @@ ax = fig.add_subplot(gs[0])
 ax.axhline(df['log_GDP_std'].min(), c='k', ls='--', lw=1)
 ax.axhline(df['log_GDP_std'].max(), c='k', ls='--', lw=1)
 
-ax.plot(rs, idata_w.prior['μ'].mean('chain').T, c='k', alpha=0.3)
+ax.plot(rs, prior_w['μ'].T, c='k', alpha=0.3)
 
 ax.set(title=(r'$\alpha \sim \mathcal{N}(1, 1)$'
               '\n'
@@ -146,21 +145,20 @@ ax.set(title=(r'$\alpha \sim \mathcal{N}(1, 1)$'
        ylim=(0.5, 1.5))
 
 # Print proportion of slopes > 0.6 (maximum reasonable) (R code 8.4)
-props = np.sum(np.abs(idata_w.prior['β']) > 0.6) / idata_w.prior['β'].size
+props = np.sum(np.abs(prior_w['β']) > 0.6) / prior_w['β'].size
 print(f"Slopes > 0.6: {props:.2f}")
 
 # Plot better priors (R code 8.5)
 m8_1 = gdp_model(data=dA1, α_std=0.1, β_std=0.3)
-with m8_1.model:
-    pm.set_data({'ind': rs})
-    idata = pm.sample_prior_predictive(N_lines)
+m8_1.model.set_data('ind', rs)
+prior = m8_1.sample_prior(N_lines)
 
 ax = fig.add_subplot(gs[1], sharex=ax, sharey=ax)
 
 ax.axhline(df['log_GDP_std'].min(), c='k', ls='--', lw=1)
 ax.axhline(df['log_GDP_std'].max(), c='k', ls='--', lw=1)
 
-ax.plot(rs, idata.prior['μ'].mean('chain').T, c='k', alpha=0.3)
+ax.plot(rs, prior['μ'].T, c='k', alpha=0.3)
 
 ax.set(title=(r'$\alpha \sim \mathcal{N}(1, 0.1)$'
               '\n'

@@ -79,7 +79,7 @@ with first_model:
     prior_samp = pm.sample_prior_predictive(N)
 
 # (R code 4.39)
-ax0.plot(weight, prior_samp.prior['mu'].mean('chain').T, 'k', alpha=0.2)
+ax0.plot(weight, prior_samp.prior['mu'].squeeze('chain').T, 'k', alpha=0.2)
 
 ax0.set(title=r"""A poor prior
 $\beta \sim \mathcal{N}(0, 10)$""",
@@ -110,7 +110,7 @@ the_model = define_linear_model(x=weight, y=adults['height'])
 with the_model:
     prior_samp = pm.sample_prior_predictive(N)
 
-ax1.plot(weight, prior_samp.prior['mu'].mean('chain').T, 'k', alpha=0.2)
+ax1.plot(weight, prior_samp.prior['mu'].squeeze('chain').T, 'k', alpha=0.2)
 
 ax1.set(title=r"""A better prior
 $\log \beta \sim \mathcal{N}(0, 1)$""")

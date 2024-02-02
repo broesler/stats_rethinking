@@ -45,7 +45,7 @@ sts.precis(pd.DataFrame(sim_p, columns=['sim_p']))
 
 # The model (R code 6.16)
 with pm.Model():
-    α = pm.Lognormal('α', 0, 0.25)
+    α = pm.LogNormal('α', 0, 0.25)
     p = pm.Deterministic('p', α)
     μ = pm.Deterministic('μ', p * df['h0'])
     σ = pm.Exponential('σ', 1)
@@ -57,7 +57,7 @@ sts.precis(m6_6)
 
 # Now model proportion of growth as a function of the predictors (R code 6.17)
 with pm.Model():
-    α = pm.Lognormal('α', 0, 0.2)
+    α = pm.LogNormal('α', 0, 0.2)
     βt = pm.Normal('βt', 0, 0.5)
     βf = pm.Normal('βf', 0, 0.5)
     p = pm.Deterministic('p', α + βt * df['treatment'] + βf * df['fungus'])
@@ -76,7 +76,7 @@ sts.precis(m6_7)
 
 # Remove fungus from the model (R code 6.18)
 with pm.Model():
-    α = pm.Lognormal('α', 0, 0.2)
+    α = pm.LogNormal('α', 0, 0.2)
     βt = pm.Normal('βt', 0, 0.5)
     p = pm.Deterministic('p', α + βt * df['treatment'])
     μ = pm.Deterministic('μ', p * df['h0'])

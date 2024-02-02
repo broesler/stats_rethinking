@@ -32,7 +32,7 @@ from pytensor.graph.basic import ancestors
 #     RandomStateSharedVariable,
 # )
 from pytensor.tensor.sharedvar import TensorSharedVariable  # , SharedVariable
-from pytensor.tensor.var import TensorConstant, TensorVariable
+from pytensor.tensor.variable import TensorConstant, TensorVariable
 
 from scipy import stats, linalg
 from scipy.interpolate import BSpline
@@ -135,6 +135,10 @@ def percentiles(data, q=0.89, **kwargs):
     quantile
     """
     a = (1 - (q)) / 2
+    if 'axis' in kwargs and 'dim' in kwargs:
+        raise ValueError('Only one of `axis` or `dim` may be given!')
+    if 'dim' in kwargs:
+        kwargs['axis'] = data.get_axis_num(kwargs.pop('dim'))
     quantiles = quantile(data, (a, 1-a), **kwargs)
     return quantiles
 
@@ -254,7 +258,7 @@ def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
     return p_grid, posterior, prior
 
 
-def density(data, adjust=1.0, **kwargs):
+def density(data, adjust=0.5, **kwargs):
     """Return the kernel density estimate of the data, consistent with
     R function of the same name.
 
@@ -285,6 +289,15 @@ def density(data, adjust=1.0, **kwargs):
     return kde
 
 
+def plot_density(data, ax=None, **kwargs):
+    if ax is None:
+        ax = plt.gca()
+    x = np.sort(data.stack(sample=('chain', 'draw')))
+    dens = density(x).pdf(x)
+    ax.plot(x, dens, **kwargs)
+    return ax
+
+
 # TODO expand documentation with examples
 def expand_grid(**kwargs):
     """Return a DataFrame of points, where the columns are kwargs.
@@ -312,8 +325,10 @@ def expand_grid(**kwargs):
 #       with many different datatypes.
 #       See: <https://github.com/rmcelreath/rethinking/blob/master/R/precis.r>
 #       pythonic way would be to make objects that contain a precis method.
+#   * other option: split these blocks into individual `_precis_dataset()`
+#     functions and the main is just a dispatcher.
 #
-def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
+def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
 
@@ -321,8 +336,8 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     ----------
     quap : array-like, DataFrame, or dict
         The model.
-    p : float in [0, 1]
-        The percentile of which to compute the interval.
+    q : float in [0, 1]
+        The quantile of which to compute the interval.
     digits : int
         Number of digits in the printed output if `verbose=True`.
     verbose : bool
@@ -334,13 +349,20 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
         A DataFrame with a row for each variable, and columns for mean,
         standard deviation, and low/high percentiles of the variable.
     """
-    if not isinstance(obj, (PostModel, xr.Dataset, pd.DataFrame, np.ndarray)):
+    if not isinstance(
+            obj,
+            (PostModel, xr.DataArray, xr.Dataset, pd.DataFrame, np.ndarray)
+            ):
         raise TypeError(f"`obj` of type '{type(obj)}' is unsupported!")
 
-    a = (1-p)/2
-    pp = 100*np.array([a, 1-a])  # percentages for printing
+    a = (1-q)/2
+    pp = 100*np.array([a, 1-a])  # percentiles for printing
 
-    if isinstance(obj, PostModel):
+    if isinstance(obj, xr.DataArray):
+        # TODO get name from 'p_dim_0', i.e.
+        obj = obj.to_dataset(name=obj.name or 'var')
+
+    if isinstance(obj, Quap):
         title = None
         # Compute density intervals
         coef = dataset_to_series(obj.coef)
@@ -349,30 +371,26 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
         hi = coef + z * obj.std
         df = pd.concat([coef, obj.std, lo, hi], axis=1)
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
-        if isinstance(obj, Ulam):
-            # Get number of effective observations
-            tf = az.summary(obj.samples)
-            # Fix automatic index names to match df
-            tf.index = tf.index.str.replace('[', '__').str.replace(']', '')
-            df['ess'] = tf['ess_bulk'].astype(int)
-            df['R_hat'] = tf['r_hat']
-        # if hist:
-        #     df['histogram'] = sparklines_from_norm(df['mean'], df['std'])
+
+    if isinstance(obj, Ulam):
+        obj = obj.samples
 
     # Dataset of data points (i.e. posterior distribution)
     if isinstance(obj, xr.Dataset):
         if 'draw' not in obj.dims:
             raise TypeError("Expected dimensions ['draw'] in `obj`")
         if 'chain' in obj.dims:
-            obj = obj.mean('chain')
-        title = (f"'DataFrame': {obj.sizes['draw']:d} obs."
+            sample_dims = ('chain', 'draw')
+            N_samples = obj.sizes['chain'] * obj.sizes['draw']
+        else:
+            sample_dims = 'draw'
+            N_samples = obj.sizes['draw']
+        title = (f"'DataFrame': {N_samples} obs."
                  f" of {len(obj.data_vars)} variables:")
-        mean = dataset_to_series(obj.mean('draw'))
-        std = dataset_to_series(obj.std('draw'))
-        z = stats.norm.ppf(1 - a)
-        lo = mean - z * std
-        hi = mean + z * std
-        df = pd.concat([mean, std, lo, hi], axis=1)
+        mean = dataset_to_series(obj.mean(sample_dims))
+        std = dataset_to_series(obj.std(sample_dims))
+        quant = dataset_to_frame(obj.quantile([a, 1-a], dim=sample_dims)).T
+        df = pd.concat([mean, std, quant], axis=1)
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
         if hist:
             df['histogram'] = sparklines_from_dataframe(dataset_to_frame(obj))
@@ -412,6 +430,20 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
             print(df)
 
     return df
+
+
+def plot_precis(obj, mname='model', q=0.89, fignum=None, labels=None):
+    """Plot the `precis` output of the object like a `coef_table`."""
+    ct = precis(obj, q=q, verbose=False, hist=False)
+    if labels is not None:
+        ct.index = labels
+    # Convert to "coef table" for plotting. Expects:
+    # -- index = ['model', 'param']
+    # -- columns = ['coef', 'std']
+    ct = ct.rename({'mean': 'coef'}, axis='columns')
+    ct.index.name = 'param'
+    ct = pd.concat({mname: ct}, names=['model'])
+    return plot_coef_table(ct, fignum=fignum)
 
 
 def sparklines_from_norm(means, stds, width=12):
@@ -493,7 +525,7 @@ class PostModel(ABC):
     _descrip = ""
 
     def __init__(self, *, coef=None, cov=None, data=None, map_est=None,
-                 loglik=None, model=None, start=None):
+                 loglik=None, model=None, start=None, **kwargs):
         self.coef = coef
         self.cov = cov
         self.data = data
@@ -501,6 +533,8 @@ class PostModel(ABC):
         self.loglik = loglik
         self.model = model
         self.start = start
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
     @property
     def std(self):
@@ -531,7 +565,12 @@ class PostModel(ABC):
         Analagous to `rethinking::extract.prior`.
         """
         idata = pm.sample_prior_predictive(samples=N, model=self.model)
-        return idata.prior.stack(sample=('chain', 'draw'))
+        return (
+            idata
+            .prior
+            .stack(sample=('chain', 'draw'))
+            .transpose('sample', ...)
+        )
 
     def deviance(self):
         """Return the deviance of the model."""
@@ -541,20 +580,11 @@ class PostModel(ABC):
         """Return the Akaike information criteria of the model."""
         return self.deviance() + 2*sum(self.coef.sizes.values())
 
-    # TODO
-    # * rename the model variable itself
-    #   now:
-    #   >>> model.named_vars
-    #   === {'x': x, 'y': y, 'z': z}
-    #   >>> model.named_vars['x'].name = 'new_name'
-    #   >>> model.named_vars
-    #   === {'x': new_name, 'y': y, 'z': z}
-    #   Want the key 'x' to be changed to 'new_name' as well.
-    # * rename any vector parameters 'b__0', 'b__1', etc.
+    # TODO rename any vector parameters 'b[0]', 'b[1]', etc.
     def rename(self, mapper):
         """Rename a parameter.
 
-        .. note:: Does NOT work on vector parameters, e.g., 'b__0'.
+        .. note:: Does NOT work on vector parameters, e.g., 'b[0]'.
         """
         self.coef = self.coef.rename(mapper)
         self.cov = self.cov.rename(index=mapper, columns=mapper)
@@ -562,27 +592,26 @@ class PostModel(ABC):
             self.model.named_vars[k].name = v
         return self
 
-    # TODO allow subclasses to provide "description" line in `out`?
     def __str__(self):
         with pd.option_context('display.float_format', '{:.4f}'.format):
             try:
                 # remove "dtype: object" line from the Series repr
-                meanstr = repr(self.coef.to_pandas()).rsplit('\n', 1)[0]
+                meanstr = repr(dataset_to_series(self.coef)).rsplit('\n', 1)[0]
             except ValueError:
                 meanstr = repr(self.coef)
 
-        # FIXME indentation. inspect.cleandoc() fails because the
-        # model.str_repr() is not always aligned left.
-        out = f"""{self._descrip}
+            loglikstr = repr(self.loglik).rsplit('\n', 1)[0]
 
-Formula:
-{self.model.str_repr()}
+        # FIXME loglik format breaks if multiple output variables.
+        # See ch11/cats.py.
+        out = (
+            f"{self._descrip}\n\n"
+            "Formula:\n"
+            f"{self.model.str_repr()}\n\n"
+            f"Posterior Means:\n{meanstr}\n\n"
+            f"Log-likelihood:\n{loglikstr}\n"
+        )
 
-Posterior Means:
-{meanstr}
-
-Log-likelihood: {self.loglik:.2f}
-"""
         return out
 
     def __repr__(self):
@@ -601,8 +630,10 @@ class Quap(PostModel):
         mean = flatten_dataset(self.coef).values
         posterior = stats.multivariate_normal(mean=mean, cov=self.cov)
         df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
-        return frame_to_dataset(df, model=self.model).mean('chain')
+        return frame_to_dataset(df, model=self.model).squeeze('chain')
 
+    # Should we store samples the first time? That behavior would be consistent
+    # with Ulam, which only samples the posterior at creation time.
     def get_samples(self, N=1000):
         return self.sample(N)
 
@@ -625,7 +656,7 @@ class Ulam(PostModel):
     # >>> idata = pm.sample(..., discard_tuned_samples=False)
     # >>> all_post = xr.concat([idata.warmup_posterior, idata.posterior],
     #                          dim='concat_dim')
-    # >>> az.plot_trace(all_post) 
+    # >>> az.plot_trace(all_post)
     # or something to that effect.
     #
     def plot_trace(self, title=None):
@@ -812,8 +843,9 @@ def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs)
             warnings.warn("`var_names` and `vars` set, ignoring `var_names`.")
         var_names = [x.name for x in vars]
 
-    # Get the posterior samples
+    # Get the posterior samples, including Deterministics
     post = idata.posterior[list(var_names)]
+    deterministics = idata.posterior[[x.name for x in model.deterministics]]
 
     # Coefficient values are just the mean of the samples
     coef = post.mean(sample_dims)
@@ -826,13 +858,17 @@ def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs)
     ).cov()
 
     # Get the minus log likelihood of the data
-    loglik = float(
+    ds = (
         -idata
         .log_likelihood
         .mean(sample_dims)
         .sum()
-        .to_dataarray()  # convert to be able to extract singleton value
+        .to_pandas()  # convert to be able to extract singleton value
     )
+    loglik = float(ds.iloc[0]) if len(ds) == 1 else ds
+
+    # TODO include full log likelihood array so that calls to sts.loglikelihood
+    # can just return the already computed data instead of having to recompute.
 
     return Ulam(
         coef=coef,
@@ -842,6 +878,7 @@ def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs)
         model=deepcopy(model),
         start=model.initial_point() if start is None else start,
         samples=post,
+        deterministics=deterministics,
     )
 
 
@@ -895,9 +932,11 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 
     Returns
     -------
-    samples : (M, N) ndarray
+    samples : (M, N) xarray.DataArray
         An array of values of the linear model evaluated at each of M `eval_at`
-        points and `N` parameter samples.
+        points and `N` parameter samples. The DataArray will have dimension
+        'draw' for the samples, and dimensions '{var.name}_dim_{i}' for each
+        dimension `i` of parameter `var`.
     """
     if out.name not in fit.model:
         raise ValueError(f"Variable '{out}' does not exist in the model!")
@@ -906,7 +945,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         params = inputvars(out)
 
     if dist is None:
-        dist = fit.sample(N)  # take the posterior
+        dist = fit.get_samples(N)  # take the posterior
 
     if eval_at is not None:
         pm.set_data(eval_at, model=fit.model)
@@ -919,30 +958,48 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         on_unused_input='ignore',
     )
 
-    # Manual loop since params are 0-D variables in the model.
+    if 'chain' not in dist.dims:
+        try:
+            dist = dist.expand_dims('chain')
+        except ValueError:
+            try:
+                dist = dist.unstack('sample')
+            except ValueError:
+                raise ValueError("'dist' must have dimensions (1) 'draw', "
+                                 "(2) ('chain', 'draw'), or "
+                                 "(3) 'sample' == ('chain', 'draw').")
+
+    # Manual loop since out_func cannot be vectorized.
     out_samp = np.fromiter(
         (
-            out_func({v.name: dist[v.name].isel(draw=i) for v in params})
-            for i in range(dist.sizes['draw'])
+            out_func({
+                v.name: dist[v.name].sel(chain=i, draw=j)
+                for v in params
+            })
+            for i in dist.coords['chain']
+            for j in dist.coords['draw']
         ),
         dtype=np.dtype((float, out.shape.eval())),
-        count=dist.sizes['draw'],
-    ).T  # (out.shape, draw)
+    )  # (draw, out.shape)
 
-    # Return a DataArray for named dimensions.
-    return xr.DataArray(
-        out_samp,
-        coords={
-            f"{out.name}_dim_0": range(out_samp.shape[0]),
-            'draw': range(out_samp.shape[1])
-        }
-    )
+    # Build the coordinates in order of the out_samp dimensions
+    coords = dict(draw=range(out_samp.shape[0]))
+    coords.update({
+        f"{out.name}_dim_{i}": range(x)
+        for i, x in enumerate(out_samp.shape[1:])
+    })
+
+    return xr.DataArray(out_samp, coords=coords)
 
 
 # TODO
 # * options for `unstd` in {'x', 'y', 'both'}
 # * add "ci" = {'hpdi', 'pi', None} option
 # * add option for observed variable and plots its PI too.
+#   - see ch11/11H4.py
+# * add option for discrete variables, or another function?
+#   - see ch11/11H3.py
+# * split into 2 functions for (fit_x, fit_y) and (quap, mean_var)?
 def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
            x=None, y=None, data=None,
            eval_at=None, unstd=False, q=0.89, ax=None,
@@ -1046,10 +1103,10 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
         xe = fit_x
         mu_samp = fit_y
 
-    # TODO expect xarray with dimension 'draw'
     # Compute mean and error
-    mu_mean = mu_samp.mean(axis=1)
-    mu_pi = percentiles(mu_samp, q=q, axis=1)  # 0.89 default
+    sample_dims = ('chain', 'draw') if 'chain' in mu_samp.dims else 'draw'
+    mu_mean = mu_samp.mean(sample_dims)
+    mu_pi = percentiles(mu_samp, q=q, axis=mu_samp.get_axis_num(sample_dims))
 
     if unstd:
         xe = unstandardize(xe, data[x])
@@ -1067,7 +1124,8 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     ax.plot(xe, mu_mean, label=label,
             c=line_kws.pop('color', line_kws.pop('c', 'C0')), **line_kws)
     ax.fill_between(xe, mu_pi[0], mu_pi[1],
-                    facecolor=fill_kws.pop('facecolor', 'C0'),
+                    facecolor=fill_kws.pop('facecolor',
+                                           fill_kws.pop('fc', 'C0')),
                     alpha=fill_kws.pop('alpha', 0.3),
                     interpolate=True,
                     label=rf"{100*q:g}% Percentile Interval",
@@ -1075,6 +1133,118 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     ax.set(xlabel=x, ylabel=y)
     return ax
 
+
+def postcheck(fit, mean_name, agg_name=None,
+              major_group=None, minor_group=None,
+              N=1000, q=0.89, fignum=None):
+    """Plot the discrete observed data and the posterior predictions.
+
+    Parameters
+    ----------
+    fit : PostModel
+        The model to which the data is fitted. The model must have a ``data``
+        attribute containing a `dict`-like structure.
+    mean_name : str, optional
+        THe name of the variable which represents the mean of the outcome.
+    agg_name : str, optional
+        The name of the variable over which the data is aggregated.
+    major_group, minor_group : str, optional
+        Names of columns in the ``fit.data`` structure by which to group the
+        data. Either ``major_group`` or both can be provided, but not
+        ``minor_group`` alone.
+    N : int, optional
+        The number of samples to take of the posterior.
+    q : float in [0, 1], optional
+        The quantile of which to compute the interval.
+    fignum : int, optional
+        The Figure number in which to plot.
+
+    Returns
+    -------
+    ax : plt.Axes
+        The axes in which the plot was drawn.
+    """
+    if minor_group and major_group is None:
+        raise ValueError('Cannot provide `minor_group` without `major_group`.')
+
+    df = fit.data.copy()  # avoid changing structure
+
+    y = fit.model.observed_RVs[0].name
+    post = fit.get_samples(N)
+
+    yv = df[y]
+    xv = np.arange(len(yv))
+
+    pred = lmeval(
+        fit,
+        out=fit.model[mean_name],
+        dist=post,
+    )
+
+    sims = lmeval(
+        fit,
+        out=fit.model[y],
+        params=fit.model.free_RVs,  # ignore deterministics
+        dist=post,
+    )
+
+    μ = pred.mean('draw')
+
+    a = (1 - q) / 2
+    μ_PI = pred.quantile([a, 1-a], dim='draw')
+    y_PI = sims.quantile([a, 1-a], dim='draw')
+
+    if agg_name is not None:
+        yv /= df[agg_name]
+        y_PI = y_PI.values / df[agg_name].values
+
+    fig = plt.figure(fignum, clear=True)
+    ax = fig.add_subplot()
+
+    # Plot the mean and simulated PIs
+    ax.errorbar(xv, μ, yerr=np.abs(μ_PI - μ), c='k',
+                ls='none', marker='o', mfc='none', mec='k', label='pred')
+    ax.scatter(np.tile(xv, (2, 1)), y_PI, marker='+', c='k', label='y PI')
+    # Plot the data
+    ax.scatter(xv, yv, c='C0', label='data', zorder=10)
+
+    ax.legend()
+    ax.set(xlabel='case',
+           ylabel=y)
+
+    ax.spines[['top', 'right']].set_visible(False)
+
+    # Connect points in each major group
+    # ASSUME 2 points per category.
+    # TODO update for arbitrary number of members in each group.
+    if major_group:
+        N_maj = len(df[major_group].cat.categories)
+        x = 2*np.arange(N_maj)
+        xp = np.r_[[x, x+1]]
+        yp = np.r_[[df.loc[x, y], df.loc[x+1, y]]]
+        ax.plot(xp, yp, 'C0')
+
+        # Label the cases
+        xv = np.arange(len(df))
+        # TODO xind is the location of each group center
+        xind = xv[:-1:2]
+
+        ax.set_xticks(xind + 0.5)
+        ax.set_xticklabels(df.loc[xind, major_group])
+
+        if minor_group:
+            ax.set_xticks(xv, minor=True)
+            ax.set_xticklabels(df[minor_group], minor=True)
+            ax.tick_params(axis='x', which='minor', pad=18)
+            ax.tick_params(axis='x', which='major',  bottom=False)
+            ax.tick_params(axis='x', which='minor',  bottom=True)
+
+        # Lines between each department for clarity
+        # TODO compute right edge of each group
+        for x in xind + 1.5:
+            ax.axvline(x, lw=1, c='k')
+
+    return ax
 
 # -----------------------------------------------------------------------------
 #         Graph Utilities
@@ -1278,8 +1448,11 @@ def bspline_basis(t, x=None, k=3, padded_knots=False):
 # -----------------------------------------------------------------------------
 #         Model comparison
 # -----------------------------------------------------------------------------
-def coef_table(models, mnames=None, params=None, std=True):
+# TODO CoefTable object? include plot method.
+def coef_table(models, mnames=None, params=None, hist=False):
     """Create a summary table of coefficients in each model.
+
+    .. note:: ``coef_table`` is just a concatenation of ``precis`` outputs.
 
     Parameters
     ----------
@@ -1289,59 +1462,40 @@ def coef_table(models, mnames=None, params=None, std=True):
         Names of the models.
     params : list of str, optional
         Names of specific parameters to return.
-    std : bool, optional
-        If True, also return a table of standard deviations.
+    hist : bool, optional
+        If True, include sparkline histograms in the table.
 
     Returns
     -------
-    ct, cs : pd.DataFrame
-        DataFrames of the coefficients and their standard deviations.
+    ct : pd.DataFrame
+        DataFrame with coefficients and their standard deviations as columns.
     """
-    coefs = [dataset_to_series(m.coef) for m in models]
-    stds = [m.std for m in models]
-
-    def transform_ct(ct, mnames=None, params=None, value_name='coef'):
-        """Make coefficient table tidy for plotting"""
-        if mnames is not None:
-            ct.columns = mnames
-        ct.index.name = 'param'
-        ct.columns.name = 'model'
-        # Use params to filter by indexed variables 'a__0', 'a__1', etc.
-        # should result from passing params=['a']
-        if params is not None:
-            try:
-                subtables = [ct.loc[params]]  # track each filtered table
-            except KeyError:
-                subtables = []
-            for p in params:
-                subtables.append(ct.filter(regex=f"^{p}__[0-9]+", axis=0))
-            ct = pd.concat(subtables).drop_duplicates()
-        ct = (ct.T  # organize by parameter, then model
-                .melt(ignore_index=False, value_name=value_name)
-                .set_index('param', append=True)
-                .reorder_levels(['param', 'model'])
-                # .sort_index()  # do not sort to keep order of input
-              )
-        return ct
-
-    ct = transform_ct(pd.concat(coefs, axis=1), mnames, params)
-    if not std:
-        return ct
-
-    cs = transform_ct(pd.concat(stds, axis=1), mnames, params,
-                      value_name='std')
-    return pd.concat([ct, cs], axis='columns')
+    df = pd.concat(
+        [precis(m, verbose=False, hist=hist) for m in models],
+        keys=mnames or [f"model_{i}" for i, _ in enumerate(models)],
+        names=['model', 'param']
+    )
+    # plot_coef_table expects ['coef', 'std', 'lo%', 'hi%']
+    df = (df.rename({'mean': 'coef'}, axis='columns')
+            .reorder_levels(['param', 'model'])
+          )
+    if params is not None:
+        # Silly workaround since df.filter does not work on MultiIndex.
+        df = df.reset_index(level='model')
+        for p in params:
+            df = df.filter(regex=rf"^{p}([\d+])?", axis='rows')
+        df = df.set_index('model', append=True)
+    return df.sort_index()
 
 
-def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
+# TODO transpose=True flag to swap x, y axes
+def plot_coef_table(ct, by_model=False, fignum=None):
     """Plot the table of coefficients from `sts.coef_table`.
 
     Parameters
     ----------
     ct : :obj:`CoefTable`
         Coefficient table output from `coef_table`.
-    q : float in [0, 1], optional
-        The probability interval to plot.
     by_model : bool, optional
         If True, order the coefficients by model on the y-axis, with colors to
         denote parameters; otherwise, parameters will be the y-axis, with
@@ -1378,15 +1532,32 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     # Find the x,y coordinates for each point
     xc, yc, colors = get_coords(ax)
 
-    # Manually add the errorbars since we have std values already
-    z = stats.norm.ppf(1 - (1 - q)/2)
-    errs = 2 * ct['std'] * z  # ± err -> 2σz
-    errs = errs.dropna()
+    # Get errs straight from coef_table
+    ci = ct.filter(like='%')
+    if not ci.empty:
+        errs = ci.sub(ct['coef'], axis='rows').abs().T  # (2, N) for errorbar
+    else:
+        # Assume we have std and approximate with symmetric errorbars
+        q = 0.89
+        z = stats.norm.ppf(1 - (1 - q)/2)  # ≈ 1.96 for q = 0.95
+        # No need for factor of 2 here, because plt.errorbar plots a bar
+        # from y[i] -> y[i] + errs[i] and y[i] -> y[i] - errs[i].
+        errs = ct['std'] * z  # ±err
+        errs = errs.dropna()
+
     ax.errorbar(xc, yc, fmt=' ', xerr=errs, ecolor=colors)
 
-    # Plot the origin and move the legend outside the plot for clarity
+    # Plot the origin and make horizontal grid-lines
     ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
-    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+
+    # TODO if by_model, need to compute `n_params` instead.
+    # Only give a legend if necessary
+    n_models = ct.index.get_level_values('model').unique().size
+    if n_models == 1:
+        ax.get_legend().remove()
+    else:
+        # Move the legend outside the plot for clarity
+        ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
     return fig, ax
 
@@ -1394,7 +1565,7 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
 # TODO make a CompareTable object?
 #   * Include `sort` as a method.
 #   * Print lower precision by default.
-def compare(models, mnames=None, ic='WAIC', sort=False):
+def compare(models, mnames=None, ic='WAIC', args=None, sort=False):
     """Create a comparison table of models based on information criteria.
 
     Parameters
@@ -1405,6 +1576,11 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
         Names of the models. If None, models will be numbered sequentially in
         order of input.
     ic : str in {'WAIC', 'LOOIC', 'PSIS'}
+        The name of the information criteria to use for comparison.
+    args : dict_like, optional
+        Additional keyword arguments to be passed to the ``ic`` function when
+        making the comparison table. These arguments will *not* be used when
+        computing the pointwise `dSE` matrix.
     sort : bool
         If True, sort the result by the difference in WAIC values.
 
@@ -1435,13 +1611,29 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
         # Model names must be strings for sns.pointplot to work properly!
         mnames = [str(x) for x in list(mnames)]
 
+    try:
+        Nobs = len(models[0].data)  # ASSUME DataFrame
+        if any([len(m.data) != Nobs for m in models]):
+            for name, m in zip(mnames, models):
+                print(f"{name}: {len(m.data)}")
+            warnings.warn(
+                'Different numbers of observations found for at least two'
+                ' models. \nModel comparison is only valid for models fit to'
+                ' exactly the same observations.'
+            )
+    except TypeError:
+        pass
+
     func = WAIC if ic == 'WAIC' else LOOIS
     diff_ic = f"d{ic}"
+
+    if args is None:
+        args = dict()
 
     # Create the dataframe of information criteria, with (model, var) as index
     df = (
         pd.concat(
-            [pd.DataFrame(func(m)) for m in models],
+            [pd.DataFrame(func(m, **args)) for m in models],
             keys=mnames,
             names=['model', 'var'],
             axis='columns'
@@ -1588,7 +1780,50 @@ def get_coords(ax):
 # -----------------------------------------------------------------------------
 #         Dataset/Frame conversion utilities
 # -----------------------------------------------------------------------------
-logsumexp = _logsumexp
+def logsumexp(a, dim=None, **kwargs):
+    """Compute the log of the sum of the exponentials of input elements.
+
+    Parameters
+    ----------
+    a : array_like
+        Input array.
+    dim : str, Iterable of Hashable, "..." or None, optional
+        Name of dimension[s] along which to apply ``logsumexp``. For, *e.g.*,
+        ``dim="x"`` or ``dim=["x", "y"]``. If "..." or None, will reduce over
+        all dimensions.
+
+        Only one of ``dim`` or ``axis`` may be given. If ``dim`` is given,
+        ``axis`` will be ignored.
+    **kwargs : Any
+        Additional keyword arguments passed on to ``scipy.special.logsumexp``.
+
+    Returns
+    -------
+    res : ndarray
+        The result, ``np.log(np.sum(np.exp(a)))`` calculated in a numerically
+        more stable way. If `b` is given then ``np.log(np.sum(b*np.exp(a)))``
+        is returned.
+    sgn : ndarray
+        If return_sign is True, this will be an array of floating-point numbers
+        matching `res` and !, 0, or -1 depending on the sign of the result. If
+        False, only one result is returned.
+
+    See Also
+    --------
+    scipy.special.logsumexp
+    """
+    axis = kwargs.pop('axis', None)
+
+    if dim is not None:
+        if axis is not None:
+            warnings.warn('Both `dim` and `axis` given, ignoring `axis`.')
+        # Test if a is an xr.DataArray
+        try:
+            axis = a.get_axis_num(dim)
+        except AttributeError:
+            pass
+
+    return _logsumexp(a, axis=axis, **kwargs)
 
 
 def numpy_to_data_array(values, var_name=None):
@@ -1613,16 +1848,15 @@ def flatten_dataset(ds):
     return ds.to_stacked_array('data', sample_dims=[], name='data')
 
 
-# TODO change to use [0], [1], etc. instead of __0, __1? This format would be
-# consistent with both r::rethinking and `arviz.summary(idata)` presentation.
 def cnames_from_dataset(ds):
     """Return a list of variable names from the flattened Dataset."""
     da = flatten_dataset(ds)
-    # Flatten vector names into singletons 'b__0', 'b__1', ..., 'b__n'
+    # Flatten vector names into singletons 'b[0]', 'b[1]', ..., 'b[n]'
     # TODO case of 2D, etc. variables
     df = pd.DataFrame(da.coords['variable'].values)
     g = df.groupby(0)
-    df.loc[g[0].transform('size').gt(1), 0] += '__' + g.cumcount().astype(str)
+    str_counts = g.cumcount().astype(str)
+    df.loc[g[0].transform('size').gt(1), 0] += '[' + str_counts + ']'
     return list(df[0].values)
 
 
@@ -1633,14 +1867,14 @@ def dataset_to_series(ds):
 
 def frame_to_dataset(df, model=None):
     """Convert DataFrame to ArviZ Dataset by combinining columns with
-    multi-dimensional parameters, e.g. β__0, β__1, ..., β__N into β (N,).
+    multi-dimensional parameters, e.g. β[0], β[1], ..., β[N] into β (N,).
     """
     model = pm.modelcontext(model)
-    var_names = df.columns.str.replace('__[0-9]+', '', regex=True).unique()
+    var_names = df.columns.str.replace(r'\[\d+\]', '', regex=True).unique()
     the_dict = dict()
     for v in var_names:
         # Add 'chain' dimension to match expected shape
-        cols = df.filter(regex=fr"^{v}(__\d+)?$")
+        cols = df.filter(regex=fr"^{v}(\[\d+\])?$")
         the_dict[v] = np.expand_dims(cols.values, 0)
     ds = az.convert_to_dataset(the_dict)
     # Remove dims for scalar variables with shape ()
@@ -1654,7 +1888,7 @@ def frame_to_dataset(df, model=None):
 # TODO Filter variable names? include/exclude?
 def dataset_to_frame(ds):
     """Convert ArviZ Dataset to DataFrame by separating columns with
-    multi-dimensional parameters, e.g. β (N,) into β__0, β__1, ..., β__N.
+    multi-dimensional parameters, e.g. β (N,) into β[0], β[1], ..., β[N].
 
     .. note::
         This function assumes that the first dimension of a multidimensional
@@ -1671,6 +1905,7 @@ def dataset_to_frame(ds):
         DataFrame with columns for each variable in the dataset. Vector
         variables will be separated into columns.
     """
+    # FIXME should use a MultiIndex ('chain', 'draw')?
     if 'chain' in ds.dims:
         ds = ds.mean('chain')
 
@@ -1697,11 +1932,10 @@ def dataset_to_frame(ds):
 
 
 def _names_from_vec(vname, ncols):
-    """Create a list of strings ['x__0', 'x__1', ..., 'x__``ncols``'],
+    """Create a list of strings ['x[0]', 'x[1]', ..., 'x[``ncols``]'],
     where 'x' is ``vname``."""
-    # TODO case of 2D, etc. variables
-    fmt = '02d' if ncols > 10 else 'd'
-    return [f"{vname}__{i:{fmt}}" for i in range(ncols)]
+    # TODO case of N-D variables
+    return [f"{vname}[{i:d}]" for i in range(ncols)]
 
 
 # -----------------------------------------------------------------------------
@@ -1748,7 +1982,7 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
         post = model.get_samples(Ns)
 
     if 'chain' not in post.dims:
-        post = post.expand_dims('chain', axis=0)
+        post = post.expand_dims('chain')
 
     if eval_at is not None:
         for k, v in eval_at.items():
@@ -1784,15 +2018,11 @@ def loglikelihood(model, post=None, var_names=None, eval_at=None, Ns=1000):
 
     Returns
     -------
-    result : xarray.Dataset (draw=Ns, var_dim=N)
+    result : xarray.Dataset (chain=M, draw=Ns, var_dim=N)
         Log likelihood for each of the ``var_names``. Each will be an array of
         size (Ns, N), for ``Ns`` samples of the posterior, and `N` data points.
     """
-    return (
-        inference_data(model, post, var_names, eval_at, Ns)
-        .log_likelihood
-        .mean('chain')
-    )
+    return inference_data(model, post, var_names, eval_at, Ns).log_likelihood
 
 
 def deviance(model=None, loglik=None, post=None, var_names=None, eval_at=None,
@@ -1809,7 +2039,6 @@ def deviance(model=None, loglik=None, post=None, var_names=None, eval_at=None,
     return {k: -2 * v.sum() for k, v in the_lppd.items()}
 
 
-# TODO combine identical documentation from lppd, WAIC, LOOIS functions.
 def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
          Ns=1000):
     r"""Compute the log pointwise predictive density for a model.
@@ -1865,13 +2094,17 @@ def lppd(model=None, loglik=None, post=None, var_names=None, eval_at=None,
             Ns=Ns,
         )
 
+    if 'chain' not in loglik.dims:
+        loglik = loglik.expand_dims('chain')
+
     if Ns is None:
-        Ns = loglik.sizes['draw']
+        Ns = loglik.sizes['chain'] * loglik.sizes['draw']
 
     if var_names is None:
         var_names = loglik.keys()
 
-    return {v: logsumexp(loglik[v], axis=0) - np.log(Ns) for v in var_names}
+    return {v: logsumexp(loglik[v], dim=('chain', 'draw')) - np.log(Ns)
+            for v in var_names}
 
 
 def DIC(model, post=None, Ns=1000):
@@ -1900,6 +2133,7 @@ def DIC(model, post=None, Ns=1000):
     ----------
     [1]: Gelman (2020). Bayesian Data Analysis, 3 ed. pp 172--173.
     """
+    # FIXME this will fail for Ulam objects with (chain, draw)
     if post is None:
         post = model.get_samples(Ns)
     f_loglik = model.model.compile_logp()
@@ -1976,9 +2210,9 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
 
     out = dict()
     for v in the_lppd:
-        penalty = loglik[v].var(dim='draw').values
+        penalty = loglik[v].var(dim=('chain', 'draw')).values
         waic_vec = -2 * (the_lppd[v] - penalty)
-        n_cases = loglik[v].shape[1]
+        n_cases = np.prod(loglik[v].shape[2:])  # ASSUMES (chain, draw, ...)
         std_err = (n_cases * np.var(waic_vec))**0.5
 
         if pointwise:
@@ -1993,7 +2227,7 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
 
 
 def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
-          Ns=1000, pointwise=False):
+          Ns=1000, pointwise=False, warn=False):
     """Compute the Pareto-smoothed Importance Sampling Leave-One-Out
     Cross-Validation score of the model.
 
@@ -2016,6 +2250,8 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
     pointwise : bool
         If True, return a vector of length `N` for each output variable, where
         `N` is the number of data points for that variable.
+    warn : bool
+        If True, report any warnings from ``az.loo``.
 
     Returns
     -------
@@ -2040,7 +2276,8 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
     out = dict()
     for v in var_names:
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore', category=UserWarning)
+            if not warn:
+                warnings.simplefilter('ignore', category=UserWarning)
             loo = az.loo(idata, pointwise=pointwise, var_name=v)
 
         elpd = loo.loo_i if pointwise else loo.elpd_loo
@@ -2050,6 +2287,8 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
             penalty=loo.p_loo,  # == loo_list$p_loo
             SE=2*loo.se,        # == loo_list$estimates['looic', 'SE']
         )
+        if pointwise:
+            d['pareto_k'] = loo.pareto_k  # == loo_list$k
         out[v] = pd.DataFrame(d) if pointwise else pd.Series(d)
 
     return out
@@ -2286,7 +2525,7 @@ def sim_train_test(
     # test error would be without having the test data available.
     # Store these values for WAIC and LOOIC:
     idata_train = inference_data(q)
-    loglik_train = idata_train.log_likelihood.mean('chain')
+    loglik_train = idata_train.log_likelihood
 
     lppd_train = lppd(loglik=loglik_train)['y']
 

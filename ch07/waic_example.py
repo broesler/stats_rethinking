@@ -64,17 +64,17 @@ idata = az.convert_to_inference_data(post.expand_dims('chain'))
 idata = pm.compute_log_likelihood(idata, model=q.model, progressbar=False)
 
 # Extract the relevant item
-loglik = idata.log_likelihood.mean('chain')  # Dataset: 'dist' (Ns, N)
+loglik = idata.log_likelihood  # Dataset: 'dist' (Ns, N)
 
-# np.linalg.norm((loglik_m.mean('draw') - loglik.mean('draw'))['dist']) ≈ 0.063
+# np.linalg.norm((loglik_m.mean('draw') - loglik.mean('draw'))['dist']) # ≈ 0.063
 
-# quap.loglik ≈ -loglik.mean(axis=1).sum()?
+# quap.loglik ≈ -loglik.mean(axis='draw').sum()?
 
 # Take the log of the average over each data point (R code 7.22)
-lppd = sts.logsumexp(loglik['dist'], axis=0) - np.log(Ns)  # (Ns, N) -> (N,)
+lppd = sts.logsumexp(loglik['dist'], dim=('chain', 'draw')) - np.log(Ns)  # (Ns, N) -> (N,)
 
 # Penalty term (R code 7.23)
-p_WAIC = loglik['dist'].var(dim='draw')  # (Ns, N) -> (N,)
+p_WAIC = loglik['dist'].var(dim=('chain', 'draw'))  # (Ns, N) -> (N,)
 
 # Combine! (R code 7.24)
 WAIC = -2 * (lppd.sum() - p_WAIC.sum())
@@ -89,22 +89,22 @@ assert np.isclose(WAIC, waic_vec.sum())
 
 # Test WAIC function with log likelihood
 wx = sts.WAIC(loglik=loglik)['dist']
-print(f"{wx['waic'] = :.4f}")
-print(f"{wx['std'] = :.4f}")
+print(f"{wx['WAIC'] = :.4f}")
+print(f"{wx['SE'] = :.4f}")
 
 # Should be exact
-np.testing.assert_allclose(wx['waic'], WAIC)
-np.testing.assert_allclose(wx['std'], std_WAIC)
+np.testing.assert_allclose(wx['WAIC'], WAIC)
+np.testing.assert_allclose(wx['SE'], std_WAIC)
 
 # Test WAIC function with model itself
 ww = sts.WAIC(model=q, post=post)['dist']
 
 # Should be exact if we give post
-print(f"{ww['waic'] = :.4f}")
-print(f"{ww['std'] = :.4f}")
+print(f"{ww['WAIC'] = :.4f}")
+print(f"{ww['SE'] = :.4f}")
 
-np.testing.assert_allclose(wx['waic'], WAIC)
-np.testing.assert_allclose(wx['std'], std_WAIC)
+np.testing.assert_allclose(wx['WAIC'], WAIC)
+np.testing.assert_allclose(wx['SE'], std_WAIC)
 
 plt.ion()
 plt.show()
