@@ -17,9 +17,28 @@ import pymc as pm
 import seaborn as sns
 import warnings
 
+from copy import deepcopy
+from pytensor.graph.basic import ancestors
+# from pytensor.tensor.random.var import (
+#     RandomGeneratorSharedVariable,
+#     RandomStateSharedVariable,
+# )
+# from pytensor.tensor.sharedvar import SharedVariable, TensorSharedVariable
+from pytensor.tensor.var import TensorConstant, TensorVariable
+
 from scipy import stats, linalg
 from scipy.interpolate import BSpline
 from sklearn.utils.extmath import cartesian
+from sparkline import sparkify
+
+# TODO
+# * define __all__ for the package to declutter internal variables
+# * quantile and HPDI (via az.hdi) return transposes of each other for
+#   multi-dimensional inputs. Pick one or the other.
+# * HPDI does not currently accept multiple q values, but only because the
+#   printing function is broken.
+# * `pairs` method to plot pair-wise covariance given Quap (sample, then
+#   seaborn.pairplot())
 
 
 def quantile(data, q=0.89, width=6, precision=4,
@@ -119,7 +138,7 @@ def hpdi(data, q=0.89, verbose=False, width=6, precision=4, **kwargs):
         warnings.simplefilter('ignore', category=FutureWarning)
         quantiles = np.array([az.hdi(np.asarray(data), hdi_prob=x, **kwargs)
                                 .squeeze()
-                            for x in q]).squeeze()
+                              for x in q]).squeeze()
     # need at least 2 dimensions for printing
     # if quantiles.ndim >= 3:
     #     quantiles = quantiles.squeeze()
@@ -217,13 +236,13 @@ def expand_grid(**kwargs):
 
 # TODO
 #   * expand documentation with examples
-#   * ignore unsupported columns like 'datetime' types
 #   * remove dependence on input type. pd.DataFrame.from_dict? or kwarg?
 #       R version uses a LOT of "setMethod" calls to allow function to work
 #       with many different datatypes.
 #       See: <https://github.com/rmcelreath/rethinking/blob/master/R/precis.r>
+#       pythonic way would be to make objects that contain a precis method.
 #
-def precis(obj, p=0.89, digits=4, verbose=True):
+def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
 
@@ -257,14 +276,19 @@ def precis(obj, p=0.89, digits=4, verbose=True):
         hi = obj.coef + z * obj.std
         df = pd.concat([obj.coef, obj.std, lo, hi], axis=1)
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
+        # if hist:
+        #     df['histogram'] = sparklines_from_norm(df['mean'], df['std'])
 
     # DataFrame of data points
     if isinstance(obj, pd.DataFrame):
+        obj = obj.select_dtypes(include=np.number)
         df = pd.DataFrame()
         df['mean'] = obj.mean()
         df['std'] = obj.std()
         for i in range(2):
             df[f"{pp[i]:g}%"] = obj.apply(lambda x: np.nanpercentile(x, pp[i]))
+        if hist:
+            df['histogram'] = sparklines_from_dataframe(obj)
 
     # Numpy array of data points
     if isinstance(obj, np.ndarray):
@@ -276,6 +300,8 @@ def precis(obj, p=0.89, digits=4, verbose=True):
         df = pd.DataFrame(vals,
                           columns=['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
                           )
+        if hist:
+            df['histogram'] = sparklines_from_array(obj)
 
     if verbose:
         with pd.option_context('display.float_format',
@@ -285,7 +311,37 @@ def precis(obj, p=0.89, digits=4, verbose=True):
     return df
 
 
-# TODO `pairs` method to plot pair-wise covariance
+def sparklines_from_norm(means, stds, width=12):
+    """Generate list of sparklines from means and stds."""
+    # Create matrix of samples
+    assert len(means) == len(stds)
+    Nm = len(means)
+    Ns = 1000
+    samp = stats.norm(np.c_[means], np.c_[stds]).rvs(size=(Nm, Ns))
+    sparklines = []
+    for s in samp:
+        sparklines.append(sparkify(np.histogram(s, bins=width)[0]))
+    return sparklines
+
+
+def sparklines_from_dataframe(df, width=12):
+    """Generate list of sparklines from a DataFrame."""
+    sparklines = []
+    for col in df:
+        data = df[col].dropna()
+        sparklines.append(sparkify(np.histogram(data, bins=width)[0]))
+    return sparklines
+
+
+def sparklines_from_array(arr, width=12):
+    """Generate list of sparklines from an array of data."""
+    sparklines = []
+    for col in arr.T:
+        data = col[np.isfinite(col)]
+        sparklines.append(sparkify(np.histogram(data, bins=width)[0]))
+    return sparklines
+
+
 class Quap():
     """The quadratic (*i.e.* Gaussian) approximation of the posterior.
 
@@ -300,7 +356,7 @@ class Quap():
     map_est : dict
         Maximum *a posteriori* estimates of any Deterministic or Potential
         variables.
-    model : :obj:`pymc.Model`
+    model : :class:`pymc.Model`
         The pymc model object used to define the posterior.
     start : dict
         Initial parameter values for the MAP optimization. Defaults to
@@ -320,7 +376,9 @@ class Quap():
             # remove "dtype: object" line from the Series repr
             meanstr = repr(self.coef).rsplit('\n', 1)[0]
 
-        return f"""Quadratic Approximate Posterior Distribution
+        # FIXME indentation. inspect.cleandoc() fails because the
+        # model.str_repr() is not always aligned left.
+        out = f"""Quadratic Approximate Posterior Distribution
 
 Formula:
 {self.model.str_repr()}
@@ -328,6 +386,7 @@ Formula:
 Posterior Means:
 {meanstr}
 """
+        return out
 
     def __repr__(self):
         return f"<{self.__class__.__name__}: {self.__str__()}>"
@@ -336,6 +395,22 @@ Posterior Means:
         """Sample the posterior approximation."""
         posterior = stats.multivariate_normal(mean=self.coef, cov=self.cov)
         return pd.DataFrame(posterior.rvs(N), columns=self.coef.index)
+
+    # TODO 
+    # * rename the model variable 
+    # * rename any vector parameters 'b__0', 'b__1', etc.
+    def rename(self, mapper):
+        """Rename a parameter.
+
+        .. note:: Does NOT work on vector parameters, e.g., 'b__0'.
+        """
+        self.coef = self.coef.rename(mapper)
+        self.cov = self.cov.rename(index=mapper, columns=mapper)
+        self.std = self.std.rename(mapper)
+        for k, v in mapper.items():
+            self.model.named_vars[k].name = v
+        return self
+
 
 
 def quap(vars=None, var_names=None, model=None, data=None, start=None):
@@ -374,7 +449,10 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=UserWarning)
-        map_est = pm.find_MAP(start=start, vars=mvars, model=model)
+        map_est = pm.find_MAP(start=start,
+                              vars=mvars,
+                              progressbar=False,
+                              model=model)
 
     # Need to compute *untransformed* Hessian! See ch02/quad_approx.py
     # See: <https://github.com/pymc-devs/pymc/issues/5443>
@@ -393,47 +471,261 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
     quap = Quap()
 
     # Filter variables for output
-    basic_vars = set(model.basic_RVs) - set(model.observed_RVs)
-    basics = {x.name: x for x in basic_vars}
-    deter_vars = set(model.unobserved_RVs) - set(model.basic_RVs)
-    dnames = [x.name for x in deter_vars]
+    basic_vars = model.free_RVs
+    dnames = [x.name for x in model.deterministics]
 
     # If requested variables are not basic, just return all of them
-    if not set(mvars).intersection(set(basic_vars)):
-        var_names = basics.keys()
+    out_vars = set(mvars).intersection(set(basic_vars))
+    if not out_vars:
+        out_vars = basic_vars
 
     cnames = []
     hnames = []
     cvals = []
-    for v in basics:
-        if v in var_names:
-            x = map_est[v]
-            if x.size == 1:
-                cnames.append(v)
-                cvals.append(float(x))
-                hnames.append(v)
-            elif x.size > 1:
-                fmt = '02d' if x.size > 10 else 'd'
-                cnames.extend([f"{v}__{k:{fmt}}" for k in range(len(x))])
-                cvals.extend(x)
-                hnames.append(v)
+    for ov in out_vars:
+        v = ov.name
+        x = map_est[v]
+        if x.size == 1:
+            cnames.append(v)
+            cvals.append(float(x))
+            hnames.append(v)
+        elif x.size > 1:
+            # TODO case of 2D, etc. variables
+            # Flatten vectors into singletons 'b__0', 'b__1', ..., 'b__n'
+            fmt = '02d' if x.size > 10 else 'd'
+            cnames.extend([f"{v}__{k:{fmt}}" for k in range(len(x))])
+            cvals.extend(x)
+            hnames.append(v)  # need the root name for Hessian
+
+    # TODO store coefficients as an xarray Dataset to accomodate
+    # multi-dimensional parameters? Having flat Series/DataFrame for means and
+    # covariance matrix makes using stats.multivariate_normal simple, but then
+    # user-code needs to do the "unflattening" to combine [alpha, b0, b1, ...]
+    # for mathematical computations.
 
     # Coefficients are just the basic RVs, without the observed RVs
     quap.coef = pd.Series({x: v for x, v in zip(cnames, cvals)}).sort_index()
     # The Hessian of a Gaussian == "precision" == 1 / sigma**2
     H = pm.find_hessian(map_est, vars=[model[x] for x in hnames], model=model)
     quap.cov = (pd.DataFrame(linalg.inv(H), index=cnames, columns=cnames)
-                  .sort_index(axis=0) .sort_index(axis=1))
+                  .sort_index(axis=0).sort_index(axis=1))
     quap.std = pd.Series(np.sqrt(np.diag(quap.cov)), index=cnames).sort_index()
     quap.map_est = {k: map_est[k] for k in dnames}
-    quap.model = model
+    quap.model = deepcopy(model)
     quap.start = model.initial_point if start is None else start
+    quap.data = deepcopy(data)  # TODO pass data for each call of quap!!
     return quap
 
 
-def sample_quap(quap, N=1000):
-    """Return a DataFrame with samples of the posterior in `quap`."""
-    return quap.sample(N)
+# TODO
+# * (un)flatten list of vector or matrix parameters
+#   See: the_model.eval_rv_shapes()
+# * keep_data=True? Need to get model data for each `eval_at.keys()`
+# * refactor `out` to `mean_var` or `lm_var`?
+#
+def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
+    """Sample the indermediate linear models from the given parameter fit.
+
+    Parameters
+    ----------
+    fit : :class:`stats_rethinking.Quap` or similar
+        An object containing a pymc model and a posterior distribution.
+    out : TensorVariable
+        The output variable corresponding to the linear model.
+    params : list of TensorVariables
+        The parameters of the linear model. If not all parameters are
+        specified, the values will be determined by the state of the random
+        number generator in the PyTensor graph.
+    eval_at : dict of str: array_like
+        A dictionary of the independent variables over which to evaluate the
+        model. Keys must be strings of variable names, and values must be
+        array-like, with dimension equivalent to the corresponding variable
+        definition in the model.
+    dist : dict or DataFrame
+        A dict or DataFrame containing samples of the distribution of the
+        `params` as values/columns.
+    N : int
+        If `dist` is None, number of samples to take from `dist`
+
+    Returns
+    -------
+    samples : (M, N) ndarray
+        An array of values of the linear model evaluated at each of M `eval_at`
+        points and `N` parameter samples.
+    """
+    # Could loop over each Deterministic variable if none specified.
+    if out not in fit.model.deterministics:
+        raise ValueError(f"Variable '{out}' does not exist in the model!")
+
+    if params is None:
+        params = inputvars(out)
+
+    if dist is None:
+        dist = fit.sample(N)  # take the posterior
+
+    if eval_at is not None:
+        pm.set_data(eval_at, model=fit.model)
+
+    # Manual loop since params are 0-D variables in the model.
+    cols = []
+    for i in range(len(dist)):
+        param_vals = {v: dist[v.name][i] for v in params}
+        cols.append(out.eval(param_vals))
+
+    return np.array(cols).T  # params as columns
+
+
+# TODO
+# * add "ci" = {'hpdi', 'pi', None} option
+def lmplot(quap, mean_var, x, y, data=None,
+           eval_at=None, unstd=False, q=0.89, ax=None):
+    """Plot the linear model defined by `quap`.
+
+    Parameters
+    ----------
+    quap : stats_rethinking.Quap
+        The quadratic approximation model estimate.
+    mean_var : TensorVariable
+        The variable corresponding to the linear model of the mean.
+    data : DataFrame
+        The data used to fit the model.
+    x, y : str
+        The column names of the data points to plot.
+    eval_at : dict of str: array_like
+        A dictionary of the independent variables over which to evaluate the
+        model. Keys must be strings of variable names, and values must be
+        array-like, with dimension equivalent to the corresponding variable
+        definition in the model.
+    unstd : bool
+        If True, the model was fit to standardized values, so un-standardize
+        them to plot in coordinates with real units.
+    q : float in [0, 1]
+        Quartile over which to shade the mean.
+    ax : plt.Axes
+        Axes object in which to draw the plot.
+
+    Returns
+    -------
+    ax : plt.Axes
+        The axes in which the plot was drawn.
+    """
+    # TODO? remove ALL of this nonsense and just require mu_samp as an input.
+    # User code then calls:
+    #   mu_s = lmeval()
+    #   lmplot(mu_s, ...)
+    data_vars = set(named_graph_inputs([mean_var])) - set(inputvars(mean_var))
+    data_names = [v.name for v in data_vars]
+
+    if eval_at is None:
+        # Use the given data to evaluate the model
+        xe = data[x].sort_values()
+        if unstd:
+            xe = standardize(xe)
+
+        # Determine which name to use
+        if len(data_vars) == 1:
+            eval_at = {data_names[0]: xe}
+        elif x in data_names:
+            eval_at = {x: xe}
+        elif len(data_vars) > 1:
+            raise ValueError("More than 1 data variable in the model!"\
+                             + " Please specify `eval_at`")
+    else:
+        if len(eval_at) == 1:
+            xe = list(eval_at.values())[0]
+        elif x in eval_at:
+            xe = eval_at[x]
+        else:
+            raise ValueError(f"Variable '{x}' not found in model.")
+
+    if ax is None:
+        ax = plt.gca()
+
+    # Ensure the passed-in variable names match those in the model.
+    # If the user has not done a quap.rename(), this step should be a no-op.
+    name_map = {v.name: k for k, v in quap.model.named_vars.items()}
+    eval_rename = dict()
+    for k, v in eval_at.items():
+        eval_rename[name_map[k]] = v
+    eval_at = eval_rename
+
+    mu_samp = lmeval(quap, out=mean_var, eval_at=eval_at)
+    mu_mean = mu_samp.mean(axis=1)
+    mu_pi = percentiles(mu_samp, q=q, axis=1)  # 0.89 default
+
+    if unstd:
+        xe = unstandardize(xe, data[x])
+        mu_mean = unstandardize(mu_mean, data[y])
+        mu_pi = unstandardize(mu_pi, data[y])
+
+    if data is not None:
+        ax.scatter(x, y, data=data, alpha=0.4)
+    ax.plot(xe, mu_mean, 'C0', label='MAP Prediction')
+    ax.fill_between(xe, mu_pi[0], mu_pi[1],
+                    facecolor='C0', alpha=0.3, interpolate=True,
+                    label=rf"{100*q:g}% Percentile Interval of $\mu$")
+    ax.set(xlabel=x, ylabel=y)
+    return ax
+
+
+# -----------------------------------------------------------------------------
+#         Graph Utilities
+# -----------------------------------------------------------------------------
+def named_graph_inputs(graphs, blockers=None):
+    """Return list of inputs to a PyTensor variable.
+
+    Parameters
+    ----------
+    graphs : list of `Variable` instances
+        Output `Variable` instances from which to search backward through
+        owners.
+    blockers : list of `Variable` instances
+        A collection of `variable`s that, when found, prevent the graph search
+        from preceding from that point.
+
+    Yields
+    ------
+        Input nodes with a name, in the order found by a left-recursive
+        depth-first search started at the nodes in `graphs`.
+
+    See Also
+    --------
+    pytensor.graph.basic.graph_inputs
+    <https://github.com/pymc-devs/pytensor/blob/095e3c9b05525583d3c5a98f9bb75eb6f7ca4556/pytensor/graph/basic.pyL882-L902>
+    """
+    graphs_names = [v.name for v in graphs]
+    yield from (r
+                for r in ancestors(graphs, blockers)
+                if r.name is not None and r.name not in graphs_names
+                )
+
+
+def inputvars(a):
+    """Get the inputs to PyTensor variables.
+
+    Parameters
+    ----------
+        a: PyTensor variable
+
+    Returns
+    -------
+        r: list of tensor variables that are inputs
+
+    See Also
+    --------
+    pymc.inputvars
+    <https://www.pymc.io/projects/docs/en/stable/_modules/pymc/pytensorf.html#inputvars>
+    """
+    return [
+        v
+        for v in named_graph_inputs(_makeiter(a))
+        if isinstance(v, TensorVariable) and not isinstance(v, TensorConstant)
+    ]
+
+
+def _makeiter(a):
+    """Return an iterable of the input."""
+    return a if isinstance(a, (tuple, list)) else [a]
 
 
 def norm_fit(data, hist_kws=None, ax=None):
@@ -450,7 +742,7 @@ def norm_fit(data, hist_kws=None, ax=None):
     return ax
 
 
-def standardize(x, data=None, axis=0):
+def standardize(x):
     """Standardize the input vector `x` by the mean and std of `data`.
 
     .. note::
@@ -459,9 +751,39 @@ def standardize(x, data=None, axis=0):
         (N / (N-1))**0.5 * (x - x.mean()) / x.std() == stats.zscore(x, ddof=0)
         where N = x.size
     """
+    center = x.mean()
+    scale = x.std()
+    z = (x - center) / scale
+    if hasattr(z, 'attrs'):
+        z.attrs = {'center': center, 'scale': scale}
+    return z
+
+
+def unstandardize(x, data=None):
+    """Return the data to the original scale.
+
+    Parameters
+    ----------
+    x : array_like
+        The scaled data.
+    data : array_like
+        The un-scaled data with which to compute the center and scale.
+
+    Returns
+    -------
+    result : un-scaled array of the same size as `x`.
+    """
     if data is None:
-        data = x
-    return (x - data.mean(axis=axis)) / data.std(axis=axis)
+        try:
+            center = x.attrs['center']
+            scale = x.attrs['scale']
+        except KeyError:
+            raise ValueError(("Must provide `data` or ",
+                              "`x.attrs = {'center': float, 'scale': float}"))
+    else:
+        center = data.mean()
+        scale = data.std()
+    return center + scale * x
 
 
 def design_matrix(x, poly_order=0, include_const=True):
@@ -536,6 +858,107 @@ def bspline_basis(t, x=None, k=3, padded_knots=False):
         B = b(x)
         B[np.isnan(B)] = 0.0
         return B
+
+
+def coef_table(models, mnames=None, params=None, std=True):
+    """Create a summary table of coefficients in each model.
+
+    Parameters
+    ----------
+    models : list of `Quap`
+        The models over which to summarize.
+    mnames : list of str, optional
+        Names of the models.
+    params : list of str, optional
+        Names of specific parameters to return.
+    std : bool, optional
+        If True, also return a table of standard deviations.
+
+    Returns
+    -------
+    ct, cs : pd.DataFrame
+        DataFrames of the coefficients and their standard deviations.
+    """
+    coefs = [m.coef for m in models]
+    stds = [m.std for m in models]
+
+    def transform_ct(ct, mnames=None, params=None, value_name='coef'):
+        """Make coefficient table tidy for plotting"""
+        if mnames is not None:
+            ct.columns = mnames
+        ct.index.name = 'param'
+        ct.columns.name = 'model'
+        # Use params to filter by indexed variables 'a__0', 'a__1', etc.
+        # should result from passing params=['a']
+        if params is not None:
+            try:
+                subtables = [ct.loc[params]]  # track each filtered table
+            except KeyError:
+                subtables = []
+            for p in params:
+                subtables.append(ct.filter(regex=f"^{p}__[0-9]+", axis=0))
+            ct = pd.concat(subtables).drop_duplicates()
+        ct = (ct.T  # organize by parameter, then model
+                .melt(ignore_index=False, value_name=value_name)
+                .set_index('param', append=True)
+                # .sort_index()
+              )
+        return ct
+
+    ct = transform_ct(pd.concat(coefs, axis=1), mnames, params)
+    if not std:
+        return ct
+
+    cs = transform_ct(pd.concat(stds, axis=1), mnames, params,
+                      value_name='std')
+    return pd.concat([ct, cs], axis=1)
+
+
+# TODO by_model=True param? Swap index levels.
+def plot_coef_table(ct, q=0.89, fignum=None):
+    """Plot the table of coefficients from `sts.coef_table`.
+
+    Parameters
+    ----------
+    ct : :obj:`CoefTable`
+        Coefficient table output from `coef_table`.
+    q : float in [0, 1], optional
+        The probability interval to plot.
+    ax : Axes, optional
+        The Axes on which to plot.
+
+    Returns
+    -------
+    fig, ax : Figure and Axes where the plot was made.
+    """
+    fig = plt.figure(fignum, clear=True, constrained_layout=True)
+    if not fig.axes:
+        ax = fig.add_subplot()
+    else:
+        ax = fig.axes[-1]  # take most recent
+
+    # Leverage Seaborn for basic setup
+    sns.pointplot(data=ct.reset_index(), x='coef', y='param', hue='model',
+                  join=False, dodge=0.3, ax=ax)
+
+    # Find the x,y coordinates for each point
+    x_coords = []
+    y_coords = []
+    colors = []
+    for point_pair in ax.collections:
+        for x, y in point_pair.get_offsets():
+            if not np.ma.is_masked(x) and not np.ma.is_masked(y):
+                x_coords.append(x)
+                y_coords.append(y)
+                colors.append(point_pair.get_facecolor())
+
+    # Manually add the errorbars since we have std values already
+    z = stats.norm.ppf(1 - (1 - q)/2)
+    errs = 2 * ct['std'] * z
+    errs = errs.dropna()
+    ax.errorbar(x_coords, y_coords, fmt=' ', xerr=errs, ecolor=colors)
+    ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
+    return fig, ax
 
 # =============================================================================
 # =============================================================================

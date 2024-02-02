@@ -18,7 +18,6 @@ from scipy import stats
 
 import stats_rethinking as sts
 
-plt.ion()
 plt.style.use('seaborn-v0_8-darkgrid')
 np.random.seed(5656)  # initialize random number generator
 
@@ -88,22 +87,24 @@ $\beta \sim \mathcal{N}(0, 10)$""",
 
 
 # Restrict beta to positive values in the new model (R code 4.41 - 4.42)
-def define_linear_model(ind, obs):
+def define_linear_model(x, y):
     """Define a linear model with the given data."""
     with pm.Model() as model:
-        ind = pm.MutableData('ind', ind)
-        obs = pm.MutableData('obs', obs)
+        ind = pm.MutableData('ind', x)
+        obs = pm.MutableData('obs', y)
         alpha = pm.Normal('alpha', mu=178, sigma=20)  # parameter priors
         beta = pm.Lognormal('beta', mu=0, sigma=1)    # new prior!
         sigma = pm.Uniform('sigma', 0, 50)            # std prior
-        mu = pm.Deterministic('mu', alpha + beta*(ind - ind.mean()))
+        # NOTE the mean-shift must be a function of the data on which the model
+        # is trained, *not* the data on which it makes predictions!!
+        mu = pm.Deterministic('mu', alpha + beta*(ind - np.mean(x)))
         # likelihood -- same shape as the independent variable!
         h = pm.Normal('h', mu=mu, sigma=sigma, observed=obs, shape=ind.shape)
     return model
 
 
 # Create the linear model ("m4.3" in R code 4.42)
-the_model = define_linear_model(ind=weight, obs=adults['height'])
+the_model = define_linear_model(x=weight, y=adults['height'])
 
 # Sample the prior and plot (like R Code 4.38 - 4.39, but with new model)
 with the_model:
@@ -158,7 +159,7 @@ for i, N in enumerate(N_test):
     wbar_n = w.mean()
 
     # MAP estimate of the parameters
-    the_model = define_linear_model(w, obs=df_n['height'])
+    the_model = define_linear_model(x=w, y=df_n['height'])
     quap = sts.quap(model=the_model)
 
     # Sample the posterior distributions of parameters
@@ -216,43 +217,11 @@ mu_samp = post_mu(x, post['alpha'], post['beta'])
 mu_mean = mu_samp.mean(axis=0)    # (Nd,) average values for each data point
 mu_hpdi = sts.hpdi(mu_samp, q=q)  # (Nd, 2)
 
-# NOTE Use pm.set_data({'ind': np.arange(25, 71)}) to update the
-# model's independent variable values. Then,
-#   h_samp = pm.sample_posterior_predictive(trace)
-#   h_mean = h_samp.posterior_predictive['h'].mean(('chain', 'draw'))
-# The catch: we need a posterior sample `trace`. Since we want the quap, not
-# the actual MCMC samples, we can fake the
-# arviz.data.inference_data.InferenceData structure using the normal
-# approximation samples we already have in the post df.
-# Needs coordinates: ('chain' = [0], 'draw' = [0, 1, ..., Ns])
-#
-# import arviz as az
-# da = (post.to_xarray()
-#           .rename({'index': 'draw'})
-#           .expand_dims(dim='chain')
-#           .assign_coords(chain=('chain', [0]))
-#         )
-# tr = az.data.inference_data.InferenceData(posterior=da)
-#
-# with the_model:
-#     # tr = pm.sample(chains=1)  # actual MCMC sampling of posterior
-#     pm.set_data({'ind': x})
-#     # pm.set_data({'ind': adults['weight']})
-#     y_samp = pm.sample_posterior_predictive(tr)
-#     y_mean = y_samp.posterior_predictive['h'].mean(('chain', 'draw'))
-#
-# # Compute rms error
-# err_mu = np.sqrt(np.sum((quap.map_est['mu'] - adults['height'])**2) / N)
-# err_y = np.sqrt(np.sum((y_mean - adults['height'])**2) / N)
-# # err_mu ~ 5.071880331827743 [cm]
-# # err_y ~ 5.075352921506911 [cm]
-
 # Figure 4.10 (R code 4.55, 4.57)
 fig = plt.figure(5, clear=True, constrained_layout=True)
 ax = fig.add_subplot()
 ax.scatter(adults['weight'], adults['height'], alpha=0.5, label='Raw Data')
 ax.plot(x, mu_mean, 'C3', label='MAP Estimate')
-# ax.plot(x, y_mean, 'C2', label='MCMC Estimate')
 ax.fill_between(x, mu_hpdi[:, 0], mu_hpdi[:, 1],
                 facecolor='k', alpha=0.3, interpolate=True,
                 label=rf"{100*q:g}% Credible Interval of $\mu$")
@@ -262,7 +231,7 @@ ax.legend()
 
 # Calculate the prediction interval, including sigma (R code 4.59, 4.60, 4.62)
 # Manually write code for:
-#   h_samp = sts.sim(define_linear_model, Ns)
+#   h_samp = sts.sim(the_model, Ns)
 h_samp = stats.norm(mu_samp, post['sigma'].values[:, np.newaxis]).rvs()  # (Nd, Ns)
 # h_hpdi = sts.hpdi(h_samp, q=q)  # (Nd, 2)
 h_pi = sts.percentiles(h_samp, q=q, axis=0)  # (2, Nd)
@@ -274,6 +243,9 @@ ax.fill_between(x, h_pi[0], h_pi[1],
 ax.set(xlim=(28, 64), ylim=(128, 182))
 
 ax.legend()
+
+plt.ion()
+plt.show()
 
 # =============================================================================
 # =============================================================================
