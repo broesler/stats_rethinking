@@ -41,7 +41,7 @@ from sparkline import sparkify
 #   seaborn.pairplot())
 
 
-def quantile(data, q=0.89, width=6, precision=4,
+def quantile(data, qs=0.89, width=6, precision=4,
              q_func=np.quantile, verbose=False, **kwargs):
     """Pretty-print the desired quantile values from the data.
 
@@ -65,19 +65,30 @@ def quantile(data, q=0.89, width=6, precision=4,
 
     Returns
     -------
-    quantile : scalary or ndarray
+    quantile : scalar or ndarray
         The requested quantiles. See documentation for `numpy.quantile`.
+        Shape = (Q, M), where Q = q.shape, and M is the shape of the data
+        without the given axis. If no axis is given, data is unraveled and
+        output shape is Q.
+
+    Examples
+    --------
+    >>> B = np.random.random((5, 10, 7))
+    >>> np.quantile(B, q=[1 - 0.89, 0.89]).shape
+    === (2,)
+    >>> np.quantile(B, q=[1 - 0.89, 0.89], axis=1).shape
+    === (2, 5, 7)
 
     See Also
     --------
     `numpy.quantile`
     """
-    q = np.atleast_1d(q)
-    quantiles = q_func(data, q, **kwargs)
+    qs = np.asarray(qs)
+    quantiles = q_func(data, qs, **kwargs)
     if verbose:
         fstr = f"{width}.{precision}f"
-        name_str = ' '.join([f"{100*p:{width-1}g}%" for p in q])
-        value_str = ' '.join([f"{q:{fstr}}" for q in quantiles])
+        name_str = ' '.join([f"{100*p:{width-1}g}%" for p in np.atleast_1d(qs)])
+        value_str = ' '.join([f"{q:{fstr}}" for q in np.atleast_1d(quantiles)])
         print(f"{name_str}\n{value_str}")
     return quantiles
 
@@ -100,6 +111,14 @@ def percentiles(data, q=0.89, **kwargs):
     **kwargs
         See `quantile` for additional options.
 
+    Returns
+    -------
+    percentiles : ndarray
+        The requested high and low quantiles.
+        Shape = (2, Q, M), where Q = q.shape, and M is the shape of the given
+        axis. If no axis is given, data is unraveled and output shape is Q.
+        The low boundary is index 0, and the high boundary is index 1.
+
     See Also
     --------
     quantile
@@ -110,9 +129,10 @@ def percentiles(data, q=0.89, **kwargs):
 
 
 # TODO remove width and precision arguments and just take fstr='8.2f', e.g.
-# * add axis=1 argument
+# * add axis=1 argument -> 
 # * allow multiple qs, but print them "nested" like on an x-axis.
-def hpdi(data, q=0.89, verbose=False, width=6, precision=4, **kwargs):
+def hpdi(data, q=0.89, verbose=False, width=6, precision=4, 
+         axis=None, **kwargs):
     """Compute highest probability density interval.
 
     .. note::
@@ -126,28 +146,65 @@ def hpdi(data, q=0.89, verbose=False, width=6, precision=4, **kwargs):
     verbose : bool
     width : int
     precision : int
+    axis : int
+        If None, unravel the data.
     kwargs : dict_like
 
     Returns
     -------
     quantiles : (M, N) ndarray
         Matrix of M vectors in N dimensions
+
+        data is (M, N, P)
+        az.hdi(data, hdi_prob=0.89).shape == (P, 2)
+        np.array([az.hdi(data, hdi_prob=q) for q in qs]).shape == (Q, P, 2)
+        ==> az.hdi "ravels" the array along the first 2 dimensions.
+
+    Examples
+    --------
+    >>> A = np.random.random((5, 10))
+    >>> az.hdi(A, hdi_prob=0.89).shape
+    === (10, 2)  # FutureWarning (draw, shape) -> (chain, draw)
+    >>> B = np.random.random((5, 10, 7))
+    >>> az.hdi(B, hdi_prob=0.89).shape
+    === (7, 2)
+    >>> C = np.random.random((5, 10, 7, 4))
+    >>> az.hdi(C, hdi_prob=0.89).shape
+    === (7, 4, 2)
+
+
     """
-    q = np.atleast_1d(q)
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', category=FutureWarning)
-        quantiles = np.array([az.hdi(np.asarray(data), hdi_prob=x, **kwargs)
-                                .squeeze()
-                              for x in q]).squeeze()
-    # need at least 2 dimensions for printing
-    # if quantiles.ndim >= 3:
-    #     quantiles = quantiles.squeeze()
+    qs = np.asarray(q)
+    data = np.asarray(data)
+
+    if verbose and qs.size > 1:
+        verbose = False
+        warnings.warn("verbose flag only valid for singleton q.")
+
+    if axis is None:
+        A = data.reshape(-1).squeeze()  # (M, N) -> (M * N,)
+    else:
+        # az.hdi "ravels" the array along the first 2 dimensions, because it
+        # assumes that the data is from az.convert_to_data() which returns an
+        # xarray with (chain, draw, ...) dimensions.
+        # ==> move the desired axis to the front, then add 1 dimension.
+        # (M, *N*, P) -> (*N*, M, P) -> (1, *N*, M, P)
+        A = np.moveaxis(data, axis, 0)[np.newaxis, :]
+
+    # (1, N, M, P) -> (M, P, 2) -> (Q, M, P, 2)
+    if qs.ndim == 0:
+        Q = az.hdi(A, hdi_prob=qs, **kwargs)
+    else:
+        Q = np.stack([az.hdi(A, hdi_prob=q, **kwargs) for q in qs])
+        Q = np.moveaxis(Q, -1, 0)  # (Q, M, P, 2) -> (2, Q, M, P)
+
     if verbose:
         fstr = f"{width}.{precision}f"
-        name_str = ' '.join([f"{100*x:{width-2}g}%" for x in np.r_[q, q]])
-        value_str = ' '.join([f"{x:{fstr}}" for x in quantiles])
+        name_str = ' '.join([f"{100*p:{width-2}g}%" for p in np.r_[qs, qs]])
+        value_str = ' '.join([f"{q:{fstr}}" for q in np.atleast_1d(Q)])
         print(f"|{name_str}|\n{value_str}")
-    return quantiles
+
+    return Q
 
 
 def grid_binom_posterior(Np, k, n, prior_func=None, norm_post=True):
@@ -270,6 +327,7 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     pp = 100*np.array([a, 1-a])  # percentages for printing
 
     if isinstance(obj, Quap):
+        title = None
         # Compute density intervals
         z = stats.norm.ppf(1 - a)
         lo = obj.coef - z * obj.std
@@ -282,6 +340,7 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
     # DataFrame of data points
     if isinstance(obj, pd.DataFrame):
         obj = obj.select_dtypes(include=np.number)
+        title = f"'DataFrame': {obj.shape[0]:d} obs. of {obj.shape[1]} variables:"
         df = pd.DataFrame()
         df['mean'] = obj.mean()
         df['std'] = obj.std()
@@ -292,6 +351,7 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
 
     # Numpy array of data points
     if isinstance(obj, np.ndarray):
+        title = f"'ndarray': {obj.shape[0]:d} obs. of {obj.shape[1]} variables:"
         # Columns are data, ignore index
         vals = np.vstack([np.nanmean(obj, axis=0),
                           np.nanstd(obj, axis=0),
@@ -304,6 +364,9 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
             df['histogram'] = sparklines_from_array(obj)
 
     if verbose:
+        if title is not None:
+            print(title)
+        # Print the dataframe with requested precision
         with pd.option_context('display.float_format',
                                f"{{:.{digits}f}}".format):
             print(df)
@@ -954,7 +1017,7 @@ def plot_coef_table(ct, q=0.89, fignum=None):
 
     # Manually add the errorbars since we have std values already
     z = stats.norm.ppf(1 - (1 - q)/2)
-    errs = 2 * ct['std'] * z
+    errs = 2 * ct['std'] * z  # ± err -> 2 * ...
     errs = errs.dropna()
     ax.errorbar(x_coords, y_coords, fmt=' ', xerr=errs, ecolor=colors)
     ax.axvline(0, ls='--', c='k', lw=1, alpha=0.5)
