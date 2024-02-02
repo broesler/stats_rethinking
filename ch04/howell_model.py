@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 r"""
-Description: Section 4.3.
+§4.3.
 
 Build a model of the distribution of human heights:
 

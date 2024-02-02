@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-Description: Solutions to the "Hard" exercises.
+Solutions to the "Hard" exercises.
 """
 # =============================================================================
 
@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
+import xarray as xr
 
 from scipy import stats
 
@@ -30,7 +31,7 @@ df = pd.read_csv(data_path + 'Howell1.csv')
 # ----------------------------------------------------------------------------- 
 #         4H1. Unknown weights
 # -----------------------------------------------------------------------------
-UNK_W = np.c_[[46.95, 43.72, 64.78, 32.59, 54.63]]
+UNK_W = np.r_[46.95, 43.72, 64.78, 32.59, 54.63]
 
 # Plot the raw data, separate adults and children
 is_adult = df['age'] >= 18
@@ -67,13 +68,13 @@ with pm.Model() as the_model:
     quap = sts.quap()
     post = quap.sample()
 
-mu_samp = post['alpha'].values + post['beta'].values * (UNK_W - w_bar)
-h_samp = stats.norm(mu_samp, post['sigma']).rvs()
-h_mean = h_samp.mean(axis=1)
-h_hpdi = sts.hpdi(h_samp.T, q=0.89)
+mu_samp = post['alpha'] + post['beta'] * (xr.DataArray(UNK_W) - w_bar)
+h_samp = stats.norm(mu_samp, post['sigma'].values[:, np.newaxis]).rvs()
+h_mean = h_samp.mean(axis=0)
+h_hpdi = sts.hpdi(h_samp, q=0.89, axis=0)  # (2, ...)
 
 with pd.option_context('display.float_format', '{:.2f}'.format):
-    print(pd.DataFrame(np.c_[UNK_W, h_mean, h_hpdi], 
+    print(pd.DataFrame(np.c_[UNK_W, h_mean, h_hpdi.T], 
                        columns=['weight', 'height', '|89%', '89%|']))
 
 # Output:
@@ -85,7 +86,7 @@ with pd.option_context('display.float_format', '{:.2f}'.format):
 # 4   54.63   163.38   155.21   171.43
 
 # Plot predictions with original data
-ax.errorbar(UNK_W, h_mean, yerr=np.abs(h_hpdi.T - h_mean),
+ax.errorbar(UNK_W, h_mean, yerr=np.abs(h_hpdi - h_mean),
             ls='-', lw=1, marker='.', markersize=10, c='C3',
             capsize=4, ecolor='k', elinewidth=1, alpha=0.8,
             label='Predicted Data')

@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-  Description: Quadratic approximation to the data (R code 4.26 -- 4.30)
+§4.3.5: Quadratic approximation to the data (R code 4.26--4.30)
 """
 # =============================================================================
 
@@ -37,32 +37,47 @@ col = 'height'
 # Specify the priors for each parameter:
 mu_c = 178   # [cm] chosen mean for the height-mean prior
 # TODO code both of these into a function.
-mus_c = 20  # [cm] ("m4.1" R code 4.28) chosen std for the height-mean prior
+# mus_c = 20  # [cm] ("m4.1" R code 4.28) chosen std for the height-mean prior
 # mus_c = 0.1  # [cm] ("m4.2" R code 4.31) test with narrow prior for the mean
 sig_c = 50   # [cm] chosen maximum value for height-stdev prior
 
-print(f"{mus_c = }:")
+for mus_c in [20, 0.1]:
+    print(f"{mus_c = }:")
 
-Ns = 10_000  # number of samples
+    Ns = 10_000  # number of samples
 
-# Compute quadratic approximation  (R code 4.27 - 4.28)
-with pm.Model() as normal_approx:
-    # Define the parameter priors: P(mu), P(sigma)
-    mu = pm.Normal('mu', mu=mu_c, sigma=mus_c)
-    sigma = pm.Uniform('sigma', 0, sig_c)
+    # Compute quadratic approximation  (R code 4.27 - 4.28)
+    with pm.Model() as normal_approx:
+        # Define the parameter priors: P(mu), P(sigma)
+        mu = pm.Normal('mu', mu=mu_c, sigma=mus_c)
+        sigma = pm.Uniform('sigma', 0, sig_c)
 
-    # Define the model likelihood, including the data: P(data | mu, sigma)
-    height = pm.Normal('h', mu=mu, sigma=sigma, observed=adults[col])
+        # Define the model likelihood, including the data: P(data | mu, sigma)
+        height = pm.Normal('h', mu=mu, sigma=sigma, observed=adults[col])
 
-    # Sample the posterior to find argmax P(mu, sigma | data)  (R code 4.30)
-    start = dict(mu=adults[col].mean(),
-                 sigma=adults[col].std())
+        # Sample posterior to find argmax P(mu, sigma | data)  (R code 4.30)
+        start = dict(mu=adults[col].mean(),
+                     sigma=adults[col].std())
 
-    # normal approximation to the posterior
-    quap = sts.quap([mu, sigma], start=start)
+        # normal approximation to the posterior
+        quap = sts.quap([mu, sigma], start=start)
 
-sts.precis(quap)  # (R code 4.29)
-# # Output:
+    sts.precis(quap)  # (R code 4.29)
+
+    # Sample from the multivariate posterior (R code 4.34)
+    #   (other option: use pm.sample() -> trace_to_dataframe())
+    post = quap.sample(Ns)
+
+    print('covariance:')
+    print(quap.cov)
+
+    print('correlation coeff:')
+    print(quap.corr)
+
+
+# -----------------------------------------------------------------------------
+#         Output:
+# -----------------------------------------------------------------------------
 # With mus_c = 20:
 #                mean       std        5.5%       94.5%
 #   mu     154.607024  0.411994  153.948578  155.265470
@@ -72,15 +87,9 @@ sts.precis(quap)  # (R code 4.29)
 #   mu     177.863755  0.099708  177.704401  178.023108
 #   sigma   24.517564  0.924040   23.040769   25.994359
 
-# Sample from the multivariate posterior (R code 4.34)
-#   (other option: use pm.sample() -> trace_to_dataframe())
-post = quap.sample(Ns)
-
-print('covariance:')
-print(post.cov())
 # With mus_c = 20:
 # covariance:
-             # mu     sigma
+#              mu     sigma
 # mu     0.168657 -0.001608
 # sigma -0.001608  0.085674
 # With mus_c = 0.1:
@@ -89,11 +98,9 @@ print(post.cov())
 # mu     0.010169  0.010876
 # sigma  0.010876  0.857316
 
-print('correlation coeff:')
-print(post.corr())
 # With mus_c = 20:
 # correlation coeff:
-             # mu     sigma
+#              mu     sigma
 # mu     1.000000 -0.006959
 # sigma -0.006959  1.000000
 # With mus_c = 0.1:

@@ -18,6 +18,13 @@ from scipy import stats
 
 import stats_rethinking as sts
 
+# TODO
+# * rewrite [alpha, beta] as a vector with np.ones for beta[0], lognorm for
+#   beta[1], norms for rest of betas
+# * test regular pm.Normal() in linear model
+# * try HalfNormal for sigma --> how to define halfnorm such that probability
+#   for a given value == specified value??
+
 plt.ion()
 plt.style.use('seaborn-v0_8-darkgrid')
 np.random.seed(56)  # initialize random number generator
@@ -88,24 +95,24 @@ for poly_order in range(1, Np+1):
 
     # Sample from normalized inputs
     x = np.arange(0, 71)  # [kg] range of weight inputs
-    z = sts.standardize(x, df['weight'])
+    z = (x - df['weight'].mean()) / df['weight'].std()
     Z_m = sts.design_matrix(z, poly_order)  # (x.size, poly_order)
 
     # (Ns, x.size) == Ns, poly_order) * (poly_order, x.size)
     # beta.shape == (poly_order+1, Ns)
     beta_samp = post.filter(regex='(alpha)|b+', axis=1).sort_index(axis=1).T
-    mu_samp = np.dot(Z_m, beta_samp).T                # (Ns, x.size)
-    mu_mean = mu_samp.mean(axis=0)  # [cm] mean height estimate vs. weight
+    mu_samp = np.dot(Z_m, beta_samp)  # (x.size, Ns)
+    mu_mean = mu_samp.mean(axis=1)  # [cm] mean height estimate vs. weight
 
     q = 0.89  # CI interval probability
-    h_samp = stats.norm(mu_samp, post['sigma'].values[:, np.newaxis]).rvs()
-    h_hpdi = sts.hpdi(h_samp, q=q)
+    h_samp = stats.norm(mu_samp, post['sigma']).rvs()
+    h_hpdi = sts.hpdi(h_samp, q=q, axis=1)
 
     # Plot vs the data (in non-normalized x-axis for readability)
     ax = fig.add_subplot(gs[poly_order-1], sharey=ax)
     ax.scatter(df['weight'], df['height'], alpha=0.5, label='Data')
     ax.plot(x, mu_mean, 'k', label='Model')
-    ax.fill_between(x, h_hpdi[:, 0], h_hpdi[:, 1],
+    ax.fill_between(x, h_hpdi[0], h_hpdi[1],
                     facecolor='k', alpha=0.2, interpolate=True,
                     label=f"{100*q:g}% CI")
     ax.set(title=titles[poly_order],
@@ -131,12 +138,7 @@ for i, col in enumerate(post.columns):
         ax.tick_params(axis='y', labelleft=False)
         ax.set_ylabel(None)
 
-# TODO
-# * rewrite [alpha, beta] as a vector with np.ones for beta[0], lognorm for
-#   beta[1], norms for rest of betas
-# * test regular pm.Normal() in linear model
-# * try HalfNormal for sigma --> how to define halfnorm such that probability
-#   for a given value == specified value??
+plt.show()
 
 # =============================================================================
 # =============================================================================

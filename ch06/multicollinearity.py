@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-Description: §6.1 Multicollinearity Examples.
+§6.1 Multicollinearity Examples.
 """
 # =============================================================================
 
