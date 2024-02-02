@@ -454,7 +454,6 @@ def sparklines_from_array(arr, width=12):
 # * can require kwargs on __init__, then use those values to compute self._std,
 #   etc. so that the property just returns that value without doing
 #   a computation each time it is called.
-# * implement DIC, WAIC, LOOIC, etc. methods
 
 class Quap():
     """The quadratic (*i.e.* Gaussian) approximation of the posterior.
@@ -512,6 +511,14 @@ class Quap():
         posterior = stats.multivariate_normal(mean=mean, cov=self.cov)
         df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
         return frame_to_dataset(df, model=self.model).mean('chain')
+
+    def sample_prior(self, N=10_000):
+        """Sample the prior distribution.
+
+        Analagous to `rethinking::extract.prior`.
+        """
+        idata = pm.sample_prior_predictive(samples=N, model=self.model)
+        return idata.prior.mean('chain')
 
     def deviance(self):
         """Return the deviance of the model."""
@@ -696,11 +703,12 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         model. Keys must be strings of variable names, and values must be
         array-like, with dimension equivalent to the corresponding variable
         definition in the model.
-    dist : dict or DataFrame
+    dist : dict or DataFrame, default None.
         A dict or DataFrame containing samples of the distribution of the
-        `params` as values/columns.
+        `params` as values/columns. If `dist` is None, the posterior
+        distribution will be used.
     N : int
-        If `dist` is None, number of samples to take from `dist`
+        If `dist` is None, number of samples to take from `dist`.
 
     Returns
     -------
@@ -729,14 +737,16 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     )
 
     # Manual loop since params are 0-D variables in the model.
-    cols = []
-    for i in range(dist.sizes['draw']):
-        # Ensure shape of given values matches that of the model variable
-        param_vals = {v.name: dist[v.name].isel(draw=i) for v in params}
-        cols.append(out_func(param_vals))
+    out_samp = np.fromiter(
+        (
+            out_func({v.name: dist[v.name].isel(draw=i) for v in params})
+            for i in range(dist.sizes['draw'])
+        ),
+        dtype=np.dtype((float, out.shape.eval())),
+        count=dist.sizes['draw'],
+    ).T  # (out.shape, draw)
 
     # Return a DataArray for named dimensions.
-    out_samp = np.array(cols).T  # params as columns
     return xr.DataArray(
         out_samp,
         coords={
@@ -753,7 +763,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
            x=None, y=None, data=None,
            eval_at=None, unstd=False, q=0.89, ax=None,
-           line_kws=None, fill_kws=None,
+           line_kws=None, fill_kws=None, marker_kws=None,
            label='MAP Prediction'):
     """Plot the linear model defined by `quap`.
 
@@ -802,8 +812,12 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
 
     if line_kws is None:
         line_kws = dict()
+
     if fill_kws is None:
         fill_kws = dict()
+
+    if marker_kws is None:
+        marker_kws = dict()
 
     if quap is not None and mean_var is not None:
         # TODO? remove ALL of this nonsense and just require mu_samp as input.
@@ -849,6 +863,7 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
         xe = fit_x
         mu_samp = fit_y
 
+    # TODO expect xarray with dimension 'draw'
     # Compute mean and error
     mu_mean = mu_samp.mean(axis=1)
     mu_pi = percentiles(mu_samp, q=q, axis=1)  # 0.89 default
@@ -858,9 +873,14 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
         mu_mean = unstandardize(mu_mean, data[y])
         mu_pi = unstandardize(mu_pi, data[y])
 
+    # TODO update "pop" calls by defining default dicts, then d.update(kwargs)?
     # Make the plot
     if data is not None:
-        ax.scatter(x, y, data=data, alpha=0.4)
+        ax.scatter(
+            x, y, data=data,
+            alpha=marker_kws.pop('alpha', 0.4),
+            **marker_kws
+        )
     ax.plot(xe, mu_mean, label=label,
             c=line_kws.pop('color', line_kws.pop('c', 'C0')), **line_kws)
     ax.fill_between(xe, mu_pi[0], mu_pi[1],
@@ -1157,9 +1177,15 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
     ct = ct.reorder_levels([hue, y]).sort_index()
 
     # Leverage Seaborn for basic setup
-    sns.pointplot(data=ct.reset_index(), x='coef', y=y, hue=hue,
-                  join=False, dodge=0.3, ax=ax)
+    # FIXME in seaborn 0.13.0, `dodge` ≠ False fails when there is only one
+    # model to plot. "float division by zero".
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', 'is_categorical_dtype')
+        sns.pointplot(data=ct.reset_index(), x='coef', y=y, hue=hue,
+                      join=False, dodge=0.3, ax=ax)
 
+    # FIXME get coords is broken
+    # warnings.warn('get_coords broken in Seaborn 0.13.0. No errorbars shown.')
     # Find the x,y coordinates for each point
     xc, yc, colors = get_coords(ax)
 
@@ -1293,6 +1319,7 @@ def compare(models, mnames=None, ic='WAIC', sort=False):
     return dict(ct=df, dSE_matrix=dSE)
 
 
+# TODO transpose flag to match book figures with WAIC on x-axis.
 def plot_compare(ct, fignum=None):
     """Plot the table of information criteria from `sts.compare`.
 
@@ -1321,9 +1348,15 @@ def plot_compare(ct, fignum=None):
         ic = 'PSIS'
 
     # Leverage Seaborn for basic setup
-    sns.pointplot(data=ct.reset_index(), y=ic, x='model', hue='var',
-                  join=False, dodge=0.3, ax=ax)
+    # FIXME in seaborn 0.13.0, `dodge` ≠ False fails when there is only one
+    # model to plot. "float division by zero".
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', 'is_categorical_dtype')
+        sns.pointplot(data=ct.reset_index(), y=ic, x='model', hue='var',
+                      join=False, dodge=0.3, ax=ax)
 
+    # FIXME get_coords is broken
+    # warnings.warn('get_coords broken in Seaborn 0.13.0. No errorbars shown.')
     # Find the x,y coordinates for each point
     xc, yc, colors = get_coords(ax)
 
@@ -1346,6 +1379,11 @@ def plot_compare(ct, fignum=None):
     return fig, ax
 
 
+# FIXME seaborn 0.13.0 breaks this code.
+# ax.collection is now empty, and ax.lines has the data we want as Line2D
+# objects. See:
+# <https://matplotlib.org/stable/api/_as_gen/matplotlib.lines.Line2D.html>
+# and get_data, get_[xy]data, get_markerfacecolor, etc. methods.
 def get_coords(ax):
     """Return the x, y, and color coordinates of the axes."""
     pts = [
@@ -1411,7 +1449,8 @@ def frame_to_dataset(df, model=None):
     the_dict = dict()
     for v in var_names:
         # Add 'chain' dimension to match expected shape
-        the_dict[v] = np.expand_dims(df.filter(like=v).values, 0)
+        cols = df.filter(regex=fr"^{v}(__\d+)?$")
+        the_dict[v] = np.expand_dims(cols.values, 0)
     ds = az.convert_to_dataset(the_dict)
     # Remove dims for scalar variables with shape ()
     shapes = model.eval_rv_shapes()
@@ -1554,7 +1593,7 @@ def loglikelihood(model, post=None, var_names=None, eval_at=None, Ns=1000):
 
 
 def deviance(model=None, loglik=None, post=None, var_names=None, eval_at=None,
-        Ns=1000):
+             Ns=1000):
     """Compute the deviance as -2 * lppd."""
     the_lppd = lppd(
         model=model,
@@ -1667,7 +1706,6 @@ def DIC(model, post=None, Ns=1000):
     return dict({'dic': dev_hat + 2*pD, 'pD': pD})
 
 
-# TODO return a dataframe when pointwise=True, Series otherwise?
 def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
          Ns=1000, pointwise=False):
     r"""Compute the Widely Applicable Information Criteria for the model.
@@ -1739,11 +1777,15 @@ def WAIC(model=None, loglik=None, post=None, var_names=None, eval_at=None,
         waic_vec = -2 * (the_lppd[v] - penalty)
         n_cases = loglik[v].shape[1]
         std_err = (n_cases * np.var(waic_vec))**0.5
+
         if pointwise:
             lppd_w, w, p = the_lppd[v], waic_vec, penalty
         else:
             lppd_w, w, p = the_lppd[v].sum(), waic_vec.sum(), penalty.sum()
-        out[v] = dict(WAIC=w, lppd=lppd_w, penalty=p, SE=std_err)
+
+        d = dict(WAIC=w, lppd=lppd_w, penalty=p, SE=std_err)
+        out[v] = pd.DataFrame(d) if pointwise else pd.Series(d)
+
     return out
 
 
@@ -1799,12 +1841,14 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
             loo = az.loo(idata, pointwise=pointwise, var_name=v)
 
         elpd = loo.loo_i if pointwise else loo.elpd_loo
-        out[v] = dict(
+        d = dict(
             PSIS=-2*elpd,       # == loo_list$estimates['looic', 'Estimate']
             lppd=elpd,
             penalty=loo.p_loo,  # == loo_list$p_loo
             SE=2*loo.se,        # == loo_list$estimates['looic', 'SE']
         )
+        out[v] = pd.DataFrame(d) if pointwise else pd.Series(d)
+
     return out
 
 
@@ -1921,6 +1965,7 @@ def LOOCV(model, ind_var, obs_var, out_var, X_data, y_data,
     var = lppd_cv.var() if lno == 1 else lppd_cv.mean(axis=0).var()
     std_err = (N * var)**0.5
 
+    # TODO return DataFrame if pointwise, else Series
     return dict(
         loocv=-2*c,
         lppd=c,
@@ -2058,7 +2103,7 @@ def sim_train_test(
 
     # Compute the deviance
     res = pd.Series({('deviance', 'train'): -2 * np.sum(lppd_train),
-                     ('deviance', 'test'):  -2 * np.sum(lppd_test)})
+                     ('deviance',  'test'): -2 * np.sum(lppd_test)})
 
     # Compile Results
     if compute_WAIC:

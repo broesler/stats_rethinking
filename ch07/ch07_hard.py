@@ -203,7 +203,8 @@ for poly_order in range(1, Np+1):
 mean_samples = mean_samples.to_array(dim='poly_order')  # [Np, len(xe), Ns)
 weights = np.reshape(ct['weight'], (-1, 1, 1))  # (Np, 1, 1)
 
-weighted_model = (mean_samples * weights).sum('poly_order')  # weights are normalized to 1
+# weights are normalized to 1
+weighted_model = (mean_samples * weights).sum('poly_order')
 
 fig, ax = plt.subplots(num=5, clear=True, constrained_layout=True)
 
@@ -211,7 +212,7 @@ fig, ax = plt.subplots(num=5, clear=True, constrained_layout=True)
 p_best = ct['WAIC'].idxmin()
 quap = models[int(p_best)]
 mu_samp_best = sts.lmeval(quap, out=quap.model.μ, eval_at={'ind': xe_s},
-                     params=[quap.model.α, quap.model.βn])
+                          params=[quap.model.α, quap.model.βn])
 
 sts.lmplot(fit_x=xe, fit_y=mu_samp_best,
            q=0.97,
@@ -257,7 +258,7 @@ dev_test = pd.Series({
 dev_test.name = 'deviance'
 dev_test.index.name = 'model'
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         7H5: Compare the deviances to the WAIC values
 # -----------------------------------------------------------------------------
 cmp_test = pd.concat([dev_test, ct['WAIC']], axis='columns')
@@ -282,7 +283,7 @@ print(cmp_test)
 # number of parameters, as expected, although the models with {4, 5, 6}
 # parameters are quite similar.
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         7H6: Stronger regularizing priors
 # -----------------------------------------------------------------------------
 model_strong = poly_model(6, data=train, priors='strong')
@@ -328,7 +329,7 @@ dev_strong = sts.deviance(
 print(f"\n{dev_strong - dev_test[p_best] = :.2f}")  # ≈ 7.00
 
 # NOTE The regularized deviance is only a bit worse than the best WAIC model
-# from before. It is enough to differentiate the model from the 
+# from before. It is enough to differentiate the model from the
 
 
 plt.ion()
