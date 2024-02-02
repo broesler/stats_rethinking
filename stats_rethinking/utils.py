@@ -21,6 +21,7 @@ import uuid
 import warnings
 import xarray as xr
 
+from abc import ABC
 from arviz.data.base import generate_dims_coords
 from contextlib import contextmanager
 from copy import deepcopy
@@ -333,13 +334,13 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
         A DataFrame with a row for each variable, and columns for mean,
         standard deviation, and low/high percentiles of the variable.
     """
-    if not isinstance(obj, (Quap, xr.Dataset, pd.DataFrame, np.ndarray)):
-        raise TypeError(f"quap of type '{type(quap)}' is unsupported!")
+    if not isinstance(obj, (PostModel, xr.Dataset, pd.DataFrame, np.ndarray)):
+        raise TypeError(f"`obj` of type '{type(obj)}' is unsupported!")
 
     a = (1-p)/2
     pp = 100*np.array([a, 1-a])  # percentages for printing
 
-    if isinstance(obj, Quap):
+    if isinstance(obj, PostModel):
         title = None
         # Compute density intervals
         coef = dataset_to_series(obj.coef)
@@ -348,6 +349,13 @@ def precis(obj, p=0.89, digits=4, verbose=True, hist=True):
         hi = coef + z * obj.std
         df = pd.concat([coef, obj.std, lo, hi], axis=1)
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
+        if isinstance(obj, Ulam):
+            # Get number of effective observations
+            tf = az.summary(obj.samples)
+            # Fix automatic index names to match df
+            tf.index = tf.index.str.replace('[', '__').str.replace(']', '')
+            df['ess'] = tf['ess_bulk'].astype(int)
+            df['R_hat'] = tf['r_hat']
         # if hist:
         #     df['histogram'] = sparklines_from_norm(df['mean'], df['std'])
 
@@ -449,15 +457,18 @@ def sparklines_from_array(arr, width=12):
     return sparklines
 
 
+# -----------------------------------------------------------------------------
+#         Quap functions
+# -----------------------------------------------------------------------------
 # TODO
 # * make all attributes read-only? quap() call populates struct.
 # * can require kwargs on __init__, then use those values to compute self._std,
 #   etc. so that the property just returns that value without doing
 #   a computation each time it is called.
+# * move `map_est` to Quap only.
 
-class Quap():
-    """The quadratic (*i.e.* Gaussian) approximation of the posterior.
-
+class PostModel(ABC):
+    """
     Attributes
     ----------
     coef : dict
@@ -472,13 +483,15 @@ class Quap():
         Maximum *a posteriori* estimates of any Deterministic or Potential
         variables.
     loglik : float
-        The log-likelihood of the model parameters.
+        The minus log-likelihood of the data, given the model parameters.
     model : :class:`pymc.Model`
         The pymc model object used to define the posterior.
     start : dict
         Initial parameter values for the MAP optimization. Defaults to
         `model.initial_point`.
     """
+    _descrip = ""
+
     def __init__(self, *, coef=None, cov=None, data=None, map_est=None,
                  loglik=None, model=None, start=None):
         self.coef = coef
@@ -502,15 +515,15 @@ class Quap():
         )
         return D @ self.cov @ D
 
-    def sample(self, N=10_000):
-        """Sample the posterior approximation.
+    def get_samples(self):
+        """Get samples from the posterior distribution.
 
-        Analagous to `rethinking::extract.samples`.
+        .. note::
+            For quadratic approximations, these samples will be drawn with this
+            function call. For MCMC models, the samples will already be stored
+            in the object, so this function just returns them.
         """
-        mean = flatten_dataset(self.coef).values
-        posterior = stats.multivariate_normal(mean=mean, cov=self.cov)
-        df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
-        return frame_to_dataset(df, model=self.model).mean('chain')
+        pass
 
     def sample_prior(self, N=10_000):
         """Sample the prior distribution.
@@ -518,7 +531,7 @@ class Quap():
         Analagous to `rethinking::extract.prior`.
         """
         idata = pm.sample_prior_predictive(samples=N, model=self.model)
-        return idata.prior.mean('chain')
+        return idata.prior.stack(sample=('chain', 'draw'))
 
     def deviance(self):
         """Return the deviance of the model."""
@@ -549,6 +562,7 @@ class Quap():
             self.model.named_vars[k].name = v
         return self
 
+    # TODO allow subclasses to provide "description" line in `out`?
     def __str__(self):
         with pd.option_context('display.float_format', '{:.4f}'.format):
             try:
@@ -559,7 +573,7 @@ class Quap():
 
         # FIXME indentation. inspect.cleandoc() fails because the
         # model.str_repr() is not always aligned left.
-        out = f"""Quadratic Approximate Posterior Distribution
+        out = f"""{self._descrip}
 
 Formula:
 {self.model.str_repr()}
@@ -575,23 +589,112 @@ Log-likelihood: {self.loglik:.2f}
         return f"<{self.__class__.__name__}: {self.__str__()}>"
 
 
+class Quap(PostModel):
+    _descrip = "Quadratic-approximate posterior"
+    __doc__ = _descrip + "\n" + PostModel.__doc__
+
+    def sample(self, N=10_000):
+        """Sample the posterior approximation.
+
+        Analagous to `rethinking::extract.samples`.
+        """
+        mean = flatten_dataset(self.coef).values
+        posterior = stats.multivariate_normal(mean=mean, cov=self.cov)
+        df = pd.DataFrame(posterior.rvs(N), columns=self.cov.index)
+        return frame_to_dataset(df, model=self.model).mean('chain')
+
+    def get_samples(self, N=1000):
+        return self.sample(N)
+
+
+class Ulam(PostModel):
+    _descrip = "Hamiltonian Monte Carlo approximation."
+    __doc__ = _descrip + "\n" + PostModel.__doc__
+
+    def __init__(self, samples=None, **kwargs):
+        super().__init__(**kwargs)
+        self.samples = samples
+
+    def get_samples(self, N=1000):
+        # TODO currently ignoring `N` argument.
+        return self.samples
+
+    # NOTE unlike rethinking::traceplot, pymc discards the warmup samples by
+    # default, and only returns the valid samples. We could write a function
+    # that mimics rethinking::traceplot, using:
+    # >>> idata = pm.sample(..., discard_tuned_samples=False)
+    # >>> all_post = xr.concat([idata.warmup_posterior, idata.posterior],
+    #                          dim='concat_dim')
+    # >>> az.plot_trace(all_post) 
+    # or something to that effect.
+    #
+    def plot_trace(self, title=None):
+        """Plot the MCMC sample chains for each parameter.
+
+        Parameters
+        ----------
+        title : str, optional
+            The title of the figure.
+
+        Returns
+        -------
+        fig : plt.Figure
+            The figure handle containing the trace plots.
+        axes : ndarray of plt.Axes
+            An array corresponding to the axes of each trace plot.
+        """
+        p = az.plot_trace(self.samples)
+        fig = p[0, 0].figure
+        fig.suptitle(title)
+        return fig, p
+
+    def pairplot(self, title=None, **kwargs):
+        """Plot the pairwise correlations between the model parameters.
+
+        Parameters
+        ----------
+        title : str, optional
+            The title of the figure.
+        kwargs : dict, optional
+            Additional arguments to be passed to `seaborn.pairplot()`.
+
+        Returns
+        -------
+        grid : seaborn.PairGrid
+            Returns the underlying instance for further tweaking.
+        """
+        opts = dict(
+            corner=True,
+            diag_kind='kde',
+            plot_kws=dict(s=10, alpha=0.2),
+            height=1.5,
+        )
+        if kwargs is not None:
+            opts.update(kwargs)
+        g = sns.pairplot(dataset_to_frame(self.samples), **opts)
+        g.figure.suptitle(title)
+        return g
+
+
 def quap(vars=None, var_names=None, model=None, data=None, start=None):
     """Compute the quadratic approximation for the MAP estimate.
 
     Parameters
     ----------
     vars : list, optional, default=model.unobserved_RVs
-        List of variables to optimize and set to optimum
+        List of variables to optimize and set to optimum.
     var_names : list, optional
-        List of `str` of variables names specified by `model`
+        List of `str` of variables names specified by `model`. If `vars` is
+        given, `var_names` will be ignored.
     model : pymc.Model (optional if in `with` context)
+    data : pd.DataFrame, optional
+        The data to which this model was fit.
     start : `dict` of parameter values, optional, default=`model.initial_point`
 
     Returns
     -------
-    result : dict
-        Dictionary of `scipy.stats.rv_frozen` distributions corresponding to
-        the MAP estimates of `vars`.
+    result : Quap
+        Object containing information about the posterior parameter values.
     """
     model = pm.modelcontext(model)
 
@@ -635,6 +738,7 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
             # warnings.warn(f"Hessian for '{v.name}' may be incorrect!")
             continue
 
+    # TODO clean up and get rid of these temp variables
     # Filter variables for output
     free_vars = model.free_RVs
     dnames = [x.name for x in model.deterministics]
@@ -659,6 +763,85 @@ def quap(vars=None, var_names=None, model=None, data=None, start=None):
         loglik=opt.fun,  # equivalent of sum(loglik(model, pointwise=False))
         model=deepcopy(model),
         start=model.initial_point() if start is None else start,
+    )
+
+
+# TODO
+# * remove mean('chain') calls. These should be converted to:
+#       ds = ds.stack(sample=('chain', 'draw')).transpose('sample', ...)
+# * get desired number of samples from chains?
+def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs):
+    """Compute the quadratic approximation for the MAP estimate.
+
+    Parameters
+    ----------
+    vars : list of TensorVariables, optional, default=model.free_RVs
+        List of variables to optimize and set to optimum.
+    var_names : list of str, optional
+        List of `str` of variables names specified by `model`.
+    model : pymc.Model (optional if in `with` context)
+    data : pd.DataFrame, optional
+        The data to which this model was fit.
+    start : dict[str] -> ndarray, optional, default=`model.initial_point`
+        Dictionary of initial parameter values. Keys should be names of random
+        variables in the model.
+    **kwargs : dict
+        Additional argumements to be passed to `pymc.sample()`.
+
+    Returns
+    -------
+    result : Ulam
+        Object containing information about the posterior parameter values.
+    """
+    sample_dims = ('chain', 'draw')
+    model = pm.modelcontext(model)
+    idata = pm.sample(
+        model=model,
+        initvals=start,
+        idata_kwargs=dict(log_likelihood=True),
+        **kwargs
+    )
+
+    # Get requested variables
+    if vars is None and var_names is None:
+        # filter out internally used variables
+        var_names = [x.name for x in model.free_RVs
+                     if not x.name.endswith('__')]
+    else:
+        if var_names is not None:
+            warnings.warn("`var_names` and `vars` set, ignoring `var_names`.")
+        var_names = [x.name for x in vars]
+
+    # Get the posterior samples
+    post = idata.posterior[list(var_names)]
+
+    # Coefficient values are just the mean of the samples
+    coef = post.mean(sample_dims)
+
+    # Compute the covariance matrix from the samples
+    cov = dataset_to_frame(
+        post
+        .stack(sample=sample_dims)
+        .transpose('sample', ...)
+    ).cov()
+
+    # Get the minus log likelihood of the data
+    loglik = float(
+        -idata
+        .log_likelihood
+        .mean(sample_dims)
+        .sum()
+        .to_dataarray()  # convert to be able to extract singleton value
+    )
+
+    return Ulam(
+        coef=coef,
+        cov=cov,
+        data=deepcopy(data),
+        loglik=loglik,
+        model=deepcopy(model),
+        start=model.initial_point() if start is None else start,
+        samples=post,
     )
 
 
@@ -953,6 +1136,9 @@ def _makeiter(a):
     return a if isinstance(a, (tuple, list)) else [a]
 
 
+# -----------------------------------------------------------------------------
+#         Model-building
+# -----------------------------------------------------------------------------
 def norm_fit(data, hist_kws=None, ax=None):
     """Plot a histogram and a normal curve fit to the data."""
     if ax is None:
@@ -1089,6 +1275,9 @@ def bspline_basis(t, x=None, k=3, padded_knots=False):
         return B
 
 
+# -----------------------------------------------------------------------------
+#         Model comparison
+# -----------------------------------------------------------------------------
 def coef_table(models, mnames=None, params=None, std=True):
     """Create a summary table of coefficients in each model.
 
@@ -1184,14 +1373,14 @@ def plot_coef_table(ct, q=0.89, by_model=False, fignum=None):
         sns.pointplot(data=ct.reset_index(), x='coef', y=y, hue=hue,
                       join=False, dodge=0.3, ax=ax)
 
-    # FIXME get coords is broken
+    # FIXME get_coords is broken
     # warnings.warn('get_coords broken in Seaborn 0.13.0. No errorbars shown.')
     # Find the x,y coordinates for each point
     xc, yc, colors = get_coords(ax)
 
     # Manually add the errorbars since we have std values already
     z = stats.norm.ppf(1 - (1 - q)/2)
-    errs = 2 * ct['std'] * z  # ± err -> 2 * ...
+    errs = 2 * ct['std'] * z  # ± err -> 2σz
     errs = errs.dropna()
     ax.errorbar(xc, yc, fmt=' ', xerr=errs, ecolor=colors)
 
@@ -1397,7 +1586,7 @@ def get_coords(ax):
 
 
 # -----------------------------------------------------------------------------
-#         Utilities
+#         Dataset/Frame conversion utilities
 # -----------------------------------------------------------------------------
 logsumexp = _logsumexp
 
@@ -1424,6 +1613,8 @@ def flatten_dataset(ds):
     return ds.to_stacked_array('data', sample_dims=[], name='data')
 
 
+# TODO change to use [0], [1], etc. instead of __0, __1? This format would be
+# consistent with both r::rethinking and `arviz.summary(idata)` presentation.
 def cnames_from_dataset(ds):
     """Return a list of variable names from the flattened Dataset."""
     da = flatten_dataset(ds)
@@ -1460,9 +1651,14 @@ def frame_to_dataset(df, model=None):
     return ds
 
 
+# TODO Filter variable names? include/exclude?
 def dataset_to_frame(ds):
     """Convert ArviZ Dataset to DataFrame by separating columns with
     multi-dimensional parameters, e.g. β (N,) into β__0, β__1, ..., β__N.
+
+    .. note::
+        This function assumes that the first dimension of a multidimensional
+        DataArray is the `index` dimension.
 
     Parameters
     ----------
@@ -1478,21 +1674,28 @@ def dataset_to_frame(ds):
     if 'chain' in ds.dims:
         ds = ds.mean('chain')
 
-    df = pd.DataFrame()
+    dfs = list()
     for vname, da in ds.items():
         if da.ndim == 1:
-            df[vname] = da.values
+            data = da.values
+            columns = [vname]
         elif da.ndim > 1:
             if da.shape[1] == 1:
-                df[vname] = da.values.squeeze()
+                data = da.values.squeeze()
+                columns = [vname]
             else:
-                df[_names_from_vec(vname, da.shape[1])] = da.values
+                data = da.values
+                columns = _names_from_vec(vname, da.shape[1])
         else:
             raise ValueError(f"{vname} has invalid dimension {da.ndim}.")
+
+        dfs.append(pd.DataFrame(data=data, columns=columns))
+
+    df = pd.concat(dfs, axis=1)
+    df.index.name = da.dims[0]
     return df
 
 
-# TODO NOT USED other than one test. Remove.
 def _names_from_vec(vname, ncols):
     """Create a list of strings ['x__0', 'x__1', ..., 'x__``ncols``'],
     where 'x' is ``vname``."""
@@ -1542,7 +1745,7 @@ def inference_data(model, post=None, var_names=None, eval_at=None, Ns=1000):
     """
     if post is None:
         Ns = int(Ns)
-        post = model.sample(Ns)
+        post = model.get_samples(Ns)
 
     if 'chain' not in post.dims:
         post = post.expand_dims('chain', axis=0)
@@ -1698,7 +1901,7 @@ def DIC(model, post=None, Ns=1000):
     [1]: Gelman (2020). Bayesian Data Analysis, 3 ed. pp 172--173.
     """
     if post is None:
-        post = model.sample(Ns)
+        post = model.get_samples(Ns)
     f_loglik = model.model.compile_logp()
     dev = [-2 * f_loglik(post.iloc[i]) for i in range(Ns)]
     dev_hat = model.deviance
