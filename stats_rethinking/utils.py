@@ -289,6 +289,7 @@ def density(data, adjust=0.5, **kwargs):
     return kde
 
 
+# TODO docstring
 def plot_density(data, ax=None, **kwargs):
     if ax is None:
         ax = plt.gca()
@@ -320,6 +321,7 @@ def expand_grid(**kwargs):
 
 # TODO
 #   * expand documentation with examples
+#   * Implement `omit` kwarg like r::rethinking::precis (R code 12.35)
 #   * remove dependence on input type. pd.DataFrame.from_dict? or kwarg?
 #       R version uses a LOT of "setMethod" calls to allow function to work
 #       with many different datatypes.
@@ -328,7 +330,7 @@ def expand_grid(**kwargs):
 #   * other option: split these blocks into individual `_precis_dataset()`
 #     functions and the main is just a dispatcher.
 #
-def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
+def precis(obj, q=0.89, digits=4, verbose=True, hist=True, filter_kws=None):
     """Return a `DataFrame` of the mean, standard deviation, and percentile
     interval of the given `rv_frozen` distributions.
 
@@ -342,6 +344,8 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
         Number of digits in the printed output if `verbose=True`.
     verbose : bool
         If True, print the output.
+    filter_kws : dict of {'items', 'like', 'regex'} -> str
+        Dictionary of a single kwarg from `pd.filter`. Acts on the rows.
 
     Returns
     -------
@@ -421,6 +425,9 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
         if hist:
             df['histogram'] = sparklines_from_array(obj)
 
+    if filter_kws is not None:
+        df = df.filter(**filter_kws, axis='rows')
+
     if verbose:
         if title is not None:
             print(title)
@@ -432,9 +439,10 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True):
     return df
 
 
-def plot_precis(obj, mname='model', q=0.89, fignum=None, labels=None):
+def plot_precis(obj, mname='model', q=0.89,
+                fignum=None, labels=None, filter_kws=None):
     """Plot the `precis` output of the object like a `coef_table`."""
-    ct = precis(obj, q=q, verbose=False, hist=False)
+    ct = precis(obj, q=q, verbose=False, hist=False, filter_kws=filter_kws)
     if labels is not None:
         ct.index = labels
     # Convert to "coef table" for plotting. Expects:
@@ -679,11 +687,16 @@ class Ulam(PostModel):
         fig.suptitle(title)
         return fig, p
 
-    def pairplot(self, title=None, **kwargs):
+    def pairplot(self, var_names=None, labels=None, title=None, **kwargs):
         """Plot the pairwise correlations between the model parameters.
 
         Parameters
         ----------
+        var_names : list of str, optional
+            A list of variable names to plot.
+        labels : list of str, optional
+            A list of the variable names to use on the plot, e.g., for a vector
+            variable β[0], β[1], ..., β[N] -> 'A', 'B', ..., 'G'.
         title : str, optional
             The title of the figure.
         kwargs : dict, optional
@@ -700,10 +713,25 @@ class Ulam(PostModel):
             plot_kws=dict(s=10, alpha=0.2),
             height=1.5,
         )
-        if kwargs is not None:
-            opts.update(kwargs)
-        g = sns.pairplot(dataset_to_frame(self.samples), **opts)
+        opts.update(kwargs)
+
+        # Plot samples from the posterios
+        post = self.get_samples()
+
+        # Filter by variable names
+        if var_names is not None:
+            post = post[var_names]
+
+        # Expand and re-label any vector variables
+        df = dataset_to_frame(post)
+
+        if labels is not None:
+            df.columns = labels
+
+        # Make the plot
+        g = sns.pairplot(df, **opts)
         g.figure.suptitle(title)
+
         return g
 
 
@@ -942,7 +970,8 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         raise ValueError(f"Variable '{out}' does not exist in the model!")
 
     if params is None:
-        params = inputvars(out)
+        params = [x for x in inputvars(out) 
+                  if x not in fit.model.deterministics]
 
     if dist is None:
         dist = fit.get_samples(N)  # take the posterior
@@ -969,6 +998,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
                                  "(2) ('chain', 'draw'), or "
                                  "(3) 'sample' == ('chain', 'draw').")
 
+    # TODO `progress_bar` kwarg + tqdm on this operation
     # Manual loop since out_func cannot be vectorized.
     out_samp = np.fromiter(
         (
@@ -982,11 +1012,18 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
         dtype=np.dtype((float, out.shape.eval())),
     )  # (draw, out.shape)
 
+    # Retain ('chain', 'draw') dimensions for consistency
+    #   TODO This will be a big refactor of many early scripts that rely on using
+    #   the first dimension, or 'draw' simension. Consider creating a `flatten`
+    #   kwarg that defaults to True?
+    N_chains, N_draws = dist.coords['chain'].size, dist.coords['draw'].size
+    out_samp = out_samp.reshape((N_chains, N_draws, -1))
+
     # Build the coordinates in order of the out_samp dimensions
-    coords = dict(draw=range(out_samp.shape[0]))
+    coords = dict(chain=range(N_chains), draw=range(N_draws))
     coords.update({
         f"{out.name}_dim_{i}": range(x)
-        for i, x in enumerate(out_samp.shape[1:])
+        for i, x in enumerate(out_samp.shape[2:])
     })
 
     return xr.DataArray(out_samp, coords=coords)
@@ -999,6 +1036,7 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
 #   - see ch11/11H4.py
 # * add option for discrete variables, or another function?
 #   - see ch11/11H3.py
+#   - see sts.postcheck below!!
 # * split into 2 functions for (fit_x, fit_y) and (quap, mean_var)?
 def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
            x=None, y=None, data=None,
@@ -1106,7 +1144,7 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     # Compute mean and error
     sample_dims = ('chain', 'draw') if 'chain' in mu_samp.dims else 'draw'
     mu_mean = mu_samp.mean(sample_dims)
-    mu_pi = percentiles(mu_samp, q=q, axis=mu_samp.get_axis_num(sample_dims))
+    mu_pi = percentiles(mu_samp, q=q, dim=sample_dims)
 
     if unstd:
         xe = unstandardize(xe, data[x])
@@ -1134,8 +1172,8 @@ def lmplot(quap=None, mean_var=None, fit_x=None, fit_y=None,
     return ax
 
 
-def postcheck(fit, mean_name, agg_name=None,
-              major_group=None, minor_group=None,
+def postcheck(fit, mean_name, mean_transform=None,
+              agg_name=None, major_group=None, minor_group=None,
               N=1000, q=0.89, fignum=None):
     """Plot the discrete observed data and the posterior predictions.
 
@@ -1145,7 +1183,9 @@ def postcheck(fit, mean_name, agg_name=None,
         The model to which the data is fitted. The model must have a ``data``
         attribute containing a `dict`-like structure.
     mean_name : str, optional
-        THe name of the variable which represents the mean of the outcome.
+        The name of the variable which represents the mean of the outcome.
+    mean_transform : callable, optional
+        A function by which to transform the mean variable values. 
     agg_name : str, optional
         The name of the variable over which the data is aggregated.
     major_group, minor_group : str, optional
@@ -1167,6 +1207,8 @@ def postcheck(fit, mean_name, agg_name=None,
     if minor_group and major_group is None:
         raise ValueError('Cannot provide `minor_group` without `major_group`.')
 
+    sample_dims = ('chain', 'draw')
+
     df = fit.data.copy()  # avoid changing structure
 
     y = fit.model.observed_RVs[0].name
@@ -1181,6 +1223,9 @@ def postcheck(fit, mean_name, agg_name=None,
         dist=post,
     )
 
+    if mean_transform is not None:
+        pred = mean_transform(pred)
+
     sims = lmeval(
         fit,
         out=fit.model[y],
@@ -1188,11 +1233,11 @@ def postcheck(fit, mean_name, agg_name=None,
         dist=post,
     )
 
-    μ = pred.mean('draw')
+    μ = pred.mean(sample_dims)
 
     a = (1 - q) / 2
-    μ_PI = pred.quantile([a, 1-a], dim='draw')
-    y_PI = sims.quantile([a, 1-a], dim='draw')
+    μ_PI = pred.quantile([a, 1-a], dim=sample_dims)
+    y_PI = sims.quantile([a, 1-a], dim=sample_dims)
 
     if agg_name is not None:
         yv /= df[agg_name]
@@ -1205,6 +1250,7 @@ def postcheck(fit, mean_name, agg_name=None,
     ax.errorbar(xv, μ, yerr=np.abs(μ_PI - μ), c='k',
                 ls='none', marker='o', mfc='none', mec='k', label='pred')
     ax.scatter(np.tile(xv, (2, 1)), y_PI, marker='+', c='k', label='y PI')
+
     # Plot the data
     ax.scatter(xv, yv, c='C0', label='data', zorder=10)
 
@@ -1243,8 +1289,13 @@ def postcheck(fit, mean_name, agg_name=None,
         # TODO compute right edge of each group
         for x in xind + 1.5:
             ax.axvline(x, lw=1, c='k')
+    elif agg_name:
+        ax.set_xticks(xv)
+        ax.set_xticklabels(df[agg_name])
+        ax.set_xlabel(agg_name)
 
     return ax
+
 
 # -----------------------------------------------------------------------------
 #         Graph Utilities
@@ -1323,17 +1374,22 @@ def norm_fit(data, hist_kws=None, ax=None):
     return ax
 
 
-def standardize(x):
+def standardize(x, data=None):
     """Standardize the input vector `x` by the mean and std of `data`.
 
     .. note::
-        The following lines are equivalent:
+        Both numpy and xarray use `ddof=0` as the default, whereas pandas
+        defaults to `ddof=1`.
+
+        If `x` is a `pd.Series`, the following lines are equivalent:
                            (x - x.mean()) / x.std() == stats.zscore(x, ddof=1)
         (N / (N-1))**0.5 * (x - x.mean()) / x.std() == stats.zscore(x, ddof=0)
-        where N = x.size
+        where N = x.size.
     """
-    center = x.mean()
-    scale = x.std()
+    if data is None:
+        data = x
+    center = np.mean(data)
+    scale = np.std(data)
     z = (x - center) / scale
     if hasattr(z, 'attrs'):
         z.attrs = {'center': center, 'scale': scale}
@@ -1362,8 +1418,8 @@ def unstandardize(x, data=None):
             raise ValueError(("Must provide `data` or ",
                               "`x.attrs = {'center': float, 'scale': float}"))
     else:
-        center = data.mean()
-        scale = data.std()
+        center = np.mean(data)
+        scale = np.std(data)
     return center + scale * x
 
 
@@ -1482,9 +1538,8 @@ def coef_table(models, mnames=None, params=None, hist=False):
     if params is not None:
         # Silly workaround since df.filter does not work on MultiIndex.
         df = df.reset_index(level='model')
-        for p in params:
-            df = df.filter(regex=rf"^{p}([\d+])?", axis='rows')
-        df = df.set_index('model', append=True)
+        tf = [df.filter(regex=rf"^{p}([\d+])?", axis='rows') for p in params]
+        df = pd.concat(tf).set_index('model', append=True)
     return df.sort_index()
 
 
@@ -1775,6 +1830,54 @@ def get_coords(ax):
     ]
     xc, yc, colors = [np.asarray(x) for x in zip(*pts)]
     return xc, yc, colors
+
+
+def simplehist(x, ax=None, **kwargs):
+    """Plot a histogram of an integer-valued array.
+
+    Parameters
+    ----------
+    x : (N,) array_like or sequence of (N,) arrays
+        Input values. This argument takes either a single array or a sequence
+        of arrays which are not required to be of the same length.
+    ax : Axes, optional
+        The axes in which to plot the histogram.
+
+    Returns
+    -------
+    n : array or list of arrays
+        The values of the histogram bins.
+    bins : array
+        The edges of the bins. Length nbins + 1. Always a single array even
+        when multiple data sets are passed in.        
+    patches : 
+        Container of individual artists used to create the histogram or list of
+        such containers if there are multiple input datasets.
+
+    Other Parameters
+    ----------------
+    *args, **kwargs
+        Arguments passed to `matplotlib.pyplot.hist`.
+
+    See Also
+    --------
+    matplotlib.pyplot.hist, numpy.histogram
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    # Set defaults
+    opts = dict(alpha=0.6, ec='k')
+    opts.update(kwargs)
+
+    # bins = [0, ..., 6] - 0.5 = [-0.5, 0.5, ..., 5.5]
+    min_bin = np.floor(np.min(x))
+    max_bin = np.ceil(np.max(x))
+
+    ax.set_xticks(np.arange(min_bin, max_bin + 1))
+    bins = np.arange(min_bin, max_bin + 2) - 0.5
+
+    return ax.hist(x, bins=bins, **opts)
 
 
 # -----------------------------------------------------------------------------

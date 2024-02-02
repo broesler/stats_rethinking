@@ -72,6 +72,7 @@ ax = sts.postcheck(
     minor_group='gender',
     fignum=1
 )
+ax.set_title('Model by Gender Only')
 
 N_depts = len(df['dept'].cat.categories)
 
@@ -147,6 +148,7 @@ ax = sts.postcheck(
     minor_group='gender',
     fignum=2
 )
+ax.set_title('Model by Department and Gender')
 
 
 plt.ion()

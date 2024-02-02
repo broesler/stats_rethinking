@@ -134,7 +134,7 @@ sts.precis(quap5_9)
 ct = sts.coef_table(models=[quap5_9], mnames=['m5.9'], params=['α'])
 
 labels = {
-    f"α__{i}": rf"$\alpha_{i}$: {x}"
+    f"α[{i}]": rf"$\alpha_{i}$: {x}"
     for i, x in enumerate(df['clade'].cat.categories)
 }
 ct = ct.rename(labels, level='param')
@@ -169,9 +169,10 @@ print('Multi-category model 5.10:')
 sts.precis(quap5_10)
 
 ct = sts.coef_table(models=[quap5_10], mnames=['m5.10'], params=['α', 'h'])
+
 # Update labels for easier reading
 labels |= {
-    f"h__{i}": rf"$h_{i}$: {x}"
+    f"h[{i}]": rf"$h_{i}$: {x}"
     for i, x in enumerate(df['house'].cat.categories)
 }
 ct = ct.rename(labels, level='param')

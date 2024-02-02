@@ -44,6 +44,8 @@ df = pd.read_csv(Path('../data/Kline.csv'))
 # memory usage: 532.0 bytes
 
 # (R code 11.40)
+# allow model evaluation at arbitrary values
+df['population'] = df['population'].astype(float)
 df['P'] = sts.standardize(np.log(df['population']))
 df['contact_id'] = (df['contact'] == 'high').astype(int)
 
@@ -55,8 +57,8 @@ xs = np.linspace(0, 100, 200)
 
 # (R code 11.41-43)
 # NOTE r::dlnorm(x, meanlog, sdlog) -> s = sdlog, scale = np.exp(meanlog)
-α_weak = stats.lognorm.pdf(xs, 10)
-α_strong = stats.lognorm.pdf(xs, 0.5, scale=np.exp(3))
+α_weak = stats.lognorm.pdf(xs, scale=np.exp(0), s=10)
+α_strong = stats.lognorm.pdf(xs, scale=np.exp(3), s=0.5)
 
 fig, ax = plt.subplots(num=1, clear=True)
 ax.plot(xs, α_weak, 'k-', label=r'$\alpha \sim \mathcal{N}(0, 10)$')
@@ -65,7 +67,7 @@ ax.plot(xs, α_strong, 'C0-', label=r'$\alpha \sim \mathcal{N}(3, 0.5)$')
 ax.legend()
 ax.set(
     xlabel='Mean number of tools',
-    ylabel='Density',
+    ylabel=r'Density $e^\alpha$',
     xlim=(0, 100),
     ylim=(0, 0.08),
 )
@@ -165,35 +167,26 @@ with pd.option_context('display.precision', 2):
 # -----------------------------------------------------------------------------
 #         Plot model results with Pareto k values (R code 11.50)
 # -----------------------------------------------------------------------------
-loo = sts.LOOIS(m11_10, pointwise=True)['T']
-pk = loo['pareto_k'] / loo['pareto_k'].max()
-
-# Get mean predictions for low and high contact locales
-Ns = 1000
-Pseq = np.linspace(-1.4, 3, Ns)  # standardized scale
-
 # Un-standardized values on real scale
-pop_seq = np.exp(sts.unstandardize(np.linspace(-5, 3, Ns), np.log(df['population'])))
-
-# Sample the mean for each contact_id
-λ_samp = {
-    c:
-    sts.lmeval(
-        m11_10,
-        out=m11_10.model.λ,
-        eval_at=dict(P=Pseq, cid=c*np.ones_like(Pseq).astype(int)),
+Ns = 100
+Pseq = np.linspace(-5, 3, Ns)  # standardized scale
+pop_seq = np.exp(
+    sts.unstandardize(
+        Pseq,
+        np.log(df['population'])
     )
-    for c in [0, 1]
-}
+)  # natural scale
 
 
-def plot_data(ax, x, xv, topK=0):
+def plot_data(ax, model, x, xv, log_scale=True, topK=0):
     """Plot the data and mean fit, sized by the Pareto k value.
 
     Parameters
     ----------
     ax : Axes
         The axes in which to make the plot.
+    model : PostModel
+        The model to evaluate.
     x : str
         The name of the column of x-data.
     xv : array_like
@@ -205,13 +198,34 @@ def plot_data(ax, x, xv, topK=0):
     -------
     None
     """
+    # Get the scaling with the original data
+    def reset_data():
+        pm.set_data(
+            dict(P=df['P' if log_scale else 'population'],
+                 cid=df['contact_id']),
+            model=model.model
+        )
+
+    reset_data()
+    loo = sts.LOOIS(model, pointwise=True)['T']
+    pk = loo['pareto_k'] / loo['pareto_k'].max()
+
+    pop = Pseq if log_scale else pop_seq
+
+    # Closed circles for high contact, open circles for low contact
     ax.scatter(x, 'total_tools', data=df,
                ec='C0', fc=np.where(df['contact'] == 'high', 'C0', 'none'),
                s=1 + 10*np.exp(3*pk))
 
     for c, ls in zip([0, 1], ['--', '-']):
+        # Sample the mean
+        λ_samp = sts.lmeval(
+            model,
+            out=model.model.λ,
+            eval_at=dict(P=pop, cid=np.full_like(pop, c, dtype=int)),
+        )
         sts.lmplot(
-            fit_x=xv, fit_y=λ_samp[c],
+            fit_x=xv, fit_y=λ_samp,
             ax=ax,
             label=('high' if c else 'low') + ' contact',
             line_kws=dict(c='k', ls=ls),
@@ -228,14 +242,16 @@ def plot_data(ax, x, xv, topK=0):
                     ha='center', va='bottom')
 
     ax.spines[['top', 'right']].set_visible(False)
+    reset_data()
+    return
 
 
 # Make the plot
 fig, axs = plt.subplots(num=3, ncols=2, sharey=True, clear=True)
-fig.set_size_inches((12.8, 4.8), forward=True)
+fig.set_size_inches((10, 5), forward=True)
 
-plot_data(axs[0], x='P', xv=Pseq, topK=4)
-plot_data(axs[1], x='population', xv=pop_seq)
+plot_data(axs[0], model=m11_10, x='P', xv=Pseq, topK=4)
+plot_data(axs[1], model=m11_10, x='population', xv=pop_seq)
 
 # TODO dummy legend entries for the open/closed circles. Move inside plot_data.
 axs[0].legend(loc='upper left')
@@ -252,11 +268,10 @@ axs[1].set(
     xticks=[0, 50_000, 150_000, 250_000],
     xlim=(-10_000, 300_000),
 )
-
 axs[1].xaxis.set_major_formatter('{x:,d}')
 
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Create "scientific" model
 # -----------------------------------------------------------------------------
 # (R code 11.52)
@@ -283,7 +298,7 @@ with pm.Model() as model:
 
 # (R code 11.51)
 fig, ax = plt.subplots(num=4, clear=True)
-plot_data(ax, x='population', xv=pop_seq)
+plot_data(ax, model=m11_11, log_scale=False, x='population', xv=pop_seq)
 
 ax.legend(loc='lower right')
 ax.set(
@@ -291,14 +306,15 @@ ax.set(
     ylabel='total tools',
     xticks=[0, 50_000, 150_000, 250_000],
     xlim=(-10_000, 300_000),
-    ylim=(None, 90),
+    ylim=(0, 90),
 )
+ax.xaxis.set_major_formatter('{x:,d}')
 
 print(sts.coef_table([m11_11, m11_11x], ['11', '11x'], hist=True))
 print(sts.compare([m11_11, m11_11x], ['11', '11x'])['ct'])
 
 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
 #         Creat model with offset
 # -----------------------------------------------------------------------------
 # Simulate data with daily counts (R code 11.53)
@@ -314,7 +330,7 @@ exposure = np.r_[np.ones(N_days), np.repeat(days_week, N_weeks)]
 monastery = np.r_[np.zeros(N_days), np.ones(N_weeks)]
 
 tf = pd.DataFrame(dict(
-    y=np.r_[y_daily, y_weekly], 
+    y=np.r_[y_daily, y_weekly],
     days=exposure,
     monastery=monastery
 ))
