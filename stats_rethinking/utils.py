@@ -391,13 +391,14 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True, filter_kws=None):
             N_samples = obj.sizes['draw']
         title = (f"'DataFrame': {N_samples} obs."
                  f" of {len(obj.data_vars)} variables:")
-        mean = dataset_to_series(obj.mean(sample_dims))
-        std = dataset_to_series(obj.std(sample_dims))
-        quant = dataset_to_frame(obj.quantile([a, 1-a], dim=sample_dims)).T
+        tf = dataset_to_frame(obj)
+        mean = tf.mean()
+        std = tf.std()
+        quant = tf.quantile([a, 1-a]).T
         df = pd.concat([mean, std, quant], axis=1)
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
         if hist:
-            df['histogram'] = sparklines_from_dataframe(dataset_to_frame(obj))
+            df['histogram'] = sparklines_from_dataframe(tf)
 
     # DataFrame of data points
     if isinstance(obj, pd.DataFrame):
@@ -602,11 +603,12 @@ class PostModel(ABC):
 
     def __str__(self):
         with pd.option_context('display.float_format', '{:.4f}'.format):
-            try:
-                # remove "dtype: object" line from the Series repr
-                meanstr = repr(dataset_to_series(self.coef)).rsplit('\n', 1)[0]
-            except ValueError:
-                meanstr = repr(self.coef)
+            # try:
+            #     # remove "dtype: object" line from the Series repr
+            #     # FIXME displays as linear index for N-D variables. 
+            #     meanstr = repr(dataset_to_series(self.coef)).rsplit('\n', 1)[0]
+            # except ValueError:
+            meanstr = repr(self.coef)
 
             loglikstr = repr(self.loglik).rsplit('\n', 1)[0]
 
@@ -879,11 +881,7 @@ def ulam(vars=None, var_names=None, model=None, data=None, start=None, **kwargs)
     coef = post.mean(sample_dims)
 
     # Compute the covariance matrix from the samples
-    cov = dataset_to_frame(
-        post
-        .stack(sample=sample_dims)
-        .transpose('sample', ...)
-    ).cov()
+    cov = dataset_to_frame(post).cov()
 
     # Get the minus log likelihood of the data
     ds = (
