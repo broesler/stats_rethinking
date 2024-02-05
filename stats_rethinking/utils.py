@@ -2008,9 +2008,11 @@ def dataset_to_frame(ds):
         DataFrame with columns for each variable in the dataset. Vector
         variables will be separated into columns.
     """
-    # FIXME should use a MultiIndex ('chain', 'draw')?
+    if 'chain' not in ds.dims and 'draw' in ds.dims:
+        ds = ds.expand_dims('chain')
+
     if 'chain' in ds.dims:
-        ds = ds.mean('chain')
+        ds = ds.stack(sample=('chain', 'draw')).transpose('sample', ...)
 
     dfs = list()
     for vname, da in ds.items():
@@ -2022,8 +2024,20 @@ def dataset_to_frame(ds):
                 data = da.values.squeeze()
                 columns = [vname]
             else:
-                data = da.values
-                columns = _names_from_vec(vname, da.shape[1])
+                var_dims = [x for x in da.dims if f"{vname}_dim_" in x]
+                if len(var_dims) == 0:
+                    data = da.values
+                    columns = _names_from_vec(vname, da.shape[1])
+                else:
+                    tf = da.to_dataframe().unstack(var_dims)
+                    try:
+                        # NOTE this line fails if there is only one row in the
+                        # data because unstack returns a Series.
+                        tf = tf.drop(['chain', 'draw'], axis='columns')
+                    except KeyError as e:
+                        pass
+                    data = tf.values
+                    columns = _names_from_columns(tf)
         else:
             raise ValueError(f"{vname} has invalid dimension {da.ndim}.")
 
@@ -2037,9 +2051,32 @@ def dataset_to_frame(ds):
 def _names_from_vec(vname, ncols):
     """Create a list of strings ['x[0]', 'x[1]', ..., 'x[``ncols``]'],
     where 'x' is ``vname``."""
-    # TODO case of N-D variables
     return [f"{vname}[{i:d}]" for i in range(ncols)]
 
+
+def _names_from_columns(df):
+    """Create a list of strings ['var[0, 0]', 'var[0, 1]', ...] from the
+    MultiIndex columns of `df`.
+
+    Parameters
+    ----------
+    df : DataFrame with MultiIndex columns.
+        The input frame should have columns like:
+            [('var', 0, 0),
+             ('var', 0, 1),
+             ...,
+             ('var', M, N)].
+
+    Returns
+    -------
+    result : list of str
+        The column names converted to string format.
+    """
+    assert len(df.columns.levels) > 1
+    return [
+        str(name) + '[' + ', '.join([str(k) for k in idx]) + ']'
+        for name, *idx in df.columns
+    ]
 
 # -----------------------------------------------------------------------------
 #         Information Criteria Functions
