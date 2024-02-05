@@ -9,15 +9,12 @@
 """
 # =============================================================================
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import xarray as xr
 
 from pathlib import Path
-from scipy import stats
-from scipy.special import logit, expit
+from scipy.special import expit
 
 import stats_rethinking as sts
 

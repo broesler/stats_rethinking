@@ -1011,9 +1011,9 @@ def lmeval(fit, out, params=None, eval_at=None, dist=None, N=1000):
     )  # (draw, out.shape)
 
     # Retain ('chain', 'draw') dimensions for consistency
-    #   TODO This will be a big refactor of many early scripts that rely on using
-    #   the first dimension, or 'draw' simension. Consider creating a `flatten`
-    #   kwarg that defaults to True?
+    #   TODO This will be a big refactor of many early scripts that rely on
+    #   using the first dimension, or 'draw' simension. Consider creating
+    #   a `flatten` kwarg that defaults to True?
     N_chains, N_draws = dist.coords['chain'].size, dist.coords['draw'].size
     out_samp = out_samp.reshape((N_chains, N_draws, -1))
 

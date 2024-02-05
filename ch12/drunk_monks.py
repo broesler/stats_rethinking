@@ -13,9 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import xarray as xr
 
-from pathlib import Path
 from scipy import stats
 from scipy.special import expit
 
@@ -24,7 +22,7 @@ import stats_rethinking as sts
 np.random.seed(365)
 
 # (R code 12.7)
-# Define parameters 
+# Define parameters
 prob_drink = 0.2  # [%] 20% of days
 rate_work = 1.0   # [manuscript/day] average 1 manuscript per day
 

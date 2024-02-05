@@ -15,7 +15,7 @@ a backdoor to confounding the effect of education on response.
 """
 # =============================================================================
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
