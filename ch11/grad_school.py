@@ -12,6 +12,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import pymc as pm
+import seaborn as sns
 import xarray as xr
 
 from pathlib import Path
@@ -90,11 +91,11 @@ with pm.Model():
 print('m11.8:')
 sts.precis(m11_8)
 
-# (R code 11.33) Compute the contrasts
-post = m11_8.get_samples()
-diff_a = post['α'].diff('α_dim_0').squeeze()
-diff_p = expit(post['α']).diff('α_dim_0').squeeze()
-sts.precis(xr.Dataset(dict(diff_a=diff_a, diff_p=diff_p)))
+# (R code 11.33) Compute the contrasts by department
+post_D = m11_8.get_samples()
+diff_aD = post_D['α'].diff('α_dim_0').squeeze()
+diff_pD = expit(post_D['α']).diff('α_dim_0').squeeze()
+sts.precis(xr.Dataset(dict(diff_aD=diff_aD, diff_pD=diff_pD)))
 
 # (R code 11.34) Tabulate rates of admission across departments
 df['applications_p'] = (
@@ -111,7 +112,6 @@ pg = (
 
 print("pg:")
 print(pg)
-
 
 # NOTE why can't we just apply the transformation to one column of groupby!?
 # Want to be able to do something like:
@@ -150,6 +150,57 @@ ax = sts.postcheck(
 )
 ax.set_title('Model by Department and Gender')
 
+
+# Follow Lecture 09 at 1:02:38 to model total and direct effects of gender
+# and department:
+# <https://youtu.be/Zi6N3GLUJmw?si=4sSyaNhENICrtRJE&t=3758>
+# Just need to index α[G, D] instead of a separate variable δ.
+#
+# Could also just add the effects from m11_8 model? should we be
+# computing diff_a = α + δ?
+
+# Create new model with departments separately indexed (R code 11.32)
+# NOTE this model provides identical predictions to m11_8 above, but is
+# properly defined with a single intercept for each case.
+with pm.Model():
+    N = pm.MutableData('N', df['applications'])
+    G = pm.MutableData('G', df['gid'])
+    D = pm.MutableData('D', df['dept'].cat.codes)
+    A = pm.MutableData('A', df['admit'])
+    α = pm.Normal('α', 0, 1.5, shape=(2, N_depts))
+    p = pm.Deterministic('p', pm.math.invlogit(α[G, D]))
+    admit = pm.Binomial('admit', N, p, shape=p.shape, observed=A)
+    mGD = sts.ulam(data=df)
+
+print('mGD:')
+sts.precis(mGD)
+
+# Compute the contrasts
+post_GD = mGD.get_samples()
+diff_pGD = expit(post_GD['α']).diff('α_dim_0').squeeze()
+
+# Plot the distribution of the gender contrast for each model
+fig, axs = plt.subplots(num=3, ncols=2, clear=True)
+fig.set_size_inches((10, 4), forward=True)
+
+axs[0].set(title='Gender Only',
+           xlabel='Gender Contrast [probability]')
+axs[1].set(title='Gender and Department',
+           xlabel='Gender Contrast [probability]')
+
+# Gender only
+sns.kdeplot(diff_p.stack(sample=('chain', 'draw')),
+            bw_adjust=0.5, c='C3', ax=axs[0])
+axs[0].text(s='men advantaged →', x=0.5, y=0.99,
+            ha='center', va='top', transform=axs[0].transAxes)
+
+# Gender and Dept
+sns.kdeplot(diff_pGD.stack(sample=('chain', 'draw')).transpose('sample', ...),
+            bw_adjust=0.5, ax=axs[1], legend=True)
+axs[1].axvline(0, ls='--', c='grey', lw=1, alpha=0.5, zorder=0)
+axs[1].text(s='← women advantaged       men advantaged →', x=0.0, y=3.95,
+            ha='center', va='top')
+axs[1].legend()
 
 plt.ion()
 plt.show()
