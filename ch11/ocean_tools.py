@@ -314,51 +314,6 @@ print(sts.coef_table([m11_11, m11_11x], ['11', '11x'], hist=True))
 print(sts.compare([m11_11, m11_11x], ['11', '11x'])['ct'])
 
 
-# -----------------------------------------------------------------------------
-#         Creat model with offset
-# -----------------------------------------------------------------------------
-# Simulate data with daily counts (R code 11.53)
-N_days = 30  # 1 month
-y_daily = stats.poisson(1.5).rvs(N_days)
-
-# Simulate data with weekly counts (R code 11.54)
-N_weeks = 4
-days_week = 7
-y_weekly = stats.poisson(days_week * 0.5).rvs(N_weeks)
-
-exposure = np.r_[np.ones(N_days), np.repeat(days_week, N_weeks)]
-monastery = np.r_[np.zeros(N_days), np.ones(N_weeks)]
-
-tf = pd.DataFrame(dict(
-    y=np.r_[y_daily, y_weekly],
-    days=exposure,
-    monastery=monastery
-))
-
-tf['log_days'] = np.log(tf['days'])
-
-# Fit the model
-with pm.Model() as model:
-    log_days = pm.ConstantData('log_days', tf['log_days'])
-    m = pm.ConstantData('m', tf['monastery'])
-    α = pm.Normal('α', 0, 1)
-    β = pm.Normal('β', 0, 1)
-    λ = pm.Deterministic(
-        'λ',
-        pm.math.exp(log_days + α + β*m)
-    )
-    y = pm.Poisson('y', λ, observed=tf['y'])
-    m11_12 = sts.ulam(data=tf)
-
-post = m11_12.get_samples()
-λ_daily = np.exp(post['α'])
-λ_weekly = np.exp(post['α'] + post['β'])
-λ_daily.name = 'λ'
-λ_weekly.name = 'λ'
-
-ct = sts.coef_table([λ_daily, λ_weekly], ['daily', 'weekly'], hist=True)
-print(ct)
-
 plt.ion()
 plt.show()
 
