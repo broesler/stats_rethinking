@@ -1872,8 +1872,11 @@ def simplehist(x, ax=None, **kwargs):
     min_bin = np.floor(np.min(x))
     max_bin = np.ceil(np.max(x))
 
-    ax.set_xticks(np.arange(min_bin, max_bin + 1))
     bins = np.arange(min_bin, max_bin + 2) - 0.5
+
+    # Don't overcrowd the x-axis labels
+    if len(bins) < 20:
+        ax.set_xticks(np.arange(min_bin, max_bin + 1))
 
     return ax.hist(x, bins=bins, **opts)
 
