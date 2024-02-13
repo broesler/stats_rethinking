@@ -89,7 +89,7 @@ post_p = (
 )
 
 
-def plot_post(post, ax=None, title=None):
+def plot_post(post, ax=None):
     """Plot the posterior distribution for each gender and department."""
     if ax is None:
         ax = plt.gca()
@@ -106,13 +106,14 @@ def plot_post(post, ax=None, title=None):
             ax=ax
         )
 
-    ax.legend()
     ax.set_ylabel('Density')
     return ax
 
 
-fig, axs = plt.subplots(num=1, nrows=2, sharex=True clear=True)
-plot_post(post_p, ax=axs[0])
+fig, axs = plt.subplots(num=1, nrows=2, sharex=True, clear=True)
+ax = axs[0]
+plot_post(post_p, ax=ax)
+ax.legend()
 ax.set(title='Ignore Confound')
 
 # -----------------------------------------------------------------------------
@@ -145,7 +146,8 @@ post_u = (
     .transpose('sample', ...)
 )
 
-plot_post(post_u, ax=axs[1])
+ax = axs[1]
+plot_post(post_u, ax=ax)
 ax.set(title='Assume Confound',
        xlabel='Probability of Admission')
 
