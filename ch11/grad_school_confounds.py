@@ -24,12 +24,9 @@ accepted to Department 1 even though there is no bias in admissions.
 import itertools
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import pymc as pm
 import seaborn as sns
-import xarray as xr
 
-from pathlib import Path
 from scipy import stats
 from scipy.special import expit
 
@@ -68,45 +65,89 @@ with pm.Model():
     α = pm.Normal('α', 0, 1, shape=(2,))
     p = pm.Deterministic('p', pm.math.invlogit(α[G]))
     admit = pm.Bernoulli('admit', p, shape=p.shape, observed=A)
-    mGu = sts.ulam()
+    m0 = sts.ulam()
 
 # Model the direct effects, now confounded!
 with pm.Model():
     α = pm.Normal('α', 0, 1, shape=(2, 2))
     p = pm.Deterministic('p', pm.math.invlogit(α[G, D]))
     admit = pm.Bernoulli('admit', p, shape=p.shape, observed=A)
-    mGDu = sts.ulam()
+    m1 = sts.ulam()
 
 print('mGu:')
-sts.precis(mGu)
+sts.precis(m0)
 
 print('mGDu:')
-sts.precis(mGDu)
+sts.precis(m1)
 
 # Plot the posterior
-post = mGDu.get_samples()
+post = m1.get_samples()
 post_p = (
     expit(post['α'])
     .stack(sample=('chain', 'draw'))
     .transpose('sample', ...)
 )
 
-colors = ['C0', 'C3']
-lss = ['-', '--']
 
-fig, ax = plt.subplots(num=1, clear=True)
-for i, j in itertools.product([0, 1], [0, 1]):
-    sns.kdeplot(
-        post_p[:, i, j],
-        ls=lss[i],
-        color=colors[j],
-        label=f"D{j}, G{i}"
-    )
+def plot_post(post, ax=None, title=None):
+    """Plot the posterior distribution for each gender and department."""
+    if ax is None:
+        ax = plt.gca()
 
-ax.legend()
-ax.set(xlabel='probability of admission',
-       ylabel='Density')
+    colors = ['C0', 'C3']
+    lss = ['-', '--']
 
+    for i, j in itertools.product([0, 1], [0, 1]):
+        sns.kdeplot(
+            post[:, i, j],
+            ls=lss[i],
+            color=colors[j],
+            label=f"D{j}, G{i}",
+            ax=ax
+        )
+
+    ax.legend()
+    ax.set_ylabel('Density')
+    return ax
+
+
+fig, axs = plt.subplots(num=1, nrows=2, sharex=True clear=True)
+plot_post(post_p, ax=axs[0])
+ax.set(title='Ignore Confound')
+
+# -----------------------------------------------------------------------------
+#         Sensitivity Analysis
+# -----------------------------------------------------------------------------
+# Plug in β and γ as "data"
+with pm.Model():
+    # Declare unobserved variable
+    u_sim = pm.Normal('u_sim', 0, 1, shape=(N,))
+
+    # A model
+    # High ability has strong effect regardless of gender
+    β = pm.MutableData('β', np.r_[1, 1])
+    α = pm.Normal('α', 0, 1, shape=(2, 2))
+    p = pm.Deterministic('p', pm.math.invlogit(α[G, D] + β[G]*u_sim))
+    admit = pm.Bernoulli('admit', p, shape=p.shape, observed=A)
+
+    # D model
+    # Only gender 1 is affected by latent ability
+    γ = pm.MutableData('γ', np.r_[1, 0])
+    δ = pm.Normal('δ', 0, 1, shape=(2,))
+    q = pm.Deterministic('q', pm.math.invlogit(δ[G] + γ[G]*u_sim))
+    dept = pm.Bernoulli('dept', q, shape=q.shape, observed=D)
+
+    mGDu = sts.ulam()
+
+post_u = (
+    expit(mGDu.get_samples()['α'])
+    .stack(sample=('chain', 'draw'))
+    .transpose('sample', ...)
+)
+
+plot_post(post_u, ax=axs[1])
+ax.set(title='Assume Confound',
+       xlabel='Probability of Admission')
 
 plt.ion()
 plt.show()
