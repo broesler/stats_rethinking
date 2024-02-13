@@ -42,6 +42,17 @@ df['dept'] = df['dept'].astype('category')
 df['gender'] = df['applicant.gender'].astype('category')
 df = df.drop('applicant.gender', axis='columns')
 
+# Load and transform the data in one fell swoop:
+# df = (
+#     pd.read_csv(Path('../data/UCBadmit.csv'))
+#     .assign(dept=lambda x: x['dept'].astype('category'),
+#             gender=lambda x: x['applicant.gender'].astype('category'),
+#             gid=lambda x: x['gender'].cat.codes)
+#     .drop('applicant.gender', axis='columns')
+#     .reset_index()
+#     .rename({'index': 'case'}, axis='columns')
+# )
+
 assert (df['applications'] == df['admit'] + df['reject']).all()
 
 # These are aggregated data.by dept and gender
