@@ -13,6 +13,11 @@ The DAG is:
     G -> D -> A
     u -> D
     u -> A
+
+Exceptional (high ability) individuals of gender 1 don't *apply* to Department
+1, they apply to Department 2. Therefore, the ability of gender 1 applicants to
+Department 1 is lower than those of gender 2, so fewer gender 1 applicants are
+accepted to Department 1 even though there is no bias in admissions.
 """
 # =============================================================================
 
@@ -30,22 +35,20 @@ from scipy.special import expit
 
 import stats_rethinking as sts
 
-rng = np.random.default_rng(seed=12)
-
 # Simulate a confounded applicant pool
 N = 2000  # number of applicants
 
 # Even gender distribution
-G = rng.choice(np.r_[0, 1], size=N)
+G = np.random.choice(np.r_[0, 1], size=N)
 
 # Sample ability, high = 1, average = 0
 u = stats.bernoulli.rvs(p=0.1, size=N)
 
 # Gender 0 tends to apply to department 0, 1 to 1,
 # and G=0 with greater ability tend to apply to 1 as well
-D = stats.bernoulli.rvs(p=np.where(G, u, 0.75), size=N)
+D = stats.bernoulli.rvs(p=np.where(G == 0, u, 0.75), size=N)
 
-# Acceptance rates
+# Acceptance rates -> Department 1 discriminates against gender 0 (first row)
 # (2, 2, 2) -> (u, D, G)
 p_u = np.stack([
     np.array([[0.1, 0.1],
@@ -61,15 +64,13 @@ p = p_u[u, D, G]
 A = stats.bernoulli.rvs(p=p, size=N)
 
 # Model the total effect of gender
-# df = pd.DataFrame(dict(G=G, D=D, A=A))
-
 with pm.Model():
     α = pm.Normal('α', 0, 1, shape=(2,))
     p = pm.Deterministic('p', pm.math.invlogit(α[G]))
     admit = pm.Bernoulli('admit', p, shape=p.shape, observed=A)
     mGu = sts.ulam()
 
-# Direct effects, now confounded!
+# Model the direct effects, now confounded!
 with pm.Model():
     α = pm.Normal('α', 0, 1, shape=(2, 2))
     p = pm.Deterministic('p', pm.math.invlogit(α[G, D]))
@@ -99,7 +100,7 @@ for i, j in itertools.product([0, 1], [0, 1]):
         post_p[:, i, j],
         ls=lss[i],
         color=colors[j],
-        label=f"D{i}, G{j}"
+        label=f"D{j}, G{i}"
     )
 
 ax.legend()
