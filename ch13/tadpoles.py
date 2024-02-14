@@ -78,13 +78,10 @@ print(ct['ct'])
 #         Plot the data (R code 13.5)
 # -----------------------------------------------------------------------------
 post = m13_2.get_samples()
-df['p_est'] = m13_2.deterministics['p'].mean(('chain', 'draw'))
+p_est = m13_2.deterministics['p'].mean(('chain', 'draw'))
 
-# α_mean = expit(post['α']).mean(('chain', 'draw'))
 a = (1 - 0.89) / 2
 p_PI = m13_2.deterministics['p'].quantile([a, 1-a], dim=('chain', 'draw'))
-# Identical to p_PI:
-# α_PI = expit(post['α']).quantile([a, 1-a], dim=('chain', 'draw'))
 
 fig, ax = plt.subplots(num=1, clear=True)
 
@@ -98,8 +95,8 @@ ax.axhline(expit(post['α_bar'].mean()), ls='--', c='C3', lw=1)
 
 ax.errorbar(
     df['tank'],
-    df['p_est'],
-    yerr=np.abs(p_PI - df['p_est'].values),
+    p_est,
+    yerr=np.abs(p_PI - p_est),
     marker='o', ls='none', c='C3', lw=3, alpha=0.5
 )
 
@@ -109,7 +106,6 @@ ax.text(32 + 8, 0, 'large tanks (35)',  ha='center', va='bottom')
 
 # Plot the data and predictions
 ax.scatter('tank', 'propsurv', data=df, c='k', label='data', zorder=3)
-# ax.scatter('tank', 'p_est', data=df, c='C3', label='p_est')
 
 ax.set(xlabel='tank',
        ylabel='proportion survival',
