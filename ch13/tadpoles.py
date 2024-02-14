@@ -120,5 +120,9 @@ sns.kdeplot(expit(sim_tanks), bw_adjust=0.1, color='k', lw=1, ax=axs[1])
 axs[1].set(xlabel='probability survive',
            ylabel='Density')
 
+for ax in axs:
+    ax.spines[['top', 'right']].set_visible(False)
+
+
 # =============================================================================
 # =============================================================================
