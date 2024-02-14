@@ -64,7 +64,7 @@ with pm.Model():
     σ = pm.Exponential('σ', 1)
     α = pm.Normal('α', α_bar, σ, shape=tank.shape)
     p = pm.Deterministic('p', pm.math.invlogit(α[tank]))
-    surv = pm.Binomial('surv', N, p, observed=df['surv'])
+    S = pm.Binomial('S', N, p, observed=df['surv'])
     m13_2 = sts.ulam(data=df)
 
 print('m13.2:')
@@ -86,23 +86,23 @@ p_PI = m13_2.deterministics['p'].quantile([a, 1-a], dim=('chain', 'draw'))
 fig, ax = plt.subplots(num=1, clear=True)
 
 # Label tank sizes
-ax.axvline(16.5, ls='--', c='gray', lw=1)
-ax.axvline(32.5, ls='--', c='gray', lw=1)
+ax.axvline(15.5, ls='--', c='gray', lw=1)
+ax.axvline(31.5, ls='--', c='gray', lw=1)
+ax.text(     8, 0, 'small tanks (10)',  ha='center', va='bottom')
+ax.text(15 + 8, 0, 'medium tanks (25)', ha='center', va='bottom')
+ax.text(31 + 8, 0, 'large tanks (35)',  ha='center', va='bottom')
 
 # Plot the data mean and prediction parameter mean
 ax.axhline(df['propsurv'].mean(), ls='--', c='k', lw=1)
 ax.axhline(expit(post['α_bar'].mean()), ls='--', c='C3', lw=1)
 
+# Plot the data with a percentile interval
 ax.errorbar(
     df['tank'],
     p_est,
     yerr=np.abs(p_PI - p_est),
-    marker='o', ls='none', c='C3', lw=3, alpha=0.5
+    marker='o', ls='none', c='C3', lw=3, alpha=0.7,
 )
-
-ax.text(     8, 0, 'small tanks (10)',  ha='center', va='bottom')
-ax.text(16 + 8, 0, 'medium tanks (25)', ha='center', va='bottom')
-ax.text(32 + 8, 0, 'large tanks (35)',  ha='center', va='bottom')
 
 # Plot the data and predictions
 ax.scatter('tank', 'propsurv', data=df, c='k', label='data', zorder=3)
@@ -111,15 +111,9 @@ ax.set(xlabel='tank',
        ylabel='proportion survival',
        ylim=(-0.05, 1.05))
 
-# # TODO use postcheck instead?? Has to be on survival scale, not proportion.
-# ax = sts.postcheck(
-#     m13_2,
-#     mean_name='p',
-#     mean_transform=lambda x: x * df['density'].values,
-#     fignum=3
-# )
-
-# Plot first 100 populations in posterior (R code 13.6)
+# -----------------------------------------------------------------------------
+#         Plot first 100 populations in posterior (R code 13.6)
+# -----------------------------------------------------------------------------
 N_lines = 100
 xs = np.linspace(-3, 4)
 
@@ -142,6 +136,93 @@ axs[1].set(xlabel='probability survive',
 for ax in axs:
     ax.spines[['top', 'right']].set_visible(False)
 
+
+# -----------------------------------------------------------------------------
+#         Add predator predictor
+# -----------------------------------------------------------------------------
+# See Lecture 12 (2023) @ 43:52
+with pm.Model():
+    N = pm.ConstantData('N', df['density'])
+    P = pm.ConstantData('P', df['pred'].cat.codes)
+    tank = pm.ConstantData('tank', df['tank'])
+    α_bar = pm.Normal('α_bar', 0, 1.5)
+    β_P = pm.Normal('β_P', 0, 0.5)
+    σ = pm.Exponential('σ', 1)
+    α = pm.Normal('α', α_bar, σ, shape=tank.shape)
+    p = pm.Deterministic('p', pm.math.invlogit(α[tank] + β_P * P))
+    S = pm.Binomial('S', N, p, observed=df['surv'])
+    mSTP = sts.ulam(data=df)
+
+mST = m13_2  # match naming in lecture
+
+post_ST = mST.get_samples()
+post_STP = mSTP.get_samples()
+
+surv_ST = (
+    pm.sample_posterior_predictive(post_ST, model=mST.model)
+    .posterior_predictive['S']
+    .mean(('chain', 'draw'))
+) / df['density']
+
+surv_STP = (
+    pm.sample_posterior_predictive(post_STP, model=mSTP.model)
+    .posterior_predictive['S']
+    .mean(('chain', 'draw'))
+) / df['density']
+
+
+fig, axs = plt.subplots(num=3, ncols=2, clear=True)
+# Compare the two model predictions
+ax = axs[0]
+ax.axline((0, 0), (1, 1), ls='--', c='gray', lw=1)
+ax.scatter(surv_ST, surv_STP, c=np.where(df['pred'] == 'pred', 'C3', 'C0'))
+ax.set(xlabel='prob survival (model without predators)',
+       ylabel='prob survival (model with predators)',
+       aspect='equal')
+ax.spines[['top', 'right']].set_visible(False)
+
+# Compare the hyperparameter distributions
+ax = axs[1]
+sns.kdeplot(post_ST['σ'].values.flat, 
+            bw_adjust=0.5, color='C0', ax=ax, label='mST')
+sns.kdeplot(post_STP['σ'].values.flat, 
+            bw_adjust=0.5, color='C3', ax=ax, label='mSTP')
+ax.legend()
+ax.set_xlabel('σ')
+ax.spines[['top', 'right']].set_visible(False)
+
+
+# -----------------------------------------------------------------------------
+#         Plot model results
+# -----------------------------------------------------------------------------
+fig, ax = plt.subplots(num=4, clear=True)
+
+# Label tank sizes
+ax.axvline(15.5, ls='--', c='gray', lw=1)
+ax.axvline(31.5, ls='--', c='gray', lw=1)
+ax.text(     8, 0, 'small tanks (10)',  ha='center', va='bottom')
+ax.text(15 + 8, 0, 'medium tanks (25)', ha='center', va='bottom')
+ax.text(31 + 8, 0, 'large tanks (35)',  ha='center', va='bottom')
+
+ax.set(xlabel='tank',
+       ylabel='proportion survival',
+       ylim=(-0.05, 1.05))
+ax.spines[['top', 'right']].set_visible(False)
+
+# Plot the data
+ax.scatter('tank', 'propsurv', data=df, c='k', label='data')
+
+for p, c in zip(['no', 'pred'], ['C0', 'C3']):
+    tf = df.loc[df['pred'] == p]
+    ax.errorbar(
+        tf['tank'],
+        p_est.sel(p_dim_0=tf.index),
+        yerr=np.abs(p_PI - p_est).sel(p_dim_0=tf.index),
+        marker='o', ls='none', c=c, lw=3, alpha=0.7,
+        label='no predators' if p == 'no' else 'predators present',
+    )
+
+ax.legend()
 
 # =============================================================================
 # =============================================================================
