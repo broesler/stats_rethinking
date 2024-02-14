@@ -59,18 +59,18 @@ df['p_partpool'] = expit(post['α_pond'].mean(('chain', 'draw')))
 # True values (R code 13.16)
 df['p_true'] = expit(df['true_a'])
 
-# Compute the errors
+# Compute the errors (R code 13.17)
 df['nopool_err'] = np.abs(df['p_nopool'] - df['p_true'])
 df['partpool_err'] = np.abs(df['p_partpool'] - df['p_true'])
 
-# Plot the errors
+# Plot the errors (R code 13.18)
 fig, ax = plt.subplots(num=1, clear=True)
 
 for i, s in zip(range(len(Nis)), ['tiny', 'small', 'medium', 'large']):
     ax.text(
         s=f"{s} ponds ({Nis[i]})",
-        x=15*(i+1) - 7.5,
-        y=1.0,
+        x=15*(i+1) - 7.5,  # data coordinates
+        y=1.0,             # axis coordinates (1.0 == top of y-axis limit)
         ha='center',
         va='top',
         transform=ax.get_xaxis_transform()  # x = data, y = axis
