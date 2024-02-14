@@ -64,7 +64,7 @@ with pm.Model():
     σ = pm.Exponential('σ', 1)
     α = pm.Normal('α', α_bar, σ, shape=tank.shape)
     p = pm.Deterministic('p', pm.math.invlogit(α[tank]))
-    S = pm.Binomial('S', N, p, observed=df['surv'])
+    surv = pm.Binomial('surv', N, p, observed=df['surv'])
     m13_2 = sts.ulam(data=df)
 
 print('m13.2:')
@@ -77,29 +77,51 @@ print(ct['ct'])
 # -----------------------------------------------------------------------------
 #         Plot the data (R code 13.5)
 # -----------------------------------------------------------------------------
-# TODO copy plots from Lecture 12 (2023) showing variance of α
 post = m13_2.get_samples()
 df['p_est'] = m13_2.deterministics['p'].mean(('chain', 'draw'))
+
+# α_mean = expit(post['α']).mean(('chain', 'draw'))
+a = (1 - 0.89) / 2
+p_PI = m13_2.deterministics['p'].quantile([a, 1-a], dim=('chain', 'draw'))
+# Identical to p_PI:
+# α_PI = expit(post['α']).quantile([a, 1-a], dim=('chain', 'draw'))
 
 fig, ax = plt.subplots(num=1, clear=True)
 
 # Label tank sizes
 ax.axvline(16.5, ls='--', c='gray', lw=1)
 ax.axvline(32.5, ls='--', c='gray', lw=1)
-ax.axhline(expit(post['α_bar'].mean(('chain', 'draw'))), ls='--', c='k', lw=1)
 
-ax.text(8, 0, s='small tanks', ha='center', va='bottom')
-ax.text(16 + 8, 0, 'medium tanks', ha='center', va='bottom')
-ax.text(32 + 8, 0, 'large tanks', ha='center', va='bottom')
+# Plot the data mean and prediction parameter mean
+ax.axhline(df['propsurv'].mean(), ls='--', c='k', lw=1)
+ax.axhline(expit(post['α_bar'].mean()), ls='--', c='C3', lw=1)
+
+ax.errorbar(
+    df['tank'],
+    df['p_est'],
+    yerr=np.abs(p_PI - df['p_est'].values),
+    marker='o', ls='none', c='C3', lw=3, alpha=0.5
+)
+
+ax.text(     8, 0, 'small tanks (10)',  ha='center', va='bottom')
+ax.text(16 + 8, 0, 'medium tanks (25)', ha='center', va='bottom')
+ax.text(32 + 8, 0, 'large tanks (35)',  ha='center', va='bottom')
 
 # Plot the data and predictions
-ax.scatter('tank', 'propsurv', data=df, c='k', label='data')
-ax.scatter('tank', 'p_est', data=df, c='C3', label='p_est')
+ax.scatter('tank', 'propsurv', data=df, c='k', label='data', zorder=3)
+# ax.scatter('tank', 'p_est', data=df, c='C3', label='p_est')
 
 ax.set(xlabel='tank',
        ylabel='proportion survival',
        ylim=(-0.05, 1.05))
 
+# # TODO use postcheck instead?? Has to be on survival scale, not proportion.
+# ax = sts.postcheck(
+#     m13_2,
+#     mean_name='p',
+#     mean_transform=lambda x: x * df['density'].values,
+#     fignum=3
+# )
 
 # Plot first 100 populations in posterior (R code 13.6)
 N_lines = 100
@@ -108,6 +130,7 @@ xs = np.linspace(-3, 4)
 sim_tanks = stats.norm(post['α_bar'], post['σ']).rvs().flatten()
 
 fig, axs = plt.subplots(num=2, ncols=2, clear=True)
+fig.set_size_inches((10, 5), forward=True)
 
 μ = post['α_bar'].isel(chain=0, draw=range(N_lines))
 s = post['σ'].isel(chain=0, draw=range(N_lines))
