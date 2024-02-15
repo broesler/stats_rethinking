@@ -171,7 +171,7 @@ with pm.Model():
     σ = pm.Exponential('σ', 1)
     τ = pm.Exponential('τ', 1)
     α = pm.Normal('α', α_bar, σ, shape=districts.shape)
-    β = pm.Normal('β', β_bar, σ, shape=districts.shape)
+    β = pm.Normal('β', β_bar, τ, shape=districts.shape)
     p = pm.Deterministic('p', pm.math.invlogit(α[D] + β[D]*U))
     C = pm.Bernoulli('C', p, observed=df['use_contraception'])
     mCDU = sts.ulam(data=df)
@@ -185,6 +185,73 @@ for u, ax in enumerate(axs):
     ax.set_title('Urban' if u else 'Rural')
 
 axs[0].set_xlabel('')
+
+
+# Make density plot of urban and rural standard deviations
+fig, ax = plt.subplots(num=4, clear=True)
+xs = np.linspace(mCDU.samples['τ'].min(), mCDU.samples['τ'].max())
+ax.plot(xs, stats.expon(scale=1).pdf(xs), ls='--', c='k', label='prior')
+sns.kdeplot(mCDU.samples['σ'].values.flat, bw_adjust=0.5, color='C3', ax=ax, label='rural')
+sns.kdeplot(mCDU.samples['τ'].values.flat, bw_adjust=0.5, color='C0', ax=ax, label='urban')
+ax.legend()
+ax.set(xlabel='posterior standard deviation',
+       ylabel='Density')
+
+
+# Plot urban and rural against each other
+# Filter by urban/rural status
+p_samps = dict()
+for u in [0, 1]:
+    k = 'urban' if u else 'rural'
+    tf = df.loc[df['urban'] == u]
+    counts = tf.groupby('district')['woman'].count()
+    props = tf.groupby('district')['use_contraception'].sum() / counts
+    p_samp = expit(
+        mCDU.samples['α'] 
+        + (mCDU.samples['β'].rename(dict({'β_dim_0': 'α_dim_0'})) * u)
+    )
+    p_samps[k] = p_samp
+
+ds = xr.Dataset(p_samps)
+p_means = ds.mean(('chain', 'draw'))
+
+# Compute covariance ellipses
+cov = sts.dataset_to_frame(ds).cov()
+
+
+# Try one point
+def plot_contour(i=0, q=0.5, ax=None):
+    if ax is None:
+        ax = plt.gca()
+    pat = f"[{i}]"
+    # (2, 2) covariance matrix
+    Σ = cov.filter(like=pat, axis='rows').filter(like=pat, axis='columns')
+    # (2,) Mean
+    rv = stats.multivariate_normal(p_means.to_array().sel(α_dim_0=i), Σ)
+    # Get the grid of data
+    x, y = np.mgrid[0:1:.01, 0:1:.01]
+    z = rv.pdf(np.dstack([x, y]))
+    z = z / z.max()  # normalize 
+    ax.contour(x, y, z, cmap='coolwarm', levels=[q])
+    return ax
+
+
+fig, ax = plt.subplots(num=5, clear=True)
+
+# TODO pick better values to get extremes
+for i in np.random.choice(districts, size=6):
+    plot_contour(i, ax=ax)
+
+ax.axhline(0.5, ls='--', c='gray', alpha=0.5)
+ax.axvline(0.5, ls='--', c='gray', alpha=0.5)
+ax.scatter(p_means['rural'], p_means['urban'], c='C3', alpha=0.7)
+
+ax.set(title='posterior means',
+       xlabel='prob C (rural)',
+       ylabel='prob C (urban)',
+       aspect='equal',
+       xlim=(0.1, 0.75),
+       ylim=(0.2, 0.75))
 
 # =============================================================================
 # =============================================================================
