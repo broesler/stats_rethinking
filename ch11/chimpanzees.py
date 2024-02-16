@@ -283,12 +283,12 @@ p_samp = sts.lmeval(
                   for x in ['actor', 'treatment']}),
 )
 
-p_mean = p_samp.mean('draw').to_series()
+p_mean = p_samp.mean(('chain', 'draw')).to_series()
 p_mean.index = pf.index
 
 q = 0.89
 a = (1 - q)/2
-p_ci = p_samp.quantile([a, 1-a], dim='draw')
+p_ci = p_samp.quantile([a, 1-a], dim=('chain', 'draw'))
 
 plot_actors(p_mean, ci=p_ci, title='posterior predictions',  c='k', ax=axs[1])
 
@@ -323,8 +323,8 @@ with pd.option_context('display.precision', 2):
     print(cmp['ct'])
 
 
-# ----------------------------------------------------------------------------- 
-#        Aggregate model 
+# -----------------------------------------------------------------------------
+#        Aggregate model
 # -----------------------------------------------------------------------------
 # Aggregate the data by treatment (R cod 11.23)
 g = (
