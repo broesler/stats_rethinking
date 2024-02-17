@@ -102,7 +102,7 @@ def plot_model(model, urban=None, ax=None):
         counts = tf.groupby('district')['woman'].count()
         props = tf.groupby('district')['use_contraception'].sum() / counts
         p_samp = expit(
-            model.samples['α'] 
+            model.samples['α']
             + (model.samples['β'].rename(dict({'β_dim_0': 'α_dim_0'}))
                * urban)
         )
@@ -130,7 +130,7 @@ plot_model(mCD, ax=ax)
 
 # Label sample sizes of K largest and smallest proportions
 K = 5
-ext_props = props.loc[~props.isna()].sort_values() 
+ext_props = props.loc[~props.isna()].sort_values()
 # Proportions (y-value)
 lo_p = ext_props[:K]
 hi_p = ext_props[-K:]
@@ -154,7 +154,7 @@ ax.annotate(
     xy=(54, 0.7),
     xytext=(0, 50),
     textcoords='offset points',
-    ha='center', 
+    ha='center',
     va='bottom',
     arrowprops=dict(arrowstyle='->', lw=2)
 )
@@ -191,8 +191,10 @@ axs[0].set_xlabel('')
 fig, ax = plt.subplots(num=4, clear=True)
 xs = np.linspace(mCDU.samples['τ'].min(), mCDU.samples['τ'].max())
 ax.plot(xs, stats.expon(scale=1).pdf(xs), ls='--', c='k', label='prior')
-sns.kdeplot(mCDU.samples['σ'].values.flat, bw_adjust=0.5, color='C3', ax=ax, label='rural')
-sns.kdeplot(mCDU.samples['τ'].values.flat, bw_adjust=0.5, color='C0', ax=ax, label='urban')
+sns.kdeplot(mCDU.samples['σ'].values.flat, bw_adjust=0.5, color='C3', ax=ax,
+            label='rural')
+sns.kdeplot(mCDU.samples['τ'].values.flat, bw_adjust=0.5, color='C0', ax=ax,
+            label='urban')
 ax.legend()
 ax.set(xlabel='posterior standard deviation',
        ylabel='Density')
@@ -207,7 +209,7 @@ for u in [0, 1]:
     counts = tf.groupby('district')['woman'].count()
     props = tf.groupby('district')['use_contraception'].sum() / counts
     p_samp = expit(
-        mCDU.samples['α'] 
+        mCDU.samples['α']
         + (mCDU.samples['β'].rename(dict({'β_dim_0': 'α_dim_0'})) * u)
     )
     p_samps[k] = p_samp
@@ -221,6 +223,7 @@ cov = sts.dataset_to_frame(ds).cov()
 
 # Try one point
 def plot_contour(i=0, q=0.5, ax=None):
+    """Plot contours of compatibility regions."""
     if ax is None:
         ax = plt.gca()
     pat = f"[{i}]"
@@ -231,27 +234,29 @@ def plot_contour(i=0, q=0.5, ax=None):
     # Get the grid of data
     x, y = np.mgrid[0:1:.01, 0:1:.01]
     z = rv.pdf(np.dstack([x, y]))
-    z = z / z.max()  # normalize 
-    ax.contour(x, y, z, cmap='coolwarm', levels=[q])
+    z /= z.max()  # normalize to [0, 1]
+    ax.contour(x, y, z, cmap='Reds_r', levels=[q], alpha=0.4, zorder=1)
     return ax
 
 
 fig, ax = plt.subplots(num=5, clear=True)
 
-# TODO pick better values to get extremes
-for i in np.random.choice(districts, size=6):
-    plot_contour(i, ax=ax)
-
 ax.axhline(0.5, ls='--', c='gray', alpha=0.5)
 ax.axvline(0.5, ls='--', c='gray', alpha=0.5)
+
 ax.scatter(p_means['rural'], p_means['urban'], c='C3', alpha=0.7)
+
+# TODO pick better values to get extremes
+# for i in np.random.choice(districts, size=6):
+for i in [3, 33, 10, 45, 56, 24]:
+    plot_contour(i, ax=ax)
 
 ax.set(title='posterior means',
        xlabel='prob C (rural)',
        ylabel='prob C (urban)',
        aspect='equal',
        xlim=(0.1, 0.75),
-       ylim=(0.2, 0.75))
+       ylim=(0.1, 0.85))
 
 # =============================================================================
 # =============================================================================
