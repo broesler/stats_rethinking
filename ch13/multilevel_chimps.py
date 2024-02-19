@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 import seaborn as sns
+import xarray as xr
 
 from pathlib import Path
 from scipy import stats
@@ -63,7 +64,7 @@ df['treatment'] = df['prosoc_left'] + 2 * df['condition']  # in range(4)
 with pm.Model():
     actor = pm.MutableData('actor', df['actor'])
     treatment = pm.MutableData('treatment', df['treatment'])
-    block_id = pm.MutableData('block', df['block'] - 1)
+    block_id = pm.MutableData('block_id', df['block'] - 1)
     # Hyper-priors
     a_bar = pm.Normal('a_bar', 0, 1.5)
     σ_a = pm.Exponential('σ_a', 1)
@@ -117,7 +118,7 @@ print(cmp['ct'])
 with pm.Model():
     actor = pm.MutableData('actor', df['actor'])
     treatment = pm.MutableData('treatment', df['treatment'])
-    block_id = pm.MutableData('block', df['block'] - 1)
+    block_id = pm.MutableData('block_id', df['block'] - 1)
     # Hyper-priors
     a_bar = pm.Normal('a_bar', 0, 1.5)
     σ_a = pm.Exponential('σ_a', 1)
@@ -136,7 +137,8 @@ with pm.Model():
     m13_6 = sts.ulam(data=df)
 
 # Compare the two models
-ct = sts.coef_table([m13_4, m13_6], ['m13.4 (block)', 'm13.6 (block + treatment)'])
+ct = sts.coef_table([m13_4, m13_6],
+                    ['m13.4 (block)', 'm13.6 (block + treatment)'])
 print(ct['coef'].unstack('model').filter(like='b[', axis='rows'))
 
 # -----------------------------------------------------------------------------
@@ -148,13 +150,14 @@ print(ct['coef'].unstack('model').filter(like='b[', axis='rows'))
 # print('Divergences: ', int(idata.sample_stats['diverging'].sum()))
 # print(f"Acceptance: {float(idata.sample_stats['acceptance_rate'].mean()):.2f}")
 
-a ~ Normal(a_bar, σ_a) -> z ~ Normal(0, 1), a = a_bar + σ_a*z
+# a ~ Normal(a_bar, σ_a) -> z ~ Normal(0, 1), a = a_bar + σ_a*z
+# g ~ Normal(    0, σ_g) -> x ~ Normal(0, 1), g =     0 + σ_g*z
 
 # 2. Non-centered model
 with pm.Model():
     actor = pm.MutableData('actor', df['actor'])
     treatment = pm.MutableData('treatment', df['treatment'])
-    block_id = pm.MutableData('block', df['block'] - 1)
+    block_id = pm.MutableData('block_id', df['block'] - 1)
     # Hyper-priors
     a_bar = pm.Normal('a_bar', 0, 1.5)
     σ_a = pm.Exponential('σ_a', 1)
@@ -182,6 +185,91 @@ neff = pd.DataFrame(dict(
 ))
 neff['diff'] = neff['neff_nc'] - neff['neff_c']
 print(neff)
+
+
+# -----------------------------------------------------------------------------
+#         Posterior Predictions
+# -----------------------------------------------------------------------------
+# (R code 13.30)
+# chimp = 1
+# d_pred = dict(
+#     actor=np.repeat(chimp, 4),
+#     treatment=np.arange(4),
+#     block_id=np.repeat(0, 4)
+# )
+# p_samp = sts.lmeval(m13_4, out=m13_4.model.p, eval_at=d_pred)
+# p_mu = p_samp.mean(('chain', 'draw'))
+# q = 0.89
+# a = (1 - q) / 2
+# p_ci = p_samp.quantile([a, 1-a], dim=('chain', 'draw'))
+
+post = m13_4.get_samples()
+
+
+# Predicting out of sample (R code 3.35)
+def p_link_abar(treatment):
+    """Model 13.4 link function, ignoring `block`.
+    This function sets the actor to the average, ignoring the variation among
+    actors."""
+    return expit(post['a_bar'] + post['b'].sel(b_dim_0=treatment))
+
+
+# (R code 13.36)
+treatments = np.arange(4)
+
+p_raw = p_link_abar(treatments)
+p_mu = p_raw.mean(('chain', 'draw'))
+a = (1 - 0.89) / 2
+p_ci = p_raw.quantile([a, 1-a], dim=('chain', 'draw'))
+
+# (R code 13.37)
+# Simulate some random chimpanzees
+a_samp = stats.norm.rvs(loc=post['a_bar'], scale=post['σ_a'])
+# Make dimensions compatible for other calcs
+a_sim = xr.DataArray(
+    a_samp,
+    coords=dict(
+        chain=range(a_samp.shape[0]),
+        draw=range(a_samp.shape[1])
+    )
+)
+
+
+def p_link_asim(treatment):
+    """Define link function with the simulated chimpanzees.
+    This function averages over the uncertainty of the actors."""
+    return expit(a_sim + post['b'].sel(b_dim_0=treatment))
+
+
+p_raw_sim = p_link_asim(treatments)
+p_mu_sim = p_raw_sim.mean(('chain', 'draw'))
+p_ci_sim = p_raw_sim.quantile([a, 1-a], dim=('chain', 'draw'))
+
+
+# Plot results
+fig, axs = plt.subplots(num=3, ncols=3, sharex=True, sharey=True, clear=True)
+ax = axs[0]
+ax.set_title('average actor')
+ax.plot(treatments, p_mu, 'k-')
+ax.fill_between(treatments, p_ci[0], p_ci[1], fc='k', alpha=0.3)
+
+ax = axs[1]
+ax.set_title('marginal of actor')
+ax.plot(treatments, p_mu_sim, 'k-')
+ax.fill_between(treatments, p_ci_sim[0], p_ci_sim[1], fc='k', alpha=0.3)
+
+ax = axs[2]
+ax.set_title('simulated actors')
+for i in range(100):
+    ax.plot(treatments, p_raw_sim.sel(chain=0, draw=i), 'k-', alpha=0.3)
+
+axs[0].set(ylabel='proportion pulled left')
+for ax in axs:
+    ax.set_xticks(treatments, ['R/N', 'L/N', 'R/P', 'L/P'])
+    ax.set(xlabel='treatment',
+           xlim=(0, 3),
+           ylim=(0, 1))
+    ax.spines[['top', 'right']].set_visible(False)
 
 plt.ion()
 plt.show()
