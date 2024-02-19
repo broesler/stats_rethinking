@@ -8,6 +8,7 @@
 §12.4 Trolley problem with gender, etc. as predictors. See also "11H5".
 
 See 2023 Rethinking Lecture 11 @ 55:16.
+<https://youtu.be/VVQaIkom5D0?si=qY7IENiZtWF3iUqv&t=3346>
 
 We cannot interpret the effect of education, β_E, without controlling for
 *both* age and gender! Age and gender "cause" education, which provides

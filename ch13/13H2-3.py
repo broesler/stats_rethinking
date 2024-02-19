@@ -96,18 +96,59 @@ with pm.Model() as model:
     β_I = pm.Normal('β_I', 0, 0.5)
     β_C = pm.Normal('β_C', 0, 0.5)
     # Intercept prior
-    cutpoints = pm.Normal('cutpoints', 0, 1, shape=(Km1,),
-                          transform=pm.distributions.transforms.ordered,
-                          initval=np.linspace(-2, 3, Km1))
+    κ = pm.Normal('κ', 0, 1, shape=(Km1,),
+                  transform=pm.distributions.transforms.ordered,
+                  initval=np.linspace(-2, 3, Km1))
     # The linear model
     φ = pm.Deterministic('φ', β_A*A + β_C*C + β_I*I)
     # The response
-    R = pm.OrderedLogistic('R', cutpoints=cutpoints, eta=φ, shape=φ.shape,
-                           observed=df['response'].cat.codes)
-    m_RX = sts.ulam(data=df, nuts_sampler='numpyro')
+    R = pm.OrderedLogistic('R', cutpoints=κ, eta=φ, shape=φ.shape,
+                           observed=df['response'] - 1)
+    m_RX = sts.ulam(nuts_sampler='numpyro')
 
-print('m_RX:')
-sts.precis(m_RX)
+# print('m_RX:')
+# sts.precis(m_RX)
+
+# -----------------------------------------------------------------------------
+#         13H2. Model the data using a varying intercept for each participant
+# -----------------------------------------------------------------------------
+# Build a model with partial pooling by individual
+with pm.Model() as model:
+    A = pm.MutableData('A', df['action'])
+    I = pm.MutableData('I', df['intention'])
+    C = pm.MutableData('C', df['contact'])
+    U = pm.MutableData('U', df['id'].cat.codes)
+    # Intercept prior with partial pooling for each individual
+    # e.g. each individual has their own distribution of responses
+    # NOTE the cutpoints are the means, so only need to model the variance.
+    σ_a = pm.HalfCauchy('σ_a', 1)
+    α = pm.Normal('α', 0, σ_a, shape=(Nu,))
+    # Slope priors
+    β_A = pm.Normal('β_A', 0, 0.5)
+    β_I = pm.Normal('β_I', 0, 0.5)
+    β_C = pm.Normal('β_C', 0, 0.5)
+    κ = pm.Normal('κ', 0, 1, shape=(Km1,),
+                  transform=pm.distributions.transforms.ordered,
+                  initval=np.linspace(-2, 3, Km1))
+    # The linear model
+    φ = pm.Deterministic('φ', α[U] + β_A*A + β_I*I + β_C*C)
+    # The response
+    R = pm.OrderedLogistic('R', cutpoints=κ, eta=φ, shape=φ.shape,
+                           observed=df['response'] - 1)
+    m_RXU = sts.ulam(nuts_sampler='numpyro')
+
+
+# -----------------------------------------------------------------------------
+#         Compare models
+# -----------------------------------------------------------------------------
+models = [m_RX, m_RXU]
+mnames = ['m_RX', 'm_RXU']
+print(sts.compare(models, mnames, ic='PSIS')['ct'])
+
+sts.plot_coef_table(
+    sts.coef_table(models, mnames, params=['κ', 'β_A', 'β_I', 'β_C', 'σ_a']),
+    fignum=2
+)
 
 # =============================================================================
 # =============================================================================
