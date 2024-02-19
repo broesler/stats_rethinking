@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # =============================================================================
-#     File: chimpanzees.py
-#  Created: 2023-12-05 10:51
+#     File: multilevel_chimps.py
+#  Created: 2024-02-16 15:38
 #   Author: Bernie Roesler
 #
 """
@@ -61,6 +61,7 @@ df['treatment'] = df['prosoc_left'] + 2 * df['condition']  # in range(4)
 #         Create the model
 # -----------------------------------------------------------------------------
 # m11.4 + cluster for "block" (R code 13.21)
+# This model is "cross-classified", since not all actors are within each block.
 with pm.Model():
     actor = pm.MutableData('actor', df['actor'])
     treatment = pm.MutableData('treatment', df['treatment'])
@@ -141,6 +142,7 @@ ct = sts.coef_table([m13_4, m13_6],
                     ['m13.4 (block)', 'm13.6 (block + treatment)'])
 print(ct['coef'].unstack('model').filter(like='b[', axis='rows'))
 
+
 # -----------------------------------------------------------------------------
 #         Handling divergences
 # -----------------------------------------------------------------------------
@@ -153,7 +155,10 @@ print(ct['coef'].unstack('model').filter(like='b[', axis='rows'))
 # a ~ Normal(a_bar, σ_a) -> z ~ Normal(0, 1), a = a_bar + σ_a*z
 # g ~ Normal(    0, σ_g) -> x ~ Normal(0, 1), g =     0 + σ_g*z
 
-# 2. Non-centered model
+
+# -----------------------------------------------------------------------------
+#         Non-centered model
+# -----------------------------------------------------------------------------
 with pm.Model():
     actor = pm.MutableData('actor', df['actor'])
     treatment = pm.MutableData('treatment', df['treatment'])
@@ -174,6 +179,7 @@ with pm.Model():
     pulled_left = pm.Binomial('pulled_left', 1, p, observed=df['pulled_left'])
     m13_4nc = sts.ulam(data=df)
 
+# TODO make sts.neff(models, mnames) function for comparison
 # Summary ess_bulk for m13_4 and m13_4nc
 neff = pd.DataFrame(dict(
     neff_c=az.summary(m13_4.samples)['ess_bulk'],
