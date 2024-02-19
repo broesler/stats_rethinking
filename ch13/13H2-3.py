@@ -5,7 +5,7 @@
 #   Author: Bernie Roesler
 #
 """
-13H2-3. The Trolley Problem, with varying intercepts. 
+13H2-3. The Trolley Problem, with varying intercepts.
 """
 # =============================================================================
 
@@ -15,7 +15,6 @@ import pandas as pd
 import pymc as pm
 
 from pathlib import Path
-from scipy.special import logit, expit
 
 import stats_rethinking as sts
 
@@ -24,7 +23,6 @@ df = pd.read_csv(
     dtype=dict(
         id='category',
         story='category',
-        response='category',
     )
 )
 
@@ -49,8 +47,40 @@ df = pd.read_csv(
 # dtypes: int64(8), object(4)
 # memory usage: 931.1 KB
 
-K = df['response'].cat.categories.size  # number of responses
+K = len(df['response'].unique())  # number of responses
 Km1 = K - 1
+
+Nu = len(df['id'].cat.categories)     # number of unique participants
+Ns = len(df['story'].cat.categories)  # number of unique stories
+
+# -----------------------------------------------------------------------------
+#         Explore the data
+# -----------------------------------------------------------------------------
+a = (1 - 0.50) / 2  # only report 1 standard error
+
+g_s = df.groupby('story')['response']
+s_mean = g_s.mean()
+s_ci = g_s.quantile([a, 1-a]).unstack('story')
+s_err = np.abs(s_ci - s_mean)
+
+N_u = 30  # only show 30 participants for brevity
+g_u = df.groupby('id')['response']
+u_mean = g_u.mean().iloc[:N_u]
+u_ci = g_u.quantile([a, 1-a])[u_mean.index].unstack('id')
+u_err = np.abs(u_ci - u_mean)
+
+fig, axs = plt.subplots(num=1, ncols=2, sharey=True, clear=True)
+fig.set_size_inches((10, 4), forward=True)
+ax = axs[0]
+ax.errorbar(s_mean.index.codes, s_mean, yerr=s_err,
+            c='C3', ls='none', marker='o')
+ax.set(xlabel='Story', ylabel='Response')
+ax.set_xticks(s_mean.index.codes, labels=s_mean.index)
+
+ax = axs[1]
+ax.errorbar(u_mean.index.codes, u_mean, yerr=u_err,
+            c='C3', ls='none', marker='o')
+ax.set(xlabel='Particpant')
 
 # -----------------------------------------------------------------------------
 #         Build a linear model (no interaction)
