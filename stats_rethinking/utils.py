@@ -2422,6 +2422,7 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
             loo = az.loo(idata, pointwise=pointwise, var_name=v)
 
         elpd = loo.loo_i if pointwise else loo.elpd_loo
+        elpd = elpd.squeeze()  # FIXME HACK see 13H2-3.py
         d = dict(
             PSIS=-2*elpd,       # == loo_list$estimates['looic', 'Estimate']
             lppd=elpd,
@@ -2429,7 +2430,7 @@ def LOOIS(model=None, idata=None, post=None, var_names=None, eval_at=None,
             SE=2*loo.se,        # == loo_list$estimates['looic', 'SE']
         )
         if pointwise:
-            d['pareto_k'] = loo.pareto_k  # == loo_list$k
+            d['pareto_k'] = loo.pareto_k.squeeze()  # == loo_list$k FIXME
         out[v] = pd.DataFrame(d) if pointwise else pd.Series(d)
 
     return out
