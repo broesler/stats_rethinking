@@ -116,7 +116,8 @@ for level in qs:
 
 ax.scatter(a_cafe, b_cafe, ec='k', fc='none')
 ax.set(xlabel='intercepts (a_cafe)',
-       ylabel='slopes (b_cafe)')
+       ylabel='slopes (b_cafe)',
+       aspect='equal')
 
 # Simulate the robot visits (R code 14.10)
 rng = np.random.default_rng(seed=22)
@@ -202,17 +203,21 @@ cov_ab_est = float(sa_est * sb_est * rho_est)
 
 # Plot the shrinkage
 fig, ax = plt.subplots(num=4, clear=True)
-ax.scatter(a_u, b_u, c='C0', label='unpooled')
-ax.scatter(a_p, b_p, ec='k', fc='none', label='pooled')
-
-# TODO plot lines between points
-
-ax.set(xlabel='intercept',
-       ylabel='slope')
+ax.scatter(a_u, b_u, ec='k', fc='none', label='unpooled')
+ax.scatter(a_p, b_p, c='C0', label='pooled')
 
 for level in qs:
     confidence_ellipse(Mu_est, Σ_est, ax=ax, level=level, ec='k', alpha=0.4)
 
+# Plot lines between points
+ax.plot([a_u, a_p], [b_u, b_p], c='k', lw=0.5)
+
+ax.legend()
+ax.set(xlabel='intercept',
+       ylabel='slope',
+       aspect='equal')
+
+# TODO rescale to actual wait times
 
 plt.ion()
 plt.show()
