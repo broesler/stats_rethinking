@@ -17,22 +17,22 @@ import pytensor as pt
 import seaborn as sns
 
 from matplotlib import transforms
-from matplotlib.patches import Ellipse
-from scipy import stats
+from matplotlib.patches import Circle
+from scipy import linalg, stats
 
 import stats_rethinking as sts
 
 
 def confidence_ellipse(mean, cov, ax=None,
                        level=0.95, facecolor='none', **kwargs):
-    """Plot an ellipse showing the confidence region of a 2D Gaussian.
+    """Plot a confidence ellipse for a 2D Gaussian.
 
     Parameters
     ----------
     mean : (2,) array_like
         The center of the ellipse.
     cov : (2, 2) array_like
-        The covariance matrix.
+        The covariance matrix. Must be symmetric positive semi-definite.
     ax : matplotlib.axes.Axes, optional
         The axes to plot on. If not provided, the current axes will be used.
     level : float, optional
@@ -44,48 +44,34 @@ def confidence_ellipse(mean, cov, ax=None,
 
     Returns
     -------
-    ellipse : matplotlib.patches.Ellipse
-        The ellipse object.
+    circle : matplotlib.patches.Circle
+        The circle object.
 
     References
     ----------
-    [0]: <https://matplotlib.org/devdocs/gallery/statistics/confidence_ellipse.html>
+    [0]: <https://gist.github.com/CarstenSchelp/b992645537660bda692f218b562d0712?permalink_comment_id=3465086istcomment-3465086>
     """
-    assert mean.shape == (2,), "Mean must be length 2"
+    assert mean.shape[0] == 2, "Mean must be length 2"
     assert cov.shape == (2, 2), "Covariance matrix must be 2x2"
-
+    assert np.allclose(cov, cov.T), "Covariance matrix must be symmetric"
     ax = ax or plt.gca()
+    kwargs.update(dict(facecolor=facecolor))
 
-    n_std = -stats.norm.ppf((1 - level) / 2)
+    # The scaling parameter is chi-squared with N dof for N-D data
+    r = np.sqrt(stats.chi2.ppf(level, df=2))
 
-    pearson = cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
-    # Using a special case to obtain the eigenvalues of this 2D dataset.
-    ell_radius_x = np.sqrt(1 + pearson)
-    ell_radius_y = np.sqrt(1 - pearson)
-    ellipse = Ellipse((0, 0),
-                      width=2*ell_radius_x,
-                      height=2*ell_radius_y,
-                      facecolor=facecolor,
-                      **kwargs)
+    # Transform matrix is 3x3 to include translation
+    T = np.eye(3)
+    T[:2, :2] = linalg.sqrtm(cov)
+    transform = transforms.Affine2D(matrix=T).scale(r).translate(*mean)
 
-    # Calculate the standard deviation of x from the square root of the
-    # variance and multiplying with the given number of standard deviations.
-    scale_x = np.sqrt(cov[0, 0]) * n_std
-    mean_x = mean[0]
-
-    # calculating the stdandard deviation of y ...
-    scale_y = np.sqrt(cov[1, 1]) * n_std
-    mean_y = mean[1]
-
-    transf = (
-        transforms.Affine2D()
-        .rotate_deg(45)
-        .scale(scale_x, scale_y)
-        .translate(mean_x, mean_y)
+    circle = Circle(
+        xy=(0, 0),
+        radius=1,
+        transform=transform + ax.transData,
+        **kwargs
     )
-
-    ellipse.set_transform(transf + ax.transData)
-    return ax.add_patch(ellipse)
+    return ax.add_patch(circle)
 
 
 # Simulate the cafes (R code 14.1)
@@ -120,18 +106,10 @@ vary_effects = stats.multivariate_normal.rvs(
 # (R code 14.8)
 a_cafe, b_cafe = vary_effects.T
 
-# Grid of Gaussian values to plot contours (R code 14.9)
-xg, yg = np.mgrid[1:7:0.01, -2.5:0.5:0.01]
-zg = stats.multivariate_normal.pdf(np.dstack((xg, yg)), mean=Mu, cov=Sigma)
-zg = (zg.max() - zg) / zg.max()
 qs = np.r_[0.1, 0.3, 0.5, 0.8, 0.99]
 
 # Plot the slopes and intercepts
 fig, ax = plt.subplots(num=1, clear=True)
-
-# TODO test is stats.norm.ppf(level) is the correct contour line
-cs = ax.contour(xg, yg, zg, cmap='Blues', levels=qs)
-ax.clabel(cs, qs, inline=True)
 
 for level in qs:
     confidence_ellipse(Mu, Sigma, ax=ax, level=level, ec='k', alpha=0.4)
@@ -226,6 +204,9 @@ cov_ab_est = float(sa_est * sb_est * rho_est)
 fig, ax = plt.subplots(num=4, clear=True)
 ax.scatter(a_u, b_u, c='C0', label='unpooled')
 ax.scatter(a_p, b_p, ec='k', fc='none', label='pooled')
+
+# TODO plot lines between points
+
 ax.set(xlabel='intercept',
        ylabel='slope')
 
