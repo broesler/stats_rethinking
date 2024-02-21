@@ -23,11 +23,40 @@ from scipy import stats
 import stats_rethinking as sts
 
 
-# TODO convert from n_std to quantile
-def confidence_ellipse(mean, cov, ax, n_std=3.0, facecolor='none', **kwargs):
-    """Plot an ellipse showing the confidence region of a 2D Gaussian."""
+def confidence_ellipse(mean, cov, ax=None,
+                       level=0.95, facecolor='none', **kwargs):
+    """Plot an ellipse showing the confidence region of a 2D Gaussian.
+
+    Parameters
+    ----------
+    mean : (2,) array_like
+        The center of the ellipse.
+    cov : (2, 2) array_like
+        The covariance matrix.
+    ax : matplotlib.axes.Axes, optional
+        The axes to plot on. If not provided, the current axes will be used.
+    level : float, optional
+        The level of the confidence interval to plot. Default is 0.95.
+    facecolor : str, optional
+        The color with which to fill the ellipse. Default is 'none'.
+    **kwargs : dict
+        Additional arguments to pass to the Ellipse call.
+
+    Returns
+    -------
+    ellipse : matplotlib.patches.Ellipse
+        The ellipse object.
+
+    References
+    ----------
+    [0]: <https://matplotlib.org/devdocs/gallery/statistics/confidence_ellipse.html>
+    """
     assert mean.shape == (2,), "Mean must be length 2"
     assert cov.shape == (2, 2), "Covariance matrix must be 2x2"
+
+    ax = ax or plt.gca()
+
+    n_std = -stats.norm.ppf((1 - level) / 2)
 
     pearson = cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
     # Using a special case to obtain the eigenvalues of this 2D dataset.
@@ -91,31 +120,35 @@ vary_effects = stats.multivariate_normal.rvs(
 # (R code 14.8)
 a_cafe, b_cafe = vary_effects.T
 
-# TODO test is stats.norm.ppf(level) is the correct contour line
 # Grid of Gaussian values to plot contours (R code 14.9)
 xg, yg = np.mgrid[1:7:0.01, -2.5:0.5:0.01]
 zg = stats.multivariate_normal.pdf(np.dstack((xg, yg)), mean=Mu, cov=Sigma)
 zg = (zg.max() - zg) / zg.max()
-qs = [0.1, 0.3, 0.5, 0.8, 0.99]
+qs = np.r_[0.1, 0.3, 0.5, 0.8, 0.99]
 
 # Plot the slopes and intercepts
 fig, ax = plt.subplots(num=1, clear=True)
+
+# TODO test is stats.norm.ppf(level) is the correct contour line
 cs = ax.contour(xg, yg, zg, cmap='Blues', levels=qs)
 ax.clabel(cs, qs, inline=True)
+
 for level in qs:
-    confidence_ellipse(Mu, Sigma, ax, n_std=stats.norm.ppf(level), ec='k')
+    confidence_ellipse(Mu, Sigma, ax=ax, level=level, ec='k', alpha=0.4)
+
 ax.scatter(a_cafe, b_cafe, ec='k', fc='none')
 ax.set(xlabel='intercepts (a_cafe)',
        ylabel='slopes (b_cafe)')
 
 # Simulate the robot visits (R code 14.10)
+rng = np.random.default_rng(seed=22)
 N_visits = 10
 afternoon = np.tile([0, 1], N_visits*N_cafes // 2)  # indicator for afternoon
 cafe_id = np.repeat(range(N_cafes), N_visits)       # unique id
 μ = a_cafe[cafe_id] + b_cafe[cafe_id] * afternoon   # the linear model
 σ = 0.5                                             # std *within* a cafe
 
-wait = stats.norm.rvs(loc=μ, scale=σ, size=N_visits*N_cafes)
+wait = stats.norm.rvs(loc=μ, scale=σ, size=N_visits*N_cafes, random_state=rng)
 
 df = pd.DataFrame(dict(cafe=cafe_id, afternoon=afternoon, wait=wait))
 
@@ -149,10 +182,10 @@ with pm.Model():
     S = pt.tensor.eye(2) * σ_cafe
     Σ = pm.math.dot(S, pm.math.dot(ρ, S))
     M = pm.MvNormal('M', mu=pm.math.stack([a, b]), cov=Σ, shape=(N_cafes, 2))
-    a_cafe = pm.Deterministic('a_cafe', M[:, 0])
-    b_cafe = pm.Deterministic('b_cafe', M[:, 1])
+    a_c = pm.Deterministic('a_c', M[:, 0])
+    b_c = pm.Deterministic('b_c', M[:, 1])
     σ = pm.Exponential('σ', 1)
-    μ = pm.Deterministic('μ', a_cafe[C] + b_cafe[C] * A)
+    μ = pm.Deterministic('μ', a_c[C] + b_c[C] * A)
     W = pm.Normal('W', μ, σ, shape=μ.shape, observed=df['wait'])
     m14_1 = sts.ulam(data=df, nuts_sampler='numpyro')
 
@@ -177,11 +210,11 @@ a_u = g.xs(0, level='afternoon')        # morning wait time in data
 b_u = g.xs(1, level='afternoon') - a_u  # difference from morning
 
 sample_dims = ('chain', 'draw')
-post = m14_1.get_samples()
-a_p = m14_1.deterministics['a_cafe'].mean(sample_dims)
-b_p = m14_1.deterministics['b_cafe'].mean(sample_dims)
+a_p = m14_1.deterministics['a_c'].mean(sample_dims)
+b_p = m14_1.deterministics['b_c'].mean(sample_dims)
 
 # Compute posterior mean Gaussian
+post = m14_1.get_samples()
 Mu_est = np.r_[post['a'].mean(sample_dims), post['b'].mean(sample_dims)]
 rho_est = post['ρ'].mean(sample_dims)
 sa_est, sb_est = post['σ_cafe'].mean(sample_dims).T
@@ -196,8 +229,8 @@ ax.scatter(a_p, b_p, ec='k', fc='none', label='pooled')
 ax.set(xlabel='intercept',
        ylabel='slope')
 
-for level in [0.1, 0.3, 0.5, 0.8, 0.99]:
-    confidence_ellipse(Mu_est, Σ_est, ax, n_std=stats.norm.ppf(level), ec='k')
+for level in qs:
+    confidence_ellipse(Mu_est, Σ_est, ax=ax, level=level, ec='k', alpha=0.4)
 
 
 plt.ion()
