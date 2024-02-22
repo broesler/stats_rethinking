@@ -112,7 +112,7 @@ qs = np.r_[0.1, 0.3, 0.5, 0.8, 0.99]
 fig, ax = plt.subplots(num=1, clear=True)
 
 for level in qs:
-    confidence_ellipse(Mu, Sigma, ax=ax, level=level, ec='k', alpha=0.4)
+    confidence_ellipse(Mu, Sigma, ax=ax, level=level, ec='gray', alpha=0.4)
 
 ax.scatter(a_cafe, b_cafe, ec='k', fc='none')
 ax.set(xlabel='intercepts (a_cafe)',
@@ -202,22 +202,66 @@ cov_ab_est = float(sa_est * sb_est * rho_est)
               [cov_ab_est, sb_est**2]]
 
 # Plot the shrinkage
-fig, ax = plt.subplots(num=4, clear=True)
+fig, axs = plt.subplots(num=4, ncols=2, clear=True)
+ax = axs[0]
 ax.scatter(a_u, b_u, ec='k', fc='none', label='unpooled')
 ax.scatter(a_p, b_p, c='C0', label='pooled')
-
-for level in qs:
-    confidence_ellipse(Mu_est, Σ_est, ax=ax, level=level, ec='k', alpha=0.4)
 
 # Plot lines between points
 ax.plot([a_u, a_p], [b_u, b_p], c='k', lw=0.5)
 
-ax.legend()
-ax.set(xlabel='intercept',
-       ylabel='slope',
-       aspect='equal')
+for level in qs:
+    confidence_ellipse(Mu_est, Σ_est, ax=ax, level=level, ec='gray', alpha=0.4)
 
-# TODO rescale to actual wait times
+ax.legend()
+ax.set(
+    title='parameter values',
+    xlabel='intercept',
+    ylabel='slope',
+    aspect='equal',
+    xlim=(a_u.min() - 0.1, a_u.max() + 0.1),
+    ylim=(b_u.min() - 0.1, b_u.max() + 0.1),
+)
+
+# Rescale to actual wait times
+ax = axs[1]
+
+# Un-pooled
+wait_morning_u = a_u
+wait_afternoon_u = a_u + b_u
+# Pooled
+wait_morning_p = a_p
+wait_afternoon_p = a_p + b_p.rename(dict(b_c_dim_0='a_c_dim_0'))
+
+# Simulate the shrinkage distribution
+v = stats.multivariate_normal(Mu_est, Σ_est).rvs(10_000)
+v[:, 1] = v.sum(axis=1)  # afternoon wait = a + b
+Mu_v = Mu_est.copy()
+Mu_v[1] = Mu_v[0] + Mu_v[1]
+Σ_v = np.cov(v.T)
+
+for level in qs:
+    confidence_ellipse(Mu_v, Σ_v, ax=ax, level=level, ec='gray', alpha=0.4)
+
+ax.scatter(wait_morning_u, wait_afternoon_u, ec='k', fc='none')
+ax.scatter(wait_morning_p, wait_afternoon_p, c='C0')
+
+# Plot lines between points
+ax.plot([wait_morning_u, wait_morning_p],
+        [wait_afternoon_u, wait_afternoon_p],
+        c='k', lw=0.5)
+
+ax.axline((0, 0), slope=1, ls='--', c='gray', alpha=0.4)
+
+ax.set(
+    title='wait times',
+    xlabel='morning wait',
+    ylabel='afternoon wait',
+    aspect='equal',
+    xlim=(wait_morning_u.min() - 0.1, wait_morning_u.max() + 0.1),
+    ylim=(wait_afternoon_u.min() - 0.1, wait_afternoon_u.max() + 0.1),
+)
+
 
 plt.ion()
 plt.show()
