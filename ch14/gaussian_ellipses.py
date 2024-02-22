@@ -18,7 +18,7 @@ from scipy import linalg, stats
 
 # TODO refactor `level` into `q`?
 def confidence_ellipse(mean, cov, ax=None,
-                       level=0.95, facecolor='none', **kwargs):
+                       n_std=None, level=None, facecolor='none', **kwargs):
     """Plot an ellipse showing the confidence region of a 2D Gaussian.
 
     Parameters
@@ -49,9 +49,14 @@ def confidence_ellipse(mean, cov, ax=None,
     assert cov.shape == (2, 2), "Covariance matrix must be 2x2"
     ax = ax or plt.gca()
 
-    # The scaling parameter is chi-squared with N dof for N-D data
-    s = np.sqrt(stats.chi2.ppf(level, df=2))
-    # s = -stats.norm.ppf((1 - level) / 2)  # WRONG
+    if n_std is not None and level is not None:
+        raise ValueError("Must specify only one of `n_std` or `level`.")
+
+    if n_std is not None:
+        s = n_std
+    else:
+        # The scaling parameter is chi-squared with N dof for N-D data
+        s = np.sqrt(stats.chi2.ppf(level, df=2))
 
     # Σ = [[σ_x^2, σ_x σ_y ρ],
     #      [σ_x σ_y ρ, σ_y^2]]
@@ -111,12 +116,15 @@ def confidence_circle(mean, cov, ax=None,
     assert np.allclose(cov, cov.T), "Covariance matrix must be symmetric"
     ax = ax or plt.gca()
     kwargs.update(dict(facecolor=facecolor))
+
     # The scaling parameter is chi-squared with N dof for N-D data
     r = np.sqrt(stats.chi2.ppf(level, df=2))
+
     # Transform matrix is 3x3 to include translation
     T = np.eye(3)
     T[:2, :2] = r * linalg.sqrtm(cov)  # scaling and rotation
     transform = transforms.Affine2D(matrix=T).translate(*mean)
+
     circle = Circle(
         xy=(0, 0),
         radius=1,
@@ -146,12 +154,13 @@ samples = rv.rvs(N)
 x, y = samples.T
 
 # Grid of Gaussian values to plot contours
-xg, yg = np.mgrid[x.min():x.max():0.01, y.min():y.max():0.01]
+xg, yg = np.mgrid[x.min()-0.2:x.max()+0.2:0.01,
+                  y.min()-0.2:y.max()+0.2:0.01]
 zg = rv.pdf(np.dstack((xg, yg)))
 zg = (zg.max() - zg) / zg.max()  # invert and normalize
 
-# qs = np.r_[0.5]  # breaks for contour plot
-qs = np.r_[0.6827, 0.9545]  # == [1, 2] std deviations for 1-D Gaussian
+qs = np.r_[0.5]  # breaks for contour plot
+# qs = np.r_[0.5, 0.683, 0.954, 0.997]  # == [1, 2] std deviations for 1-D Gaussian
 # n_stds = -stats.norm.ppf((1 - qs) / 2)  # [1.0000, 2.0000]
 
 # Color in/outside of ellipse
@@ -165,21 +174,28 @@ outside = ~inside
 #         Plot the slopes and intercepts
 # -----------------------------------------------------------------------------
 # Create a custom colormap for the contours
-colors = plt.get_cmap('Blues')(np.linspace(0.75, 1.0, len(qs)))
-cmap = plt.matplotlib.colors.LinearSegmentedColormap.from_list('Blues', colors)
+cm = 'Blues_r'
+range_ = np.linspace(0.0, 0.5, len(qs))
+colors = plt.get_cmap(cm)(range_)
+
+if len(qs) > 1:
+    cmap = plt.matplotlib.colors.LinearSegmentedColormap.from_list(cm, colors)
+else:
+    cmap = cm
+
 fmt = {q: f"{-stats.norm.ppf((1 - q) / 2):.0g}σ" for q in qs}
 
 fig, ax = plt.subplots(num=1, clear=True)
 
 # Plot the numerical contours
-cs = ax.contour(xg, yg, zg, cmap=cmap, levels=qs)
+cs = ax.contour(xg, yg, zg, levels=qs, cmap=cmap)
 ax.clabel(cs, fmt=fmt)
 
-for level in qs:
+for i, level in enumerate(qs):
     E = confidence_ellipse(μ, Σ, ax=ax, level=level,
-                           ec='k', ls='-.', lw=3, alpha=0.4, zorder=3)
+                           ec=colors[i], ls='-.', lw=2, alpha=0.4, zorder=3)
     C = confidence_circle(μ, Σ, ax=ax, level=level,
-                          ec='C3', ls='--', lw=3, zorder=2)
+                          ec=colors[i], ls='--', lw=2, zorder=2)
 
 # ax.scatter(*samples, c='C0', alpha=0.2)
 ax.scatter(*samples[inside].T, c='C0', alpha=0.2)
