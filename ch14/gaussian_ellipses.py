@@ -16,7 +16,7 @@ from matplotlib import transforms
 from matplotlib.patches import Circle, Ellipse
 from scipy import linalg, stats
 
-
+# TODO refactor `level` into `q`?
 def confidence_ellipse(mean, cov, ax=None,
                        level=0.95, facecolor='none', **kwargs):
     """Plot an ellipse showing the confidence region of a 2D Gaussian.
@@ -51,6 +51,7 @@ def confidence_ellipse(mean, cov, ax=None,
 
     # The scaling parameter is chi-squared with N dof for N-D data
     s = np.sqrt(stats.chi2.ppf(level, df=2))
+    # s = -stats.norm.ppf((1 - level) / 2)  # WRONG
 
     # Σ = [[σ_x^2, σ_x σ_y ρ],
     #      [σ_x σ_y ρ, σ_y^2]]
@@ -129,7 +130,7 @@ def confidence_circle(mean, cov, ax=None,
 #         Define constants
 # -----------------------------------------------------------------------------
 np.random.seed(565656)
-σ_x = 1.0
+σ_x = 0.9
 σ_y = 0.8
 ρ = 0.7
 
@@ -150,7 +151,8 @@ zg = rv.pdf(np.dstack((xg, yg)))
 zg = (zg.max() - zg) / zg.max()  # invert and normalize
 
 # qs = np.r_[0.5]  # breaks for contour plot
-qs = np.r_[0.683, 0.954]  # == [1, 2] std deviations for 1-D Gaussian
+qs = np.r_[0.6827, 0.9545]  # == [1, 2] std deviations for 1-D Gaussian
+# n_stds = -stats.norm.ppf((1 - qs) / 2)  # [1.0000, 2.0000]
 
 # Color in/outside of ellipse
 r = np.sqrt(stats.chi2.ppf(qs[0], df=2))
@@ -165,12 +167,13 @@ outside = ~inside
 # Create a custom colormap for the contours
 colors = plt.get_cmap('Blues')(np.linspace(0.75, 1.0, len(qs)))
 cmap = plt.matplotlib.colors.LinearSegmentedColormap.from_list('Blues', colors)
+fmt = {q: f"{-stats.norm.ppf((1 - q) / 2):.0g}σ" for q in qs}
 
 fig, ax = plt.subplots(num=1, clear=True)
 
 # Plot the numerical contours
 cs = ax.contour(xg, yg, zg, cmap=cmap, levels=qs)
-ax.clabel(cs, inline=True)
+ax.clabel(cs, fmt=fmt)
 
 for level in qs:
     E = confidence_ellipse(μ, Σ, ax=ax, level=level,
@@ -186,6 +189,19 @@ ax.set(title=f"confidence = {qs[0]:.3f}, empirical = {sum(inside)/N:.3f}",
        xlabel='x',
        ylabel='y',
        aspect='equal')
+
+# TODO investigate: np.allclose(stats.chi2.ppf(0.95, df=2), -2*np.log(0.05))
+# ----------------------------------------------------------------------------- 
+#         Plot error in `n_std` calculation
+# -----------------------------------------------------------------------------
+fig, ax = plt.subplots(num=2, clear=True)
+stds = np.linspace(0.1, 8.5)
+qs = 1 - 2*stats.norm.cdf(-stds)
+rs = np.sqrt(stats.chi2.ppf(qs, df=2))
+ax.plot(stds, (rs - stds) / stds, '.-')
+ax.axhline(0, ls='--', c='gray', lw=1)
+ax.set_xticks(np.arange(9))
+ax.set(xlabel='σ', ylabel='% difference from χ²')
 
 # =============================================================================
 # =============================================================================
