@@ -377,6 +377,7 @@ def precis(obj, q=0.89, digits=4, verbose=True, hist=True, filter_kws=None):
         df.columns = ['mean', 'std', f"{pp[0]:g}%", f"{pp[1]:g}%"]
 
     if isinstance(obj, Ulam):
+        # TODO include neff and Rhat values from idata.sample_stats
         obj = obj.samples
 
     # Dataset of data points (i.e. posterior distribution)
@@ -659,6 +660,10 @@ class Ulam(PostModel):
     def get_samples(self, N=1000):
         # TODO currently ignoring `N` argument.
         return self.samples
+
+    # TODO 
+    def sample_posterior_predictive(self, N=1000):
+        pass
 
     # NOTE unlike rethinking::traceplot, pymc discards the warmup samples by
     # default, and only returns the valid samples. We could write a function

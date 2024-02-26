@@ -12,6 +12,7 @@ Toy script to plot Gaussian confidence ellipses.
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import warnings
 
 from matplotlib import transforms
 from matplotlib.patches import Circle, Ellipse
@@ -20,8 +21,9 @@ from scipy import linalg, stats
 
 path = Path('/Users/bernardroesler/src/web_dev/broesler.github.io/assets/images/conf_ellipse')
 
-def confidence_ellipse(mean, cov, ax=None,
-                       n_std=None, level=None, facecolor='none', **kwargs):
+
+def confidence_ellipse(mean, cov, ax=None, n_std=None, level=None,
+                       facecolor='none', **kwargs):
     """Plot an ellipse showing the confidence region of a 2D Gaussian.
 
     Parameters
@@ -57,7 +59,7 @@ def confidence_ellipse(mean, cov, ax=None,
 
     if n_std is not None:
         level = stats.chi2.cdf(n_std**2, df=2)
-        
+
     # The scaling parameter is chi-squared with N dof for N-D data
     s = np.sqrt(stats.chi2.ppf(level, df=2))
 
@@ -88,20 +90,24 @@ def confidence_ellipse(mean, cov, ax=None,
     return ax.add_patch(ellipse)
 
 
-def confidence_circle(mean, cov, ax=None,
-                      level=0.95, facecolor='none', **kwargs):
+def confidence_circle(mean, cov, ax=None, n_std=None, level=None,
+                      facecolor='none', **kwargs):
     """Plot a confidence ellipse for a 2D Gaussian.
 
     Parameters
     ----------
-    mean : (N,) array_like
+    mean : (2,) array_like
         The center of the ellipse.
-    cov : (N, N) array_like
+    cov : (2, 2) array_like
         The covariance matrix. Must be symmetric positive semi-definite.
     ax : matplotlib.axes.Axes, optional
         The axes to plot on. If not provided, the current axes will be used.
+    n_std : float, optional
+        The number of standard deviations from the mean to plot the ellipse, as
+        computed by the Mahalanobis distance.
+        One of `n_std` or `level` must be specified.
     level : float, optional
-        The level of the confidence interval to plot. Default is 0.95.
+        The level of the confidence interval to plot.
     facecolor : str, optional
         The color with which to fill the ellipse. Default is 'none'.
     **kwargs : dict
@@ -116,12 +122,22 @@ def confidence_circle(mean, cov, ax=None,
     ----------
     [0]: <https://gist.github.com/CarstenSchelp/b992645537660bda692f218b562d0712?permalink_comment_id=3465086istcomment-3465086>
     """
-    assert np.allclose(cov, cov.T), "Covariance matrix must be symmetric"
+    assert mean.shape == (2,), "Mean must be length 2"
+    assert cov.shape == (2, 2), "Covariance matrix must be 2x2"
     ax = ax or plt.gca()
     kwargs.update(dict(facecolor=facecolor))
 
+    if n_std is None and level is None:
+        raise ValueError("Must specify either `n_std` or `level`.")
+
+    if n_std is not None:
+        level = 1 - np.exp(-n_std**2 / 2)  # == stats.chi2.cdf(n_std**2, df=2)
+        if level is not None:
+            warnings.warn("Ignoring `level` parameter; using `n_std` instead.")
+
     # The scaling parameter is chi-squared with N dof for N-D data
-    r = np.sqrt(stats.chi2.ppf(level, df=2))
+    # == np.sqrt(stats.chi2.ppf(level, df=2))
+    r = np.sqrt(-2 * np.log(1 - level))
 
     # Transform matrix is 3x3 to include translation
     T = np.eye(3)
@@ -135,6 +151,47 @@ def confidence_circle(mean, cov, ax=None,
         **kwargs
     )
     return ax.add_patch(circle)
+
+
+# TODO add labels to the vectors
+def plot_svd_vecs(A, ax=None, **kwargs):
+    """Plot the vectors of the SVD of a 2x2 matrix.
+
+    Parameters
+    ----------
+    A : (2, 2) array_like
+        The matrix to decompose.
+    ax : matplotlib.axes.Axes, optional
+        The axes to plot on. If not provided, the current axes will be used.
+    **kwargs : dict
+        Additional arguments to pass to the plot
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The axes object.
+    """
+    assert A.shape == (2, 2), "Matrix must be 2x2"
+    ax = ax or plt.gca()
+    # Take the SVD of A
+    U, s, Vt = linalg.svd(A)
+    # Plot the vectors of Vt on the unit circle
+    ax.quiver(0, 0, *Vt[0], angles='xy', scale_units='xy', scale=1, color='C0')
+    ax.quiver(0, 0, *Vt[1], angles='xy', scale_units='xy', scale=1, color='C0')
+    ax.add_patch(Circle((0, 0), 1, fill=False, color='k', ls='--', lw=1, zorder=1))
+    # Plot the scaled vectors U @ S on the corresponding ellipse
+    ax.quiver(0, 0, *(U @ np.sqrt(np.diag(s)))[:, 0], angles='xy', scale_units='xy', scale=1, color='C3') 
+    ax.quiver(0, 0, *(U @ np.sqrt(np.diag(s)))[:, 1], angles='xy', scale_units='xy', scale=1, color='C3')
+    ax.add_patch(
+        Ellipse(
+            (0, 0),
+            width=2*np.sqrt(s[0]),
+            height=2*np.sqrt(s[1]),
+            angle=np.degrees(np.arctan2(U[1, 0], U[0, 0])),
+            fill=False, color='k', ls='--', lw=1, zorder=1,
+        )
+    )
+    return ax
 
 
 # -----------------------------------------------------------------------------
@@ -162,11 +219,8 @@ x, y = samples.T
 Σ_hat = np.cov(samples.T, ddof=1)
 
 # TODO separate code for initial "1σ" ellipses
-# qs = np.r_[0.683]
-qs = np.r_[0.989]
-# qs = np.r_[0.5, 0.683, 0.954, 0.997]  # == [1, 2] std deviations for 1-D Gaussian
-# n_stds = -stats.norm.ppf((1 - qs) / 2)  # [1.0000, 2.0000]
-n_std = 3
+qs = np.r_[0.683]
+n_std = np.sqrt(stats.chi2.ppf(qs, df=2))
 
 # Grid of Gaussian values to plot contours
 x_min = min(x.min() - 0.2, μ[0] - (n_std + 1)*σ_x)
@@ -179,6 +233,7 @@ xg, yg = np.mgrid[x_min:x_max:0.01, y_min:y_max:0.01]
 zg = stats.multivariate_normal(μ_hat, Σ_hat).pdf(np.dstack((xg, yg)))
 zg = (zg.max() - zg) / zg.max()  # invert and normalize
 
+# TODO use matplotlib.patches.Patch.contains_point instead
 # Color in/outside of ellipse
 r_sq = stats.chi2.ppf(qs[0], df=2)
 
@@ -204,7 +259,8 @@ if len(qs) > 1:
 else:
     cmap = cm
 
-fmt = {q: f"{-stats.norm.ppf((1 - q) / 2):.2g}σ" for q in qs}
+# fmt = {q: f"{-stats.norm.ppf((1 - q) / 2):.2g}σ" for q in qs}  # FIXME WRONG
+fmt = {q: f"{np.sqrt(stats.chi2.ppf(q, df=2)):.3g}σ" for q in qs}
 
 fig, ax = plt.subplots(num=1, clear=True)
 
@@ -232,32 +288,38 @@ ax.set(#title=f"confidence = {qs[0]:.3f}, empirical = {sum(inside)/N:.3f}",
        aspect='equal')
 ax.spines[['top', 'right']].set_visible(False)
 
-if N == 20:
-    fig.savefig(path / Path('./initial_problem.pdf'), transparent=False)
+# if N == 20:
+#     fig.savefig(path / Path('./initial_problem.pdf'), transparent=False)
 
 # qs = np.r_[0.997]
 # n_std = 3
 # fig.savefig(path / Path('./three_sigma_wrong.pdf'), transparent=False)
 
-# TODO investigate: np.allclose(stats.chi2.ppf(0.95, df=2), -2*np.log(0.05))
-# ----------------------------------------------------------------------------- 
-#         Plot error in `n_std` calculation
+# TODO
+#  * investigate: np.allclose(stats.chi2.ppf(0.95, df=2), -2*np.log(0.05))
+#  * linalg.eig(Σ) == linalg.svd(Σ) since Σ is symmetric
+#  * play with eig/SVD to understand the rotation and scaling
+# NOTE
+# T[:2, :2] = r * linalg.cholesky(cov).T  # scaling and rotation works too
+
+U, s, Vt = linalg.svd(Σ)
+D = stats.multivariate_normal(cov=np.eye(2)).rvs(N).T
+
+fig, ax = plt.subplots(num=3, clear=True)
+ax.scatter(*D, c='gray', alpha=0.2, label=r"$D \sim \mathcal{N}(0, I)$")
+ax.scatter(*(Vt @ D), c='C0', alpha=0.2, label=r"$V^T D$")
+ax.scatter(*(np.sqrt(np.diag(s)) @ Vt @ D), c='C3', alpha=0.2, label=r"$\sqrt{S} V^T D$")
+ax.scatter(*(U @ np.sqrt(np.diag(s)) @ Vt @ D), c='C2', alpha=0.2,
+           label=r"$U \sqrt{S} V^T D = \Sigma D$")
+ax.legend()
+ax.set(title='Geometric Transformation via SVD',
+       xlabel='x',
+       ylabel='y',
+       aspect='equal')
+
 # -----------------------------------------------------------------------------
-fig, ax = plt.subplots(num=2, clear=True)
-stds = np.linspace(1, 8.5)
-ps = 1 - 2*stats.norm.cdf(-stds)
-rs = np.sqrt(stats.chi2.ppf(ps, df=2))
-ax.plot(stds, (rs - stds) / stds, '.-')
-ax.set_xticks(np.arange(9))
-ax.set(xlabel=r'$n \sigma$',
-       ylabel=r'% difference from $\chi^2_2$',
-       ylim=(0, None))
-ax.spines[['top', 'right']].set_visible(False)
-ax.grid()
-
-# fig.savefig(path / Path('rel_error.pdf'), transparent=False)
-
-# Define the probability table
+#         Define the probability table
+# -----------------------------------------------------------------------------
 ks = np.arange(1, 11)
 sigs = np.arange(1, 7)
 q_arr = (
@@ -271,6 +333,17 @@ df.columns.name = 'n_std'
 # print(df.to_markdown(floatfmt='.4f'))
 
 
+# Plot SVD vectors
+A = np.array([[1, 2], 
+              [0, 2]])
+
+fig, ax = plt.subplots(num=4, clear=True)
+plot_svd_vecs(A, ax=ax)
+
+ax.set(title='SVD of A',
+       xlabel='x',
+       ylabel='y',
+       aspect='equal')
 
 # =============================================================================
 # =============================================================================
