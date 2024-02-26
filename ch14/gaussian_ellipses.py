@@ -11,12 +11,15 @@ Toy script to plot Gaussian confidence ellipses.
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from matplotlib import transforms
 from matplotlib.patches import Circle, Ellipse
+from pathlib import Path
 from scipy import linalg, stats
 
-# TODO refactor `level` into `q`?
+path = Path('/Users/bernardroesler/src/web_dev/broesler.github.io/assets/images/conf_ellipse')
+
 def confidence_ellipse(mean, cov, ax=None,
                        n_std=None, level=None, facecolor='none', **kwargs):
     """Plot an ellipse showing the confidence region of a 2D Gaussian.
@@ -53,10 +56,10 @@ def confidence_ellipse(mean, cov, ax=None,
         raise ValueError("Must specify only one of `n_std` or `level`.")
 
     if n_std is not None:
-        s = n_std
-    else:
-        # The scaling parameter is chi-squared with N dof for N-D data
-        s = np.sqrt(stats.chi2.ppf(level, df=2))
+        level = stats.chi2.cdf(n_std**2, df=2)
+        
+    # The scaling parameter is chi-squared with N dof for N-D data
+    s = np.sqrt(stats.chi2.ppf(level, df=2))
 
     # Σ = [[σ_x^2, σ_x σ_y ρ],
     #      [σ_x σ_y ρ, σ_y^2]]
@@ -138,11 +141,12 @@ def confidence_circle(mean, cov, ax=None,
 #         Define constants
 # -----------------------------------------------------------------------------
 np.random.seed(565656)
-σ_x = 0.9
+σ_x = 1.0
 σ_y = 0.8
 ρ = 0.7
 
-μ = np.r_[np.pi, -1]
+μ = np.r_[3, -1]
+# μ = np.r_[0, 0]
 cov_xy = σ_x * σ_y * ρ
 Σ = np.array([[σ_x**2, cov_xy],
               [cov_xy, σ_y**2]])
@@ -153,21 +157,38 @@ N = 1000
 samples = rv.rvs(N)
 x, y = samples.T
 
-# Grid of Gaussian values to plot contours
-xg, yg = np.mgrid[x.min()-0.2:x.max()+0.2:0.01,
-                  y.min()-0.2:y.max()+0.2:0.01]
-zg = rv.pdf(np.dstack((xg, yg)))
-zg = (zg.max() - zg) / zg.max()  # invert and normalize
+# Estimate the population parameters from the sample
+μ_hat = samples.mean(axis=0)
+Σ_hat = np.cov(samples.T, ddof=1)
 
-qs = np.r_[0.5]  # breaks for contour plot
+# TODO separate code for initial "1σ" ellipses
+# qs = np.r_[0.683]
+qs = np.r_[0.989]
 # qs = np.r_[0.5, 0.683, 0.954, 0.997]  # == [1, 2] std deviations for 1-D Gaussian
 # n_stds = -stats.norm.ppf((1 - qs) / 2)  # [1.0000, 2.0000]
+n_std = 3
+
+# Grid of Gaussian values to plot contours
+x_min = min(x.min() - 0.2, μ[0] - (n_std + 1)*σ_x)
+x_max = max(x.min() + 0.2, μ[0] + (n_std + 1)*σ_x)
+y_min = min(y.min() - 0.2, μ[1] - (n_std + 1)*σ_y)
+y_max = max(y.min() + 0.2, μ[1] + (n_std + 1)*σ_y)
+
+xg, yg = np.mgrid[x_min:x_max:0.01, y_min:y_max:0.01]
+# zg = rv.pdf(np.dstack((xg, yg)))
+zg = stats.multivariate_normal(μ_hat, Σ_hat).pdf(np.dstack((xg, yg)))
+zg = (zg.max() - zg) / zg.max()  # invert and normalize
 
 # Color in/outside of ellipse
-r = np.sqrt(stats.chi2.ppf(qs[0], df=2))
+r_sq = stats.chi2.ppf(qs[0], df=2)
+
+# r = 1  # what level does this correspond to?
+# => level = stats.chi2(2).cdf(r**2) == 0.3934693402873665
+
 # Scale the samples to the unit circle for comparison
-u, v = linalg.inv(linalg.sqrtm(Σ)) @ (samples - μ).T
-inside = u**2 + v**2 <= r**2
+# u, v = linalg.inv(linalg.sqrtm(Σ)) @ (samples - μ).T
+u, v = linalg.inv(linalg.sqrtm(Σ_hat)) @ (samples - μ_hat).T
+inside = (u**2 + v**2) <= r_sq
 outside = ~inside
 
 # -----------------------------------------------------------------------------
@@ -183,7 +204,7 @@ if len(qs) > 1:
 else:
     cmap = cm
 
-fmt = {q: f"{-stats.norm.ppf((1 - q) / 2):.0g}σ" for q in qs}
+fmt = {q: f"{-stats.norm.ppf((1 - q) / 2):.2g}σ" for q in qs}
 
 fig, ax = plt.subplots(num=1, clear=True)
 
@@ -192,32 +213,64 @@ cs = ax.contour(xg, yg, zg, levels=qs, cmap=cmap)
 ax.clabel(cs, fmt=fmt)
 
 for i, level in enumerate(qs):
-    E = confidence_ellipse(μ, Σ, ax=ax, level=level,
+    # n_std = -stats.norm.ppf((1 - level)/2)
+    E = confidence_ellipse(μ_hat, Σ_hat, ax=ax, n_std=n_std, #level=level,
                            ec=colors[i], ls='-.', lw=2, alpha=0.4, zorder=3)
-    C = confidence_circle(μ, Σ, ax=ax, level=level,
-                          ec=colors[i], ls='--', lw=2, zorder=2)
+    # E = confidence_ellipse(μ, Σ, ax=ax, n_std=n_std, #level=level,
+    #                        ec=colors[i], ls='-.', lw=2, alpha=0.4, zorder=3)
+    # C = confidence_circle(μ, Σ, ax=ax, level=level,
+    #                       ec=colors[i], ls='--', lw=2, zorder=2)
 
 # ax.scatter(*samples, c='C0', alpha=0.2)
-ax.scatter(*samples[inside].T, c='C0', alpha=0.2)
-ax.scatter(*samples[outside].T, c='C3', alpha=0.2)
+pts_alpha = 0.2 if N > 100 else 0.6
+ax.scatter(*samples[inside].T, c='C0', alpha=pts_alpha)
+ax.scatter(*samples[outside].T, c='C3', alpha=pts_alpha)
 
-ax.set(title=f"confidence = {qs[0]:.3f}, empirical = {sum(inside)/N:.3f}",
+ax.set(#title=f"confidence = {qs[0]:.3f}, empirical = {sum(inside)/N:.3f}",
        xlabel='x',
        ylabel='y',
        aspect='equal')
+ax.spines[['top', 'right']].set_visible(False)
+
+if N == 20:
+    fig.savefig(path / Path('./initial_problem.pdf'), transparent=False)
+
+# qs = np.r_[0.997]
+# n_std = 3
+# fig.savefig(path / Path('./three_sigma_wrong.pdf'), transparent=False)
 
 # TODO investigate: np.allclose(stats.chi2.ppf(0.95, df=2), -2*np.log(0.05))
 # ----------------------------------------------------------------------------- 
 #         Plot error in `n_std` calculation
 # -----------------------------------------------------------------------------
 fig, ax = plt.subplots(num=2, clear=True)
-stds = np.linspace(0.1, 8.5)
-qs = 1 - 2*stats.norm.cdf(-stds)
-rs = np.sqrt(stats.chi2.ppf(qs, df=2))
+stds = np.linspace(1, 8.5)
+ps = 1 - 2*stats.norm.cdf(-stds)
+rs = np.sqrt(stats.chi2.ppf(ps, df=2))
 ax.plot(stds, (rs - stds) / stds, '.-')
-ax.axhline(0, ls='--', c='gray', lw=1)
 ax.set_xticks(np.arange(9))
-ax.set(xlabel='σ', ylabel='% difference from χ²')
+ax.set(xlabel=r'$n \sigma$',
+       ylabel=r'% difference from $\chi^2_2$',
+       ylim=(0, None))
+ax.spines[['top', 'right']].set_visible(False)
+ax.grid()
+
+# fig.savefig(path / Path('rel_error.pdf'), transparent=False)
+
+# Define the probability table
+ks = np.arange(1, 11)
+sigs = np.arange(1, 7)
+q_arr = (
+    np.array([stats.chi2.cdf(z**2, df=k) for k in ks for z in sigs])
+    .reshape(len(ks), len(sigs))
+)
+df = pd.DataFrame(q_arr, index=ks, columns=sigs)
+df.index.name = 'dimensions'
+df.columns.name = 'n_std'
+
+# print(df.to_markdown(floatfmt='.4f'))
+
+
 
 # =============================================================================
 # =============================================================================
