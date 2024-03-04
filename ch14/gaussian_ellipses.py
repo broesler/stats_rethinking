@@ -153,8 +153,7 @@ def confidence_circle(mean, cov, ax=None, n_std=None, level=None,
     return ax.add_patch(circle)
 
 
-# TODO add labels to the vectors
-def plot_svd_vecs(A, ax=None, **kwargs):
+def plot_svd_vecs(A, ax=None):
     """Plot the vectors of the SVD of a 2x2 matrix.
 
     Parameters
@@ -163,8 +162,6 @@ def plot_svd_vecs(A, ax=None, **kwargs):
         The matrix to decompose.
     ax : matplotlib.axes.Axes, optional
         The axes to plot on. If not provided, the current axes will be used.
-    **kwargs : dict
-        Additional arguments to pass to the plot
 
     Returns
     -------
@@ -173,24 +170,33 @@ def plot_svd_vecs(A, ax=None, **kwargs):
     """
     assert A.shape == (2, 2), "Matrix must be 2x2"
     ax = ax or plt.gca()
+
     # Take the SVD of A
     U, s, Vt = linalg.svd(A)
-    # Plot the vectors of Vt on the unit circle
-    ax.quiver(0, 0, *Vt[0], angles='xy', scale_units='xy', scale=1, color='C0')
-    ax.quiver(0, 0, *Vt[1], angles='xy', scale_units='xy', scale=1, color='C0')
-    ax.add_patch(Circle((0, 0), 1, fill=False, color='k', ls='--', lw=1, zorder=1))
-    # Plot the scaled vectors U @ S on the corresponding ellipse
-    ax.quiver(0, 0, *(U @ np.sqrt(np.diag(s)))[:, 0], angles='xy', scale_units='xy', scale=1, color='C3') 
-    ax.quiver(0, 0, *(U @ np.sqrt(np.diag(s)))[:, 1], angles='xy', scale_units='xy', scale=1, color='C3')
+    US = U @ np.sqrt(np.diag(s))
+
+    arrow_kwargs = dict(angles='xy', scale_units='xy', scale=1)
+    text_kwargs = dict(ha='left', va='bottom')
+    for i in range(2):
+        # Plot the vectors of Vt and US
+        ax.quiver(0, 0, *Vt[i],    color='C0', **arrow_kwargs)
+        ax.quiver(0, 0, *US[:, i], color='C3', **arrow_kwargs) 
+        # Label the vectors
+        ax.text(*Vt[i]/2,    rf"$v_{i}$",            color='C0', **text_kwargs)
+        ax.text(*US[:, i]/2, rf"$\sigma_{i} u_{i}$", color='C3', **text_kwargs)
+
+    # Plot the unit circle and the ellipse
+    ax.add_patch(Circle((0, 0), 1, fill=False, color='C0', lw=1, zorder=1))
     ax.add_patch(
         Ellipse(
             (0, 0),
             width=2*np.sqrt(s[0]),
             height=2*np.sqrt(s[1]),
             angle=np.degrees(np.arctan2(U[1, 0], U[0, 0])),
-            fill=False, color='k', ls='--', lw=1, zorder=1,
+            fill=False, color='C3', lw=1, zorder=1,
         )
     )
+
     return ax
 
 
@@ -334,13 +340,15 @@ df.columns.name = 'n_std'
 
 
 # Plot SVD vectors
-A = np.array([[1, 2], 
-              [0, 2]])
+A = np.array([[1, 1], 
+              [0, 1]])
 
 fig, ax = plt.subplots(num=4, clear=True)
-plot_svd_vecs(A, ax=ax)
+ax.axhline(0, ls='--', color='gray', lw=1)
+ax.axvline(0, ls='--', color='gray', lw=1)
+plot_svd_vecs(Σ, ax=ax)
 
-ax.set(title='SVD of A',
+ax.set(title='SVD of Σ',
        xlabel='x',
        ylabel='y',
        aspect='equal')
